@@ -12,6 +12,7 @@ The module uses a global cache to store initialized agents for better performanc
 
 import importlib
 import logging
+import re
 import textwrap
 import time
 import traceback
@@ -29,6 +30,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.errors import GraphRecursionError
 from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent
 from sqlalchemy import func, update
@@ -40,17 +42,56 @@ from app.core.credit import expense_message, expense_skill
 from app.core.node import PostModelNode, PreModelNode
 from app.core.prompt import agent_prompt
 from app.core.skill import skill_store
-from models.agent import Agent, AgentData, AgentQuota, AgentTable
+from models.agent import Agent, AgentTable
+from models.agent_data import AgentData, AgentQuota
 from models.app_setting import AppSetting
 from models.chat import AuthorType, ChatMessage, ChatMessageCreate, ChatMessageSkillCall
 from models.credit import CreditAccount, OwnerType
 from models.db import get_pool, get_session
 from models.llm import get_model_cost
-from models.skill import AgentSkillData, ThreadSkillData
+from models.skill import AgentSkillData, Skill, ThreadSkillData
 from models.user import User
 from utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
+
+
+async def explain_prompt(message: str) -> str:
+    """
+    Process message to replace @skill:*:* patterns with (call skill xxxxx) format.
+
+    Args:
+        message (str): The input message to process
+
+    Returns:
+        str: The processed message with @skill patterns replaced
+    """
+    # Pattern to match @skill:category:config_name with word boundaries
+    pattern = r"\b@skill:([^:]+):([^\s]+)\b"
+
+    async def replace_skill_pattern(match):
+        category = match.group(1)
+        config_name = match.group(2)
+
+        # Get skill by category and config_name
+        skill = await Skill.get_by_config_name(category, config_name)
+
+        if skill:
+            return f"(call skill {skill.name})"
+        else:
+            # If skill not found, keep original pattern
+            return match.group(0)
+
+    # Find all matches
+    matches = list(re.finditer(pattern, message))
+
+    # Process matches in reverse order to maintain string positions
+    result = message
+    for match in reversed(matches):
+        replacement = await replace_skill_pattern(match)
+        result = result[: match.start()] + replacement + result[match.end() :]
+
+    return result
 
 
 # Global variable to cache all agent executors
@@ -109,7 +150,7 @@ async def initialize_agent(aid, is_private=False):
     memory = AsyncPostgresSaver(get_pool())
 
     # ==== Load skills
-    tools: list[BaseTool] = []
+    tools: list[BaseTool | dict] = []
 
     if agent.skills:
         for k, v in agent.skills.items():
@@ -131,10 +172,17 @@ async def initialize_agent(aid, is_private=False):
     # filter the duplicate tools
     tools = list({tool.name: tool for tool in tools}.values())
 
+    # testing native search, FIXME: use flag
+    if agent.model in ["gpt-4.1", "gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"]:
+        tools.append({"type": "web_search_preview"})
+
     # finally, set up the system prompt
     prompt = agent_prompt(agent, agent_data)
     # Escape curly braces in the prompt
     escaped_prompt = prompt.replace("{", "{{").replace("}", "}}")
+    # Process message to handle @skill patterns
+    if config.admin_llm_skill_control:
+        escaped_prompt = await explain_prompt(escaped_prompt)
     prompt_array = [
         ("system", escaped_prompt),
         ("placeholder", "{entrypoint_prompt}"),
@@ -143,6 +191,9 @@ async def initialize_agent(aid, is_private=False):
     if agent.prompt_append:
         # Escape any curly braces in prompt_append
         escaped_append = agent.prompt_append.replace("{", "{{").replace("}", "}}")
+        # Process message to handle @skill patterns
+        if config.admin_llm_skill_control:
+            escaped_append = await explain_prompt(escaped_append)
         prompt_array.append(("system", escaped_append))
 
     prompt_temp = ChatPromptTemplate.from_messages(prompt_array)
@@ -169,14 +220,14 @@ async def initialize_agent(aid, is_private=False):
     )
     for tool in tools:
         logger.info(
-            f"[{aid}{'-private' if is_private else ''}] loaded tool: {tool.name}"
+            f"[{aid}{'-private' if is_private else ''}] loaded tool: {tool.name if isinstance(tool, BaseTool) else tool}"
         )
 
     # Pre model hook
     pre_model_hook = PreModelNode(
         model=llm,
         short_term_memory_strategy=agent.short_term_memory_strategy,
-        max_tokens=input_token_limit,
+        max_tokens=input_token_limit // 2,
         max_summary_tokens=2048,  # later we can let agent to set this
     )
     # Post model hook
@@ -264,6 +315,7 @@ async def execute_agent(
     start = time.perf_counter()
     # make sure reply_to is set
     message.reply_to = message.id
+
     input = await message.save()
 
     agent = await Agent.get(input.agent_id)
@@ -370,12 +422,39 @@ async def execute_agent(
             if "type" in att and att["type"] == "image" and "url" in att
         ]
 
-    # message
+    # Process input message to handle @skill patterns
+    if config.admin_llm_skill_control:
+        input_message = await explain_prompt(input.message)
+    else:
+        input_message = input.message
+
+    # super mode
+    recursion_limit = 30
+    if re.search(r"\b@super\b", input_message):
+        recursion_limit = 300
+        # Remove @super from the message
+        input_message = re.sub(r"\b@super\b", "", input_message).strip()
+
+    # testing native search, FIXME: use flag
+    if re.search(r"\b@search\b", input_message):
+        if agent.model in [
+            "gpt-4.1",
+            "gpt-4.1-mini",
+            "gpt-4o",
+            "gpt-4o-mini",
+            "grok-3",
+        ]:
+            input_message = re.sub(
+                r"\b@search\b", "(search for results)", input_message
+            ).strip()
+        else:
+            input_message = re.sub(r"\b@search\b", "", input_message).strip()
+
     # if the model doesn't natively support image parsing, add the image URLs to the message
     if agent.has_image_parser_skill() and image_urls:
-        input.message += f"\n\nImages:\n{'\n'.join(image_urls)}"
+        input_message += f"\n\nImages:\n{'\n'.join(image_urls)}"
     content = [
-        {"type": "text", "text": input.message},
+        {"type": "text", "text": input_message},
     ]
     if not agent.has_image_parser_skill() and image_urls:
         # anyway, pass it directly to LLM
@@ -385,6 +464,7 @@ async def execute_agent(
                 for image_url in image_urls
             ]
         )
+
     messages = [
         HumanMessage(content=content),
     ]
@@ -404,6 +484,8 @@ async def execute_agent(
     ):
         entrypoint_prompt = agent.telegram_entrypoint_prompt
         logger.debug("telegram entrypoint prompt added")
+    if entrypoint_prompt and config.admin_llm_skill_control:
+        entrypoint_prompt = await explain_prompt(entrypoint_prompt)
 
     # stream config
     thread_id = f"{input.agent_id}-{input.chat_id}"
@@ -415,15 +497,16 @@ async def execute_agent(
             "entrypoint": input.author_type,
             "entrypoint_prompt": entrypoint_prompt,
             "payer": payer if payment_enabled else None,
-        }
+        },
+        "recursion_limit": recursion_limit,
     }
 
     # run
     cached_tool_step = None
-    async for chunk in executor.astream({"messages": messages}, stream_config):
-        try:
+    try:
+        async for chunk in executor.astream({"messages": messages}, stream_config):
             this_time = time.perf_counter()
-            # logger.debug(f"stream chunk: {chunk}", extra={"thread_id": thread_id})
+            logger.debug(f"stream chunk: {chunk}", extra={"thread_id": thread_id})
             if "agent" in chunk and "messages" in chunk["agent"]:
                 if len(chunk["agent"]["messages"]) != 1:
                     logger.error(
@@ -434,7 +517,17 @@ async def execute_agent(
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     # tool calls, save for later use, if it is deleted by post_model_hook, will not be used.
                     cached_tool_step = msg
-                elif hasattr(msg, "content") and msg.content:
+                if hasattr(msg, "content") and msg.content:
+                    content = msg.content
+                    if isinstance(msg.content, list):
+                        # in new version, content item maybe a list
+                        content = msg.content[0]
+                    if isinstance(content, dict):
+                        if "text" in content:
+                            content = content["text"]
+                        else:
+                            content = str(content)
+                            logger.error(f"unexpected content type: {content}")
                     # agent message
                     chat_message_create = ChatMessageCreate(
                         id=str(XID()),
@@ -446,7 +539,7 @@ async def execute_agent(
                         model=agent.model,
                         thread_type=input.author_type,
                         reply_to=input.id,
-                        message=msg.content,
+                        message=content,
                         input_tokens=(
                             msg.usage_metadata.get("input_tokens", 0)
                             if hasattr(msg, "usage_metadata") and msg.usage_metadata
@@ -472,6 +565,22 @@ async def execute_agent(
                                 chat_message_create.input_tokens,
                                 chat_message_create.output_tokens,
                             )
+
+                            # Check for web_search_call in additional_kwargs
+                            if (
+                                hasattr(msg, "additional_kwargs")
+                                and msg.additional_kwargs
+                            ):
+                                tool_outputs = msg.additional_kwargs.get(
+                                    "tool_outputs", []
+                                )
+                                for tool_output in tool_outputs:
+                                    if tool_output.get("type") == "web_search_call":
+                                        logger.info(
+                                            f"[{input.agent_id}] Found web_search_call in additional_kwargs"
+                                        )
+                                        amount += 35
+                                        break
                             credit_event = await expense_message(
                                 session,
                                 payer,
@@ -488,11 +597,6 @@ async def execute_agent(
                         )
                         await session.commit()
                         resp.append(chat_message)
-                else:
-                    logger.error(
-                        "unexpected agent message: " + str(msg),
-                        extra={"thread_id": thread_id},
-                    )
             elif "tools" in chunk and "messages" in chunk["tools"]:
                 if not cached_tool_step:
                     logger.error(
@@ -501,6 +605,7 @@ async def execute_agent(
                     )
                     continue
                 skill_calls = []
+                have_first_call_in_cache = False  # tool node emit every tool call
                 for msg in chunk["tools"]["messages"]:
                     if not hasattr(msg, "tool_call_id"):
                         logger.error(
@@ -508,8 +613,10 @@ async def execute_agent(
                             extra={"thread_id": thread_id},
                         )
                         continue
-                    for call in cached_tool_step.tool_calls:
+                    for call_index, call in enumerate(cached_tool_step.tool_calls):
                         if call["id"] == msg.tool_call_id:
+                            if call_index == 0:
+                                have_first_call_in_cache = True
                             skill_call: ChatMessageSkillCall = {
                                 "id": msg.tool_call_id,
                                 "name": call["name"],
@@ -544,12 +651,14 @@ async def execute_agent(
                         cached_tool_step.usage_metadata.get("input_tokens", 0)
                         if hasattr(cached_tool_step, "usage_metadata")
                         and cached_tool_step.usage_metadata
+                        and have_first_call_in_cache
                         else 0
                     ),
                     output_tokens=(
                         cached_tool_step.usage_metadata.get("output_tokens", 0)
                         if hasattr(cached_tool_step, "usage_metadata")
                         and cached_tool_step.usage_metadata
+                        and have_first_call_in_cache
                         else 0
                     ),
                     time_cost=this_time - last,
@@ -558,28 +667,30 @@ async def execute_agent(
                 if cold_start_cost > 0:
                     skill_message_create.cold_start_cost = cold_start_cost
                     cold_start_cost = 0
-                cached_tool_step = None
                 # save message and credit in one transaction
                 async with get_session() as session:
                     if payment_enabled:
-                        # message payment
-                        message_amount = await get_model_cost(
-                            agent.model,
-                            skill_message_create.input_tokens,
-                            skill_message_create.output_tokens,
-                        )
-                        message_payment_event = await expense_message(
-                            session,
-                            payer,
-                            skill_message_create.id,
-                            input.id,
-                            message_amount,
-                            agent,
-                        )
-                        skill_message_create.credit_event_id = message_payment_event.id
-                        skill_message_create.credit_cost = (
-                            message_payment_event.total_amount
-                        )
+                        # message payment, only first call in a group has message bill
+                        if have_first_call_in_cache:
+                            message_amount = await get_model_cost(
+                                agent.model,
+                                skill_message_create.input_tokens,
+                                skill_message_create.output_tokens,
+                            )
+                            message_payment_event = await expense_message(
+                                session,
+                                payer,
+                                skill_message_create.id,
+                                input.id,
+                                message_amount,
+                                agent,
+                            )
+                            skill_message_create.credit_event_id = (
+                                message_payment_event.id
+                            )
+                            skill_message_create.credit_cost = (
+                                message_payment_event.total_amount
+                            )
                         # skill payment
                         for skill_call in skill_calls:
                             if not skill_call["success"]:
@@ -616,6 +727,10 @@ async def execute_agent(
                     ):
                         if "messages" in chunk["post_model_hook"]:
                             msg = chunk["post_model_hook"]["messages"][-1]
+                            content = msg.content
+                            if isinstance(msg.content, list):
+                                # in new version, content item maybe a list
+                                content = msg.content[0]
                             post_model_message_create = ChatMessageCreate(
                                 id=str(XID()),
                                 agent_id=input.agent_id,
@@ -626,7 +741,7 @@ async def execute_agent(
                                 model=agent.model,
                                 thread_type=input.author_type,
                                 reply_to=input.id,
-                                message=msg.content,
+                                message=content,
                                 input_tokens=0,
                                 output_tokens=0,
                                 time_cost=this_time - last,
@@ -659,48 +774,69 @@ async def execute_agent(
                     f"unexpected message type: {str(chunk)}\n{error_traceback}",
                     extra={"thread_id": thread_id},
                 )
-        except SQLAlchemyError as e:
-            error_traceback = traceback.format_exc()
-            logger.error(
-                f"failed to execute agent: {str(e)}\n{error_traceback}",
-                extra={"thread_id": thread_id},
-            )
-            error_message_create = ChatMessageCreate(
-                id=str(XID()),
-                agent_id=input.agent_id,
-                chat_id=input.chat_id,
-                user_id=input.user_id,
-                author_id=input.agent_id,
-                author_type=AuthorType.SYSTEM,
-                thread_type=input.author_type,
-                reply_to=input.id,
-                message="IntentKit Internal Error",
-                time_cost=time.perf_counter() - start,
-            )
-            error_message = await error_message_create.save()
-            resp.append(error_message)
-            return resp
-        except Exception as e:
-            error_traceback = traceback.format_exc()
-            logger.error(
-                f"failed to execute agent: {str(e)}\n{error_traceback}",
-                extra={"thread_id": thread_id, "agent_id": input.agent_id},
-            )
-            error_message_create = ChatMessageCreate(
-                id=str(XID()),
-                agent_id=input.agent_id,
-                chat_id=input.chat_id,
-                user_id=input.user_id,
-                author_id=input.agent_id,
-                author_type=AuthorType.SYSTEM,
-                thread_type=input.author_type,
-                reply_to=input.id,
-                message="Internal Agent Error",
-                time_cost=time.perf_counter() - start,
-            )
-            error_message = await error_message_create.save()
-            resp.append(error_message)
-            return resp
+    except SQLAlchemyError as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"failed to execute agent: {str(e)}\n{error_traceback}",
+            extra={"thread_id": thread_id},
+        )
+        error_message_create = ChatMessageCreate(
+            id=str(XID()),
+            agent_id=input.agent_id,
+            chat_id=input.chat_id,
+            user_id=input.user_id,
+            author_id=input.agent_id,
+            author_type=AuthorType.SYSTEM,
+            thread_type=input.author_type,
+            reply_to=input.id,
+            message="IntentKit Internal Error",
+            time_cost=time.perf_counter() - start,
+        )
+        error_message = await error_message_create.save()
+        resp.append(error_message)
+        return resp
+    except GraphRecursionError as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"reached recursion limit: {str(e)}\n{error_traceback}",
+            extra={"thread_id": thread_id, "agent_id": input.agent_id},
+        )
+        error_message_create = ChatMessageCreate(
+            id=str(XID()),
+            agent_id=input.agent_id,
+            chat_id=input.chat_id,
+            user_id=input.user_id,
+            author_id=input.agent_id,
+            author_type=AuthorType.SYSTEM,
+            thread_type=input.author_type,
+            reply_to=input.id,
+            message="Step Limit Error",
+            time_cost=time.perf_counter() - start,
+        )
+        error_message = await error_message_create.save()
+        resp.append(error_message)
+        return resp
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"failed to execute agent: {str(e)}\n{error_traceback}",
+            extra={"thread_id": thread_id, "agent_id": input.agent_id},
+        )
+        error_message_create = ChatMessageCreate(
+            id=str(XID()),
+            agent_id=input.agent_id,
+            chat_id=input.chat_id,
+            user_id=input.user_id,
+            author_id=input.agent_id,
+            author_type=AuthorType.SYSTEM,
+            thread_type=input.author_type,
+            reply_to=input.id,
+            message="Internal Agent Error",
+            time_cost=time.perf_counter() - start,
+        )
+        error_message = await error_message_create.save()
+        resp.append(error_message)
+        return resp
     return resp
 
 
