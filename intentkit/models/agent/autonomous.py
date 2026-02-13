@@ -43,11 +43,11 @@ class AutonomousCreateRequest(BaseModel):
         max_length=20000,
     )
     enabled: bool = PydanticField(
-        default=False,
+        default=True,
         description="Whether the autonomous configuration is enabled",
     )
     has_memory: bool = PydanticField(
-        default=True,
+        default=False,
         description="Whether to retain conversation memory between autonomous runs.",
     )
 
@@ -184,7 +184,7 @@ class AgentAutonomous(BaseModel):
     enabled: Annotated[
         bool | None,
         PydanticField(
-            default=False,
+            default=True,
             description="Whether the autonomous configuration is enabled",
             json_schema_extra={
                 "x-group": "autonomous",
@@ -194,7 +194,7 @@ class AgentAutonomous(BaseModel):
     has_memory: Annotated[
         bool | None,
         PydanticField(
-            default=True,
+            default=False,
             description="Whether to retain conversation memory between autonomous runs. If False, thread memory is cleared before each run.",
             json_schema_extra={
                 "x-group": "autonomous",

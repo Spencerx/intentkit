@@ -198,8 +198,8 @@ def test_autonomous_create_request_no_minutes_field():
     assert "minutes" not in AutonomousCreateRequest.model_fields
 
     # Verify default values
-    assert req.enabled is False
-    assert req.has_memory is True
+    assert req.enabled is True
+    assert req.has_memory is False
     assert req.name is None
     assert req.description is None
 

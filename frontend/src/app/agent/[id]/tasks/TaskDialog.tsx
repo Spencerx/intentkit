@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -31,10 +30,10 @@ export function TaskDialog({
   const [formData, setFormData] = useState<Partial<AutonomousTask>>({
     name: "",
     description: "",
-    cron: "0 * * * *", // default hourly
+    cron: "0 0 * * *",
     prompt: "",
-    enabled: false,
-    has_memory: true,
+    enabled: true,
+    has_memory: false,
   });
 
   useEffect(() => {
@@ -51,10 +50,10 @@ export function TaskDialog({
       setFormData({
         name: "",
         description: "",
-        cron: "0 * * * *",
+        cron: "0 0 * * *",
         prompt: "",
-        enabled: false, // Default to disabled for safety
-        has_memory: true,
+        enabled: true,
+        has_memory: false,
       });
     }
   }, [task, open]);
@@ -126,18 +125,18 @@ export function TaskDialog({
                     setFormData({ ...formData, cron: e.target.value })
                   }
                   required
-                  placeholder="* * * * *"
+                  placeholder="0 0 * * *"
                   className="font-mono"
                 />
               </div>
               <p className="text-[0.8rem] text-muted-foreground">
-                Format: Minute Hour Day Month DayOfWeek (e.g., &quot;0 9 * * *&quot; for daily at 9am)
+                Format: Minute Hour Day Month DayOfWeek (e.g., &quot;0 0 * * *&quot; for daily at midnight)
               </p>
             </div>
 
             <div className="grid gap-2">
               <label htmlFor="prompt" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                System Prompt <span className="text-destructive">*</span>
+                Trigger Prompt <span className="text-destructive">*</span>
               </label>
               <textarea
                 id="prompt"
@@ -173,7 +172,7 @@ export function TaskDialog({
               </div>
 
               <div className="flex items-center space-x-2">
-                 <input
+                <input
                   type="checkbox"
                   id="has_memory"
                   checked={formData.has_memory}

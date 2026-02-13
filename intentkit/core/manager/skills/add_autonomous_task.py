@@ -44,8 +44,8 @@ class AddAutonomousTask(ManagerSkill):
         prompt: str,
         name: str | None = None,
         description: str | None = None,
-        enabled: bool = False,
-        has_memory: bool = True,
+        enabled: bool = True,
+        has_memory: bool = False,
         **kwargs: Any,
     ) -> AddAutonomousTaskOutput:
         """Add an autonomous task to the agent.
