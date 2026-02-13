@@ -258,10 +258,10 @@ export default function AgentTasksPage() {
         {/* Page Title */}
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">
+            <h2 className="text-lg font-bold tracking-tight">
               Autonomous Tasks
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Manage autonomous scheduled tasks for this agent.
             </p>
           </div>
