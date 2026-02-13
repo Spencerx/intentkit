@@ -1,86 +1,47 @@
-# Frontend Architecture Guide for IntentKit
+# Frontend Guide
 
-This guide outlines the architecture for the IntentKit frontend, designed for self-hosted, single-user agent management.
+## Tech Stack
 
-## 1. Technology Stack
+- **Next.js 16+** (App Router, SSR mode — NOT static export)
+- **Shadcn/ui** (components in `src/components/ui/`) + **Tailwind CSS**
+- **TanStack Query v5** for server state, **Zustand** for client UI state
+- **@rjsf** (React JSON Schema Form) for agent config forms
+- **Lucide React** for icons
+- **ky** as HTTP client (available but `fetch` is also used directly)
+- API communication: REST + SSE streaming for chat
 
-We use a modern, "T3-ish" stack optimized for developer experience and AI-assisted coding.
+## Directory Structure
 
--   **Framework**: **Next.js 15+ (App Router)**
-    -   **Mode**: Static Export (`output: 'export'`). The frontend is compiled to pure HTML/CSS/JS and served by the FastAPI backend. No Node.js server is required in production.
-    -   **Language**: TypeScript.
-
--   **UI System**: **Shadcn/ui** + **Tailwind CSS**
-    -   **Shadcn/ui**: Headless components (Radix UI) with Tailwind styling. Components are copied into `src/components/ui`, allowing full customization.
-    -   **Tailwind CSS**: Utility-first CSS framework for rapid styling.
-    -   **Icons**: Lucide React.
-
--   **State Management**:
-    -   **TanStack Query (React Query) v5**: Manages server state (fetching agents, chat history, status polling). Handles caching, loading states, and revalidation.
-    -   **Zustand**: Manages global client-side UI state (e.g., sidebar toggle, active theme) if necessary.
-
--   **Communication**:
-    -   **REST API**: Standard CRUD operations via `fetch` or `ky`.
-    -   **Server-Sent Events (SSE)**: For real-time streaming of LLM responses from the agent.
-
-## 2. Directory Structure
-
-```text
-frontend/
-├── public/             # Static assets
-├── src/
-│   ├── app/            # Next.js App Router pages
-│   │   ├── layout.tsx  # Root layout (providers, sidebar)
-│   │   ├── page.tsx    # Dashboard / Agent List
-│   │   └── agents/
-│   │       └── [id]/   # Agent Detail & Chat Interface
-│   ├── components/
-│   │   ├── ui/         # Shadcn primitive components (Button, Input, etc.)
-│   │   └── features/   # Business logic components (ChatWindow, AgentCard)
-│   ├── lib/            # Utilities
-│   │   ├── api.ts      # API client configuration
-│   │   └── utils.ts    # Helper functions (cn, etc.)
-│   ├── hooks/          # Custom React hooks
-│   └── types/          # TypeScript definitions
-├── next.config.ts      # Next.js configuration
-├── tailwind.config.ts  # Tailwind configuration
-└── package.json
+```
+src/
+├── app/                # Pages (App Router)
+│   ├── agents/         # Agent list
+│   ├── agent/[id]/     # Agent detail, chat, tasks
+│   ├── posts/          # Post list
+│   ├── post/           # Post detail
+│   ├── timeline/       # Activity timeline
+│   ├── layout.tsx      # Root layout + providers
+│   └── providers.tsx   # TanStack Query + Zustand providers
+├── components/
+│   ├── ui/             # Shadcn primitives (Button, Input, etc.)
+│   └── features/       # Business components (ChatWindow, AgentCard, etc.)
+├── lib/
+│   ├── api.ts          # All API client functions (agentApi, chatApi, activityApi, postApi, autonomousApi)
+│   ├── config.ts       # Environment config (NEXT_PUBLIC_API_BASE_URL, NEXT_PUBLIC_AWS_S3_CDN_URL)
+│   └── utils.ts        # Helpers (cn, etc.)
+├── hooks/              # Custom hooks
+└── types/              # TypeScript types (agent, chat, content)
 ```
 
-## 3. Key Design Patterns
+## API & Dev Setup
 
-### Data Fetching
--   Use **TanStack Query** hooks (`useQuery`, `useMutation`) for all API interactions.
--   Do not use `useEffect` for data fetching.
--   Define query keys in a centralized factory or consistent pattern (e.g., `['agents', id]`) to enable easy invalidation.
+- Dev server: `npm run dev` on `:3000`, proxies `/api/*` → `http://127.0.0.1:8000` (configured in `next.config.ts` rewrites)
+- Override proxy: set `NEXT_PUBLIC_API_BASE_URL` in `.env.local`
+- All API functions are centralized in `src/lib/api.ts` — add new endpoints there
+- SSE streaming: chat uses `POST /agents/{aid}/chats/{chat_id}/messages` with `stream: true`, parsed as SSE events
 
-### Streaming (Chat)
--   Use the native `fetch` API or a lightweight wrapper to handle SSE streams from FastAPI.
--   Maintain a local message list state that appends chunks as they arrive.
+## Rules
 
-### Component Composition
--   Prefer **Composition** over Inheritance.
--   Keep components small and focused.
--   Use Shadcn components as building blocks.
-
-## 4. Development Workflow
-
-1.  **Prerequisites**: Node.js 24+.
-2.  **Setup**: `npm install`.
-3.  **Run**: `npm run dev`.
-    -   The frontend runs on `localhost:3000`.
-    -   API requests to `/api/*` are proxied to the FastAPI backend running on `localhost:8000` (configured in `next.config.ts`).
-
-## 5. Deployment (Self-Hosted)
-
-1.  **Build**: `npm run build`.
-    -   This generates a static `out/` directory.
-2.  **Serve**:
-    -   The FastAPI backend mounts the `out/` directory as static files.
-    -   The backend serves `index.html` for the root path and handles SPA routing fallback (if necessary, though static export usually relies on hash routing or specific file serving).
-
-## 6. Rules for AI Agents
-
--   **Shadcn First**: When asked to create UI, always prefer using existing Shadcn components from `src/components/ui`. If a component is missing, instruct the user to install it via `npx shadcn@latest add <component>`.
--   **Tailwind Only**: Do not write custom CSS files or modules. Use Tailwind classes.
--   **Type Safety**: Ensure all props and API responses are strictly typed.
+- **Shadcn first**: use existing components from `src/components/ui/`. If missing, install via `npx shadcn@latest add <component>`
+- **Tailwind only**: no custom CSS files or CSS modules
+- **Lint after changes**: run `npm run lint` and fix all errors before committing
