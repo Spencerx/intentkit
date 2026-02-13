@@ -21,6 +21,8 @@ from intentkit.config.db import get_session, init_db
 from intentkit.config.redis import init_redis
 from intentkit.core.api import core_router
 from intentkit.models.agent import AgentTable
+from intentkit.models.team import TeamMemberTable, TeamRole, TeamTable
+from intentkit.models.user import UserTable
 from intentkit.utils.alert import cleanup_alert
 from intentkit.utils.error import (
     IntentKitAPIError,
@@ -150,6 +152,8 @@ async def lifespan(app: FastAPI):
     # This is synchronous but fast enough for startup
     ensure_bucket_exists_and_public()
 
+    await ensure_system_user_and_team()
+
     # Create example agent if no agents exist
     await create_example_agent()
 
@@ -226,6 +230,7 @@ async def create_example_agent() -> None:
                 id="example",
                 name="Example",
                 owner="system",
+                team_id="system",
                 skills={
                     "common": {
                         "states": {"common_current_time": "public"},
@@ -240,3 +245,31 @@ async def create_example_agent() -> None:
     except Exception as e:
         logger.error(f"Failed to create example agent: {str(e)}")
         # Don't re-raise the exception to avoid blocking server startup
+
+
+async def ensure_system_user_and_team() -> None:
+    try:
+        async with get_session() as session:
+            system_user = await session.get(UserTable, "system")
+            if not system_user:
+                session.add(UserTable(id="system"))
+
+            system_team = await session.get(TeamTable, "system")
+            if not system_team:
+                session.add(TeamTable(id="system", name="system"))
+
+            system_member = await session.get(
+                TeamMemberTable, {"team_id": "system", "user_id": "system"}
+            )
+            if not system_member:
+                session.add(
+                    TeamMemberTable(
+                        team_id="system",
+                        user_id="system",
+                        role=TeamRole.OWNER,
+                    )
+                )
+
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to create system user/team: {str(e)}")

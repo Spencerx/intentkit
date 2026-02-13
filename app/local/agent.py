@@ -78,6 +78,7 @@ async def create_agent_endpoint(
     """
     new_agent = AgentCreate.model_validate(agent)
     new_agent.owner = "system"
+    new_agent.team_id = "system"
 
     if not new_agent.picture:
         try:
