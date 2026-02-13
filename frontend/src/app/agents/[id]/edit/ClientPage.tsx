@@ -196,7 +196,10 @@ export default function EditAgentPage() {
             }
         }
 
-        const { autonomous, ...restData } = data; // eslint-disable-line @typescript-eslint/no-unused-vars
+        const restData = { ...data };
+        if ("autonomous" in restData) {
+            delete (restData as Record<string, unknown>).autonomous;
+        }
         return {
             ...restData,
             skills: Object.keys(cleanedSkills).length > 0 ? cleanedSkills : undefined,

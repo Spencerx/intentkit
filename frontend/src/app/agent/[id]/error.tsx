@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, ArrowLeft, RotateCcw } from "lucide-react";
 
@@ -34,10 +35,10 @@ export default function AgentError({
                         Try Again
                     </Button>
                     <Button asChild>
-                        <a href="/">
+                        <Link href="/">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back to Agents
-                        </a>
+                        </Link>
                     </Button>
                 </div>
             </div>

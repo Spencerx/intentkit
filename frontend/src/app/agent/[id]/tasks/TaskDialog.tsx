@@ -131,7 +131,7 @@ export function TaskDialog({
                 />
               </div>
               <p className="text-[0.8rem] text-muted-foreground">
-                Format: Minute Hour Day Month DayOfWeek (e.g., "0 9 * * *" for daily at 9am)
+                Format: Minute Hour Day Month DayOfWeek (e.g., &quot;0 9 * * *&quot; for daily at 9am)
               </p>
             </div>
 
