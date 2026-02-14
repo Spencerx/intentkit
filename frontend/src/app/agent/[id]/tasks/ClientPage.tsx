@@ -17,7 +17,7 @@ import Link from "next/link";
 import { ChatSidebar } from "@/components/features/ChatSidebar";
 import { getImageUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge, badgeVariants } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import cronstrue from "cronstrue";
 import {
   Card,
@@ -45,6 +45,7 @@ import {
 import { agentApi, chatApi, autonomousApi, AutonomousTask } from "@/lib/api";
 import { TaskDialog } from "./TaskDialog";
 import { buildChatThreadPath, buildTaskLogsPath } from "@/lib/autonomousChat";
+import { TaskBadgeActions } from "./TaskBadgeActions";
 
 export default function AgentTasksPage() {
   const params = useParams();
@@ -305,15 +306,13 @@ export default function AgentTasksPage() {
                             Memory
                           </Badge>
                         )}
-                        <Badge variant={task.enabled ? "default" : "secondary"}>
-                          {task.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                        <Link
-                          href={buildTaskLogsPath(agentId, task.id)}
-                          className={badgeVariants({ variant: "outline" })}
-                        >
-                          Logs
-                        </Link>
+                        <TaskBadgeActions
+                          enabled={task.enabled}
+                          logsHref={buildTaskLogsPath(agentId, task.id)}
+                          onToggle={() =>
+                            setActionTask({ task, type: "toggle" })
+                          }
+                        />
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
