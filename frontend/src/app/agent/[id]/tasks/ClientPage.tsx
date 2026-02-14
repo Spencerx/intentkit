@@ -4,7 +4,6 @@ import { useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Bot,
   Pencil,
   MoreVertical,
@@ -18,7 +17,7 @@ import Link from "next/link";
 import { ChatSidebar } from "@/components/features/ChatSidebar";
 import { getImageUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
 import cronstrue from "cronstrue";
 import {
   Card,
@@ -45,6 +44,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { agentApi, chatApi, autonomousApi, AutonomousTask } from "@/lib/api";
 import { TaskDialog } from "./TaskDialog";
+import { buildChatThreadPath, buildTaskLogsPath } from "@/lib/autonomousChat";
 
 export default function AgentTasksPage() {
   const params = useParams();
@@ -143,13 +143,13 @@ export default function AgentTasksPage() {
   // Thread actions
   const handleSelectThread = useCallback(
     (threadId: string) => {
-      window.location.href = `/agent/${agentId}?thread=${threadId}`;
+      window.location.href = buildChatThreadPath(agentId, threadId);
     },
     [agentId],
   );
 
   const handleNewThread = useCallback(() => {
-    window.location.href = `/agent/${agentId}`;
+    window.location.href = buildChatThreadPath(agentId, null);
   }, [agentId]);
 
   const handleUpdateTitle = useCallback(
@@ -204,33 +204,29 @@ export default function AgentTasksPage() {
       <div className="flex-1 flex flex-col p-6 overflow-hidden">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-3">
-              {agent?.picture ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={getImageUrl(agent.picture) ?? undefined}
-                  alt={displayName}
-                  className="h-10 w-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                  <Bot className="h-5 w-5 text-primary" />
-                </div>
-              )}
-              <div>
-                <h1 className="text-xl font-bold">{displayName}</h1>
-                <p className="text-sm text-muted-foreground line-clamp-1">
-                  {agent?.purpose || "No description"}
-                </p>
+          <Link
+            href={`/agent/${agentId}/activities`}
+            className="flex items-center gap-3"
+          >
+            {agent?.picture ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={getImageUrl(agent.picture) ?? undefined}
+                alt={displayName}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <Bot className="h-5 w-5 text-primary" />
               </div>
+            )}
+            <div>
+              <h1 className="text-xl font-bold">{displayName}</h1>
+              <p className="text-sm text-muted-foreground line-clamp-1">
+                {agent?.purpose || "No description"}
+              </p>
             </div>
-          </div>
+          </Link>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
               <Link href={`/agents/${agentId}/edit`}>
@@ -312,6 +308,12 @@ export default function AgentTasksPage() {
                         <Badge variant={task.enabled ? "default" : "secondary"}>
                           {task.enabled ? "Enabled" : "Disabled"}
                         </Badge>
+                        <Link
+                          href={buildTaskLogsPath(agentId, task.id)}
+                          className={badgeVariants({ variant: "outline" })}
+                        >
+                          Logs
+                        </Link>
 
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -411,9 +413,8 @@ export default function AgentTasksPage() {
             <AlertDialogDescription>
               {actionTask &&
                 (actionTask.type === "toggle"
-                  ? `This will ${
-                      actionTask.task.enabled ? "disable" : "enable"
-                    } the task "${actionTask.task.name ?? "Untitled"}".`
+                  ? `This will ${actionTask.task.enabled ? "disable" : "enable"
+                  } the task "${actionTask.task.name ?? "Untitled"}".`
                   : `This will permanently delete the task "${actionTask.task.name ?? "Untitled"}". This action cannot be undone.`)}
             </AlertDialogDescription>
           </AlertDialogHeader>

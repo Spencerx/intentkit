@@ -73,6 +73,9 @@ export interface Chat {
 // Alias for consistency with API naming
 export type ChatThread = Chat;
 
+export const isUserAuthoredMessage = (authorType: AuthorType) =>
+  authorType === "web" || authorType === "api" || authorType === "trigger";
+
 // Response type for paginated message list
 export interface ChatMessagesResponse {
   data: ChatMessage[];
@@ -89,4 +92,3 @@ export interface UIMessage {
   isStreaming?: boolean;
   skillCalls?: ChatMessageSkillCall[];
 }
-

@@ -187,9 +187,11 @@ export const chatApi = {
    * Create a new chat thread
    * POST /agents/{aid}/chats
    */
-  async createChat(agentId: string): Promise<ChatThread> {
+  async createChat(agentId: string, chatId?: string): Promise<ChatThread> {
     const response = await fetch(`${API_BASE}/agents/${agentId}/chats`, {
       method: "POST",
+      headers: chatId ? { "Content-Type": "application/json" } : undefined,
+      body: chatId ? JSON.stringify({ chat_id: chatId }) : undefined,
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));

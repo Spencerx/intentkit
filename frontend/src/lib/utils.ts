@@ -34,3 +34,21 @@ export function getImageUrl(path: string | null | undefined): string | null {
   const rel = path.startsWith("/") ? path.slice(1) : path;
   return `${base}/${rel}`;
 }
+
+const agentAvatarCache = new Map<string, string>();
+
+export const cacheAgentAvatar = (
+  agentId: string,
+  picture?: string | null,
+) => {
+  if (!agentId) return;
+  const resolved = getImageUrl(picture);
+  if (resolved) {
+    agentAvatarCache.set(agentId, resolved);
+  } else {
+    agentAvatarCache.delete(agentId);
+  }
+};
+
+export const getCachedAgentAvatar = (agentId: string) =>
+  agentAvatarCache.get(agentId) ?? null;

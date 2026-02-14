@@ -14,10 +14,14 @@ import {
   Archive,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getImageUrl } from "@/lib/utils";
+import {
+  cacheAgentAvatar,
+  getCachedAgentAvatar,
+  getImageUrl,
+} from "@/lib/utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -41,7 +45,10 @@ import { ChatSidebar } from "@/components/features/ChatSidebar";
 import { SkillCallBadgeList } from "@/components/features/SkillCallBadge";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { toast } from "@/hooks/use-toast";
+import { isUserAuthoredMessage } from "@/types/chat";
 import type { UIMessage, ChatThread, ChatMessage } from "@/types/chat";
+import { buildChatThreadPath } from "@/lib/autonomousChat";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // Tailwind prose classes for markdown rendering in chat bubbles
 const markdownProseClass =
@@ -57,7 +64,7 @@ function isThreadOlderThanThreeDays(thread: ChatThread): boolean {
 
 // Convert API ChatMessage to UI message
 function apiMessageToUIMessage(msg: ChatMessage): UIMessage {
-  const isUserMessage = msg.author_type === "web" || msg.author_type === "api";
+  const isUserMessage = isUserAuthoredMessage(msg.author_type);
   return {
     id: msg.id,
     role: isUserMessage ? "user" : "agent",
@@ -70,6 +77,7 @@ function apiMessageToUIMessage(msg: ChatMessage): UIMessage {
 export default function AgentChatPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const agentId = params.id as string;
 
@@ -113,7 +121,19 @@ export default function AgentChatPage() {
 
   // Initialize: select the most recent thread or start new if older than 3 days
   useEffect(() => {
-    if (hasInitialized || isLoadingThreads || !agentId) return;
+    if (!agentId) return;
+
+    const threadFromUrl = searchParams.get("thread");
+    if (threadFromUrl) {
+      if (currentThreadId !== threadFromUrl || isNewThread) {
+        setCurrentThreadId(threadFromUrl);
+        setIsNewThread(false);
+      }
+      setHasInitialized(true);
+      return;
+    }
+
+    if (hasInitialized || isLoadingThreads) return;
 
     if (threads.length === 0) {
       // No threads, start a new one
@@ -135,10 +155,25 @@ export default function AgentChatPage() {
         // Use the most recent thread
         setCurrentThreadId(mostRecent.id);
         setIsNewThread(false);
+        router.replace(buildChatThreadPath(agentId, mostRecent.id));
       }
     }
     setHasInitialized(true);
-  }, [threads, isLoadingThreads, hasInitialized, agentId]);
+  }, [
+    threads,
+    isLoadingThreads,
+    hasInitialized,
+    agentId,
+    searchParams,
+    currentThreadId,
+    isNewThread,
+    router,
+  ]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    cacheAgentAvatar(agentId, agent?.picture);
+  }, [agentId, agent?.picture]);
 
   // Load messages when thread changes (but not during send operation)
   useEffect(() => {
@@ -174,18 +209,23 @@ export default function AgentChatPage() {
   }, [messages]);
 
   // Thread actions
-  const handleSelectThread = useCallback((threadId: string) => {
-    setCurrentThreadId(threadId);
-    setIsNewThread(false);
-    setError(null);
-  }, []);
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      setCurrentThreadId(threadId);
+      setIsNewThread(false);
+      setError(null);
+      router.push(buildChatThreadPath(agentId, threadId));
+    },
+    [agentId, router],
+  );
 
   const handleNewThread = useCallback(() => {
     setIsNewThread(true);
     setCurrentThreadId(null);
     setMessages([]);
     setError(null);
-  }, []);
+    router.push(buildChatThreadPath(agentId, null));
+  }, [agentId, router]);
 
   const handleUpdateTitle = useCallback(
     async (threadId: string, title: string) => {
@@ -213,14 +253,16 @@ export default function AgentChatPage() {
           );
           setCurrentThreadId(sorted[0].id);
           setIsNewThread(false);
+          router.replace(buildChatThreadPath(agentId, sorted[0].id));
         } else {
           setIsNewThread(true);
           setCurrentThreadId(null);
           setMessages([]);
+          router.replace(buildChatThreadPath(agentId, null));
         }
       }
     },
-    [agentId, refetchThreads, currentThreadId, threads],
+    [agentId, refetchThreads, currentThreadId, threads, router],
   );
 
   // Send message with streaming
@@ -251,6 +293,7 @@ export default function AgentChatPage() {
           setCurrentThreadId(threadId);
           setIsNewThread(false);
           await refetchThreads();
+          router.replace(buildChatThreadPath(agentId, threadId));
         }
 
         // Stream the response
@@ -289,6 +332,7 @@ export default function AgentChatPage() {
       currentThreadId,
       isNewThread,
       refetchThreads,
+      router,
     ],
   );
 
@@ -355,6 +399,7 @@ export default function AgentChatPage() {
   }
 
   const displayName = agent.name || agent.id;
+  const cachedAvatar = getCachedAgentAvatar(agentId) ?? getImageUrl(agent.picture);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
@@ -376,33 +421,25 @@ export default function AgentChatPage() {
       <div className="flex-1 flex flex-col p-6">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-3">
-              {getImageUrl(agent.picture) ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={getImageUrl(agent.picture)!}
-                  alt={displayName}
-                  className="h-10 w-10 rounded-full object-cover"
-                />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                  <Bot className="h-5 w-5 text-primary" />
-                </div>
-              )}
-              <div>
-                <h1 className="text-xl font-bold">{displayName}</h1>
-                <p className="text-sm text-muted-foreground line-clamp-1">
-                  {agent.purpose || "No description"}
-                </p>
-              </div>
+          <Link
+            href={`/agent/${agentId}/activities`}
+            className="flex items-center gap-3"
+          >
+            <Avatar className="h-10 w-10">
+              {cachedAvatar ? (
+                <AvatarImage src={cachedAvatar} alt={displayName} />
+              ) : null}
+              <AvatarFallback className="bg-primary/10">
+                <Bot className="h-5 w-5 text-primary" />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-xl font-bold">{displayName}</h1>
+              <p className="text-sm text-muted-foreground line-clamp-1">
+                {agent.purpose || "No description"}
+              </p>
             </div>
-          </div>
+          </Link>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" asChild>
               <Link href={`/agents/${agentId}/edit`}>
@@ -537,7 +574,7 @@ export default function AgentChatPage() {
                 {isNewThread
                   ? "New Chat"
                   : threads.find((t) => t.id === currentThreadId)?.summary ||
-                    "Chat Session"}
+                  "Chat Session"}
               </span>
               <span className="text-xs">
                 ({messages.length} message{messages.length !== 1 ? "s" : ""})
@@ -566,20 +603,20 @@ export default function AgentChatPage() {
                     msg.role === "user" ? "ml-auto flex-row-reverse" : "",
                   )}
                 >
-                  <div
-                    className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border",
-                      msg.role === "agent"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted",
-                    )}
-                  >
-                    {msg.role === "agent" ? (
-                      <Bot className="h-4 w-4" />
-                    ) : (
+                  {msg.role === "agent" ? (
+                    <Avatar className="h-8 w-8 border">
+                      {cachedAvatar ? (
+                        <AvatarImage src={cachedAvatar} alt={displayName} />
+                      ) : null}
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        <Bot className="h-4 w-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-muted">
                       <User className="h-4 w-4" />
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div
                     className={cn(
                       "rounded-lg px-4 py-2 text-sm",
