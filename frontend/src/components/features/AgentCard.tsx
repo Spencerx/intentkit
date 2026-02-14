@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { AgentResponse } from "@/types/agent";
 import { getImageUrl } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Bot, Cpu } from "lucide-react";
 import Link from "next/link";
 
@@ -17,31 +18,44 @@ interface AgentCardProps {
 export function AgentCard({ agent }: AgentCardProps) {
   const displayName = agent.name || agent.id;
   const displayDescription = agent.purpose || "No description available";
+  const resolvedImage = getImageUrl(agent.picture);
 
   // Extract active skills
   const activeSkills = agent.skills
     ? Object.entries(agent.skills)
-        .filter(([, config]) => (config as { enabled: boolean }).enabled)
-        .map(([category]) => category)
+      .filter(([, config]) => (config as { enabled: boolean }).enabled)
+      .map(([category]) => category)
     : [];
+
+  const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    if (!resolvedImage) return;
+    const target = event.currentTarget;
+    const currentRetry = Number(target.dataset.retry ?? "0");
+    if (currentRetry < 1) {
+      const separator = resolvedImage.includes("?") ? "&" : "?";
+      target.dataset.retry = String(currentRetry + 1);
+      target.src = `${resolvedImage}${separator}ts=${Date.now()}`;
+    }
+  };
 
   return (
     <Link href={`/agent/${agent.id}`} className="block h-full group">
       <Card className="flex flex-col h-full transition-colors hover:bg-muted/50 hover:border-primary/50">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
-            {agent.picture ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
-                src={getImageUrl(agent.picture) ?? undefined}
-                alt={displayName}
-                className="h-9 w-9 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+            <Avatar className="h-9 w-9">
+              {resolvedImage ? (
+                <AvatarImage
+                  src={resolvedImage}
+                  alt={displayName}
+                  className="object-cover"
+                  onError={handleImageError}
+                />
+              ) : null}
+              <AvatarFallback className="bg-primary/10">
                 <Bot className="h-5 w-5 text-primary" />
-              </div>
-            )}
+              </AvatarFallback>
+            </Avatar>
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base font-semibold truncate leading-none">
                 {displayName}
