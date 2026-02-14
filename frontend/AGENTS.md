@@ -45,3 +45,4 @@ src/
 - **Shadcn first**: use existing components from `src/components/ui/`. If missing, install via `npx shadcn@latest add <component>`
 - **Tailwind only**: no custom CSS files or CSS modules
 - **Lint after changes**: run `npm run lint` and fix all errors before committing
+- **Typecheck after changes**: run `npm run typecheck` and fix all errors
