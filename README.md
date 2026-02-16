@@ -1,7 +1,7 @@
 # IntentKit
 
 <div align="center">
-  <img src="docs/images/intentkit_banner.png" alt="IntentKit by Crestal" width="100%" />
+  <img src="docs/static/images/intentkit_banner.png" alt="IntentKit by Crestal" width="100%" />
 </div>
 <br>
 
@@ -56,7 +56,7 @@ uv sync
                                                                                     
 ```
 
-The architecture is a simplified view, and more details can be found in the [Architecture](docs/architecture.md) section.
+The architecture is a simplified view, and more details can be found in the [Architecture](docs/content/en/docs/others/architecture.md) section.
 
 ## Development
 
@@ -98,7 +98,7 @@ The project is divided into the core package and the application:
 
 IntentKit provides a comprehensive REST API for programmatic access to your agents. Build applications, integrate with existing systems, or create custom interfaces using our Agent API.
 
-**Get Started:** [Agent API Documentation](docs/agent_api.md)
+**Get Started:** [Agent API Documentation](docs/content/en/docs/others/agent_api.md)
 
 ## Contributing
 
@@ -106,9 +106,9 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ### Contribute Skills
 
-First check [Wishlist](docs/contributing/wishlist.md) for active requests.
+First check [Wishlist](docs/content/en/docs/others/contributing/wishlist.md) for active requests.
 
-Once you are ready to start, see [Skill Development Guide](docs/contributing/skills.md) for more information.
+Once you are ready to start, see [Skill Development Guide](docs/content/en/docs/others/contributing/skills.md) for more information.
 
 ### Developer Chat
 
