@@ -1,12 +1,17 @@
-# Release v0.11.2
+# Release v0.11.3
 
 ## New Features
 
-- Added support for new AI models: MiniMax M2.5 with enhanced intelligence and structured output capabilities, and GLM 5 with improved performance and reasoning abilities.
+- Added x402 updates to expand onchain payment support.
+- Enabled frontend hot-reload in docker-compose for faster local development.
+- Introduced LLM packer improvements to streamline model packaging.
+- Launched the Hugo-based documentation site with initial installation guidance.
 
 ## Improvements
 
-- Enhanced error logging in autonomous tasks with detailed exception information and stack traces for better debugging.
-- Updated model configurations to reflect the latest available models and their capabilities.
+- Improved avatar generation and frontend error handling for smoother UI experiences.
+- Refined autonomous task defaults and display formatting.
+- Updated image handling to use relative paths with CDN resolution.
+- Stabilized local API behavior and development reload flows.
 
-Full Changelog: [v0.11.1...v0.11.2](https://github.com/crestalnetwork/intentkit/compare/v0.11.1...v0.11.2)
+Full Changelog: [v0.11.2...v0.11.3](https://github.com/crestalnetwork/intentkit/compare/v0.11.2...v0.11.3)

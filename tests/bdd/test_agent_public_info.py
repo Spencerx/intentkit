@@ -31,7 +31,11 @@ async def test_update_public_info_partial():
     And other public info fields remain at their defaults
     """
     # Given
-    agent_data = AgentCreate(id="pub-agent-1", name="Public Info Agent 1")
+    agent_data = AgentCreate(
+        id="pub-agent-1",
+        name="Public Info Agent 1",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # When
@@ -76,7 +80,11 @@ async def test_override_public_info_resets_unset_fields():
     And `description` and `ticker` are reset to None (defaults)
     """
     # Given
-    agent_data = AgentCreate(id="pub-agent-2", name="Public Info Agent 2")
+    agent_data = AgentCreate(
+        id="pub-agent-2",
+        name="Public Info Agent 2",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # First, set some fields
@@ -107,7 +115,11 @@ async def test_update_public_info_with_examples():
     Then the agent's `examples` are correctly persisted
     """
     # Given
-    agent_data = AgentCreate(id="pub-agent-3", name="Public Info Agent 3")
+    agent_data = AgentCreate(
+        id="pub-agent-3",
+        name="Public Info Agent 3",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # When
@@ -148,7 +160,11 @@ async def test_partial_update_preserves_existing_fields():
     And `description` remains unchanged from the first update
     """
     # Given
-    agent_data = AgentCreate(id="pub-agent-4", name="Public Info Agent 4")
+    agent_data = AgentCreate(
+        id="pub-agent-4",
+        name="Public Info Agent 4",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     await update_public_info(
@@ -177,7 +193,11 @@ async def test_public_info_updated_at_is_set():
     Then the agent's `public_info_updated_at` is not None
     """
     # Given
-    agent_data = AgentCreate(id="pub-agent-5", name="Public Info Agent 5")
+    agent_data = AgentCreate(
+        id="pub-agent-5",
+        name="Public Info Agent 5",
+        model="gpt-4o-mini",
+    )
     agent, _ = await create_agent(agent_data)
     assert agent.public_info_updated_at is None
 

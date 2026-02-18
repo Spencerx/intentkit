@@ -33,6 +33,7 @@ async def test_create_agent_minimal_config():
     agent_data = AgentCreate(
         id="test-agent-1",
         name="Test Agent",
+        model="gpt-4o-mini",
     )
     agent, _ = await create_agent(agent_data)
 
@@ -81,6 +82,7 @@ async def test_create_duplicate_agent_fails():
     agent_data = AgentCreate(
         id="existing-agent",
         name="Existing Agent",
+        model="gpt-4o-mini",
     )
     await create_agent(agent_data)
 
@@ -111,7 +113,7 @@ async def test_patch_agent_updates_specific_fields():
     await create_agent(original)
 
     # When
-    update = AgentUpdate(name="New Name")
+    update = AgentUpdate(name="New Name", model="gpt-4o-mini")
     patched_agent, _ = await patch_agent("patch-target", update)
 
     # Then
@@ -130,7 +132,7 @@ async def test_patch_nonexistent_agent_fails():
     """
     # When/Then
     with pytest.raises(IntentKitAPIError) as exc_info:
-        update = AgentUpdate(name="New Name")
+        update = AgentUpdate(name="New Name", model="gpt-4o-mini")
         await patch_agent("non-existent", update)
 
     assert exc_info.value.status_code == 404
@@ -149,6 +151,7 @@ async def test_get_agent_by_id():
     agent_data = AgentCreate(
         id="get-target",
         name="Get Target Agent",
+        model="gpt-4o-mini",
     )
     await create_agent(agent_data)
 

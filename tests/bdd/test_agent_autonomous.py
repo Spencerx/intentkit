@@ -42,7 +42,11 @@ async def test_add_autonomous_task_to_agent():
     And the task `status` is `waiting` because it is enabled
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-1", name="Autonomous Agent 1")
+    agent_data = AgentCreate(
+        id="auto-agent-1",
+        name="Autonomous Agent 1",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # When
@@ -78,7 +82,11 @@ async def test_list_autonomous_tasks():
     Then both tasks are returned
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-2", name="Autonomous Agent 2")
+    agent_data = AgentCreate(
+        id="auto-agent-2",
+        name="Autonomous Agent 2",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     task1 = AutonomousCreateRequest(
@@ -116,7 +124,11 @@ async def test_update_autonomous_task_partial():
     And other fields remain unchanged
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-3", name="Autonomous Agent 3")
+    agent_data = AgentCreate(
+        id="auto-agent-3",
+        name="Autonomous Agent 3",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     created = await add_autonomous_task(
@@ -155,7 +167,11 @@ async def test_delete_autonomous_task():
     And `list_autonomous_tasks` returns an empty list
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-4", name="Autonomous Agent 4")
+    agent_data = AgentCreate(
+        id="auto-agent-4",
+        name="Autonomous Agent 4",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     created = await add_autonomous_task(
@@ -206,7 +222,11 @@ async def test_delete_nonexistent_task_fails():
     Then an `IntentKitAPIError` with `status_code=404` and `key=TaskNotFound` is raised
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-5", name="Autonomous Agent 5")
+    agent_data = AgentCreate(
+        id="auto-agent-5",
+        name="Autonomous Agent 5",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # When/Then
@@ -232,7 +252,11 @@ async def test_operations_on_archived_agent_fail():
     from intentkit.models.agent.db import AgentTable
 
     # Given: create agent then archive it directly in DB
-    agent_data = AgentCreate(id="auto-agent-archived", name="Archived Agent")
+    agent_data = AgentCreate(
+        id="auto-agent-archived",
+        name="Archived Agent",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     async with get_session() as session:
@@ -269,7 +293,11 @@ async def test_update_autonomous_task_status():
     Then the task's status and next_run_time are updated
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-6", name="Status Agent")
+    agent_data = AgentCreate(
+        id="auto-agent-6",
+        name="Status Agent",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     created = await add_autonomous_task(
@@ -308,7 +336,11 @@ async def test_disabled_task_has_no_status():
     And `next_run_time` is `None`
     """
     # Given
-    agent_data = AgentCreate(id="auto-agent-7", name="Disabled Agent")
+    agent_data = AgentCreate(
+        id="auto-agent-7",
+        name="Disabled Agent",
+        model="gpt-4o-mini",
+    )
     await create_agent(agent_data)
 
     # When
