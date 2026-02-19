@@ -19,7 +19,7 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,9 +38,7 @@ class AgentSkillDataTable(Base):
     agent_id: Mapped[str] = mapped_column(String, primary_key=True)
     skill: Mapped[str] = mapped_column(String, primary_key=True)
     key: Mapped[str] = mapped_column(String, primary_key=True)
-    data: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"), nullable=True
-    )
+    data: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -227,9 +225,7 @@ class ChatSkillDataTable(Base):
     skill: Mapped[str] = mapped_column(String, primary_key=True)
     key: Mapped[str] = mapped_column(String, primary_key=True)
     agent_id: Mapped[str] = mapped_column(String, nullable=False)
-    data: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"), nullable=True
-    )
+    data: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

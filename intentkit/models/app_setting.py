@@ -6,7 +6,7 @@ from typing import Annotated, Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import DateTime, String, func, select
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from intentkit.config.base import Base
@@ -53,7 +53,7 @@ class AppSettingTable(Base):
         primary_key=True,
     )
     value: Mapped[Any] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

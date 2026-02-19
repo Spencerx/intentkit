@@ -20,7 +20,7 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -216,11 +216,11 @@ class ChatMessageTable(Base):
     reply_to: Mapped[str | None] = mapped_column(String, nullable=True)
     message: Mapped[str] = mapped_column(String, nullable=False)
     attachments: Mapped[list[ChatMessageAttachment] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
     )
     skill_calls: Mapped[list[ChatMessageSkillCall] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
     )
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)

@@ -1,28 +1,25 @@
 import pytest  # noqa: F401
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from intentkit.config.base import Base
 from intentkit.models.agent import Agent
 from intentkit.models.llm import LLMModelInfoTable
 from intentkit.models.skill import Skill, SkillTable
 
 
 @pytest_asyncio.fixture()
-async def session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+async def session(db_engine):
+    async with db_engine.begin() as conn:
+        await conn.run_sync(
+            Base.metadata.create_all,
+            tables=[SkillTable.__table__, LLMModelInfoTable.__table__],
+        )
 
-    # Ensure tables for the models used in these tests exist
-    async with engine.begin() as conn:
-        await conn.run_sync(SkillTable.__table__.create)
-        await conn.run_sync(LLMModelInfoTable.__table__.create)
+    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
 
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    try:
-        async with session_factory() as session:
-            yield session
-    finally:
-        await engine.dispose()
+    async with session_factory() as session:
+        yield session
 
 
 async def _insert_erc20_skill(session, skill_name: str = "erc20_get_balance"):

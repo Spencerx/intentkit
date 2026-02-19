@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, Numeric, String, func
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from intentkit.config.base import Base
@@ -103,7 +103,7 @@ class AgentUserInputColumns:
 
     # Skills configuration from AgentCore
     skills: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Dict of skills and their corresponding configurations",
     )
@@ -116,7 +116,7 @@ class AgentUserInputColumns:
         comment="Strategy for managing short-term memory when context limit is reached. 'trim' removes oldest messages, 'summarize' creates summaries.",
     )
     autonomous: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Autonomous agent configurations",
     )
@@ -132,7 +132,7 @@ class AgentUserInputColumns:
         comment="Extra prompt for telegram entrypoint",
     )
     telegram_config: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Telegram integration configuration settings",
     )
@@ -143,7 +143,7 @@ class AgentUserInputColumns:
         comment="Whether the agent can receive events from Discord",
     )
     discord_config: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Discord integration configuration settings",
     )
@@ -196,7 +196,7 @@ class AgentTable(Base, AgentUserInputColumns):
         comment="Upstream reference ID for idempotent operations",
     )
     upstream_extra: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Additional data store for upstream use",
     )
@@ -206,22 +206,22 @@ class AgentTable(Base, AgentUserInputColumns):
         comment="Version hash of the agent",
     )
     statistics: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Statistics of the agent, update every 1 hour for query",
     )
     assets: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Assets of the agent, update every 1 hour for query",
     )
     account_snapshot: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Account snapshot of the agent, update every 1 hour for query",
     )
     extra: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Other helper data fields for query, come from agent and agent data",
     )
@@ -263,12 +263,12 @@ class AgentTable(Base, AgentUserInputColumns):
         comment="Introduction for example interactions",
     )
     examples: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="List of example interactions for the agent",
     )
     public_extra: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Public extra data of the agent",
     )

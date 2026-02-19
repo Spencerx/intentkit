@@ -6,16 +6,7 @@ from typing import Annotated, Any, ClassVar
 from epyxid import XID
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import (
-    ARRAY,
-    JSON,
-    DateTime,
-    Index,
-    Numeric,
-    String,
-    func,
-    select,
-)
+from sqlalchemy import ARRAY, DateTime, Index, Numeric, String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -159,7 +150,7 @@ class CreditEventTable(Base):
         nullable=False,
     )
     credit_types: Mapped[list[str] | None] = mapped_column(
-        JSON().with_variant(ARRAY(String), "postgresql"),
+        ARRAY(String),
         nullable=True,
     )
     balance_after: Mapped[Decimal | None] = mapped_column(

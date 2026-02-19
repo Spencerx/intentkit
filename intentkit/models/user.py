@@ -5,7 +5,7 @@ from typing import Annotated, Any, ClassVar, TypeVar, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import DateTime, Index, Integer, String, func, select
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -91,7 +91,7 @@ class UserTable(Base):
         nullable=True,
     )
     extra: Mapped[dict[str, object] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
     )
     evm_wallet_address: Mapped[str | None] = mapped_column(
@@ -107,7 +107,7 @@ class UserTable(Base):
         nullable=True,
     )
     linked_accounts: Mapped[dict[str, object] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

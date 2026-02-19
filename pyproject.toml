@@ -103,6 +103,7 @@ dev = [
     # Testing
     "pytest>=8.4.0",
     "pytest-asyncio>=1.2.0",
+    "testing.postgresql",
     # Linting and code quality
     "ruff>=0.11.9",
     "deptry>=0.23.0",
@@ -165,3 +166,5 @@ testpaths = ["tests"]
 markers = [
     "bdd: mark test as BDD integration test",
 ]
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

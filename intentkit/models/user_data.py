@@ -9,7 +9,7 @@ from typing import Annotated, Any, ClassVar
 from pydantic import BaseModel, ConfigDict
 from pydantic import Field as PydanticField
 from sqlalchemy import DateTime, String, func, select
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from intentkit.config.base import Base
@@ -34,9 +34,7 @@ class UserDataTable(Base):
 
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
     key: Mapped[str] = mapped_column(String, primary_key=True)
-    data: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"), nullable=True
-    )
+    data: Mapped[dict[str, Any] | None] = mapped_column(JSONB(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

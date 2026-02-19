@@ -8,7 +8,7 @@ from typing import Annotated, Any, ClassVar
 from pydantic import ConfigDict
 from pydantic import Field as PydanticField
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.dialects.postgresql import JSON, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from intentkit.config.base import Base
@@ -116,7 +116,7 @@ class TemplateTable(Base):
         comment="Network identifier",
     )
     skills: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON().with_variant(JSONB(), "postgresql"),
+        JSONB(),
         nullable=True,
         comment="Dict of skills and their corresponding configurations",
     )

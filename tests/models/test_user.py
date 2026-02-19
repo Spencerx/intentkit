@@ -1,36 +1,22 @@
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from intentkit.config.base import Base
 from intentkit.models.user import User, UserTable
 
 
 @pytest_asyncio.fixture()
-async def sqlite_engine():
-    from intentkit.config import db as db_module
-
-    test_engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    db_module.engine = test_engine
-
-    async with test_engine.begin() as conn:
+async def user_engine(db_engine):
+    async with db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all, tables=[UserTable.__table__])
 
-    try:
-        yield test_engine
-    finally:
-        await test_engine.dispose()
-        db_module.engine = None
+    yield db_engine
 
 
 @pytest.mark.asyncio
-async def test_get_by_evm_wallet(sqlite_engine):
-    session_factory = async_sessionmaker(sqlite_engine, expire_on_commit=False)
+async def test_get_by_evm_wallet(user_engine):
+    session_factory = async_sessionmaker(user_engine, expire_on_commit=False)
 
     async with session_factory() as session:
         session.add(
