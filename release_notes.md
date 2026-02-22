@@ -1,17 +1,16 @@
-# Release v0.11.3
+# Release v0.11.4
 
-## New Features
+## Bug Fixes
 
-- Added x402 updates to expand onchain payment support.
-- Enabled frontend hot-reload in docker-compose for faster local development.
-- Introduced LLM packer improvements to streamline model packaging.
-- Launched the Hugo-based documentation site with initial installation guidance.
+- Fixed template model inheritance when creating agents.
+- Fixed docker compose configuration issues.
+
+## Testing
+
+- Switched to testing.postgres for database tests.
 
 ## Improvements
 
-- Improved avatar generation and frontend error handling for smoother UI experiences.
-- Refined autonomous task defaults and display formatting.
-- Updated image handling to use relative paths with CDN resolution.
-- Stabilized local API behavior and development reload flows.
+- Updated project dependencies.
 
-Full Changelog: [v0.11.2...v0.11.3](https://github.com/crestalnetwork/intentkit/compare/v0.11.2...v0.11.3)
+Full Changelog: [v0.11.3...v0.11.4](https://github.com/crestalnetwork/intentkit/compare/v0.11.3...v0.11.4)
