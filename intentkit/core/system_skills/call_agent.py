@@ -66,26 +66,54 @@ class CallAgentSkill(SystemSkill):
         # and this skill imports engine, which imports skills
         from intentkit.core.engine import execute_agent
 
-        context = self.get_context()
-
-        # Create a chat message for the called agent
-        # Inherit context from the current skill execution
-        chat_message = ChatMessageCreate(
-            id=str(XID()),
-            agent_id=agent_id,
-            chat_id=f"call-{context.agent_id}-{context.chat_id}",
-            user_id=context.user_id,
-            author_id=context.agent_id,
-            author_type=AuthorType.INTERNAL,
-            thread_type=context.entrypoint,
-            message=message,
-        )
-
-        # Execute the called agent with a timeout
         try:
+            context = self.get_context()
+
+            # Create a chat message for the called agent
+            # Inherit context from the current skill execution
+            chat_message = ChatMessageCreate(
+                id=str(XID()),
+                agent_id=agent_id,
+                chat_id=f"call-{context.agent_id}-{context.chat_id}",
+                user_id=context.user_id,
+                author_id=context.agent_id,
+                author_type=AuthorType.INTERNAL,
+                thread_type=context.entrypoint,
+                message=message,
+            )
+
+            # Execute the called agent with a timeout
             async with asyncio.timeout(CALL_AGENT_TIMEOUT):
                 results = await execute_agent(chat_message)
-        except TimeoutError:
+
+            if not results:
+                raise ToolException(
+                    f"No response received from the called agent '{agent_id}'"
+                )
+
+            # Get the last message from the results
+            last_message = results[-1]
+
+            # Check if the last message is from the agent
+            if last_message.author_type == AuthorType.AGENT:
+                return last_message.message
+
+            # If the last message is a system message, include the error details
+            if last_message.author_type == AuthorType.SYSTEM:
+                error_info = ""
+                if last_message.error_type:
+                    error_info = f" (error_type: {last_message.error_type})"
+                raise ToolException(
+                    f"Agent '{agent_id}' returned a system error{error_info}: {last_message.message}"
+                )
+
+            # For other message types (skill, etc.), raise an exception
+            raise ToolException(
+                f"Agent '{agent_id}' did not return an agent response. "
+                + f"Last message type: {last_message.author_type}"
+            )
+
+        except TimeoutError as e:
             self.logger.error(
                 f"call_agent timed out after {CALL_AGENT_TIMEOUT}s "
                 f"waiting for agent '{agent_id}'"
@@ -93,31 +121,9 @@ class CallAgentSkill(SystemSkill):
             raise ToolException(
                 f"Agent '{agent_id}' did not respond within "
                 f"{CALL_AGENT_TIMEOUT} seconds"
-            )
-
-        if not results:
-            raise ToolException(
-                f"No response received from the called agent '{agent_id}'"
-            )
-
-        # Get the last message from the results
-        last_message = results[-1]
-
-        # Check if the last message is from the agent
-        if last_message.author_type == AuthorType.AGENT:
-            return last_message.message
-
-        # If the last message is a system message, include the error details
-        if last_message.author_type == AuthorType.SYSTEM:
-            error_info = ""
-            if last_message.error_type:
-                error_info = f" (error_type: {last_message.error_type})"
-            raise ToolException(
-                f"Agent '{agent_id}' returned a system error{error_info}: {last_message.message}"
-            )
-
-        # For other message types (skill, etc.), raise an exception
-        raise ToolException(
-            f"Agent '{agent_id}' did not return an agent response. "
-            + f"Last message type: {last_message.author_type}"
-        )
+            ) from e
+        except ToolException:
+            raise
+        except Exception as e:
+            self.logger.error(f"call_agent failed: {e}", exc_info=True)
+            raise ToolException(f"Call agent failed with error: {e}") from e

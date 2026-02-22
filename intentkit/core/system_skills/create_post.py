@@ -91,39 +91,45 @@ class CreatePostSkill(SystemSkill):
             A message indicating success with the post ID.
         """
 
-        context = self.get_context()
-        agent_id = context.agent_id
+        try:
+            context = self.get_context()
+            agent_id = context.agent_id
 
-        from intentkit.core.agent import get_agent
+            from intentkit.core.agent import get_agent
 
-        agent = await get_agent(agent_id)
-        if agent is None:
-            raise ToolException(f"Agent with ID {agent_id} not found")
+            agent = await get_agent(agent_id)
+            if agent is None:
+                raise ToolException(f"Agent with ID {agent_id} not found")
 
-        agent_name = agent.name or "Unknown Agent"
-        agent_picture = agent.picture
+            agent_name = agent.name or "Unknown Agent"
+            agent_picture = agent.picture
 
-        post_create = AgentPostCreate(
-            agent_id=agent_id,
-            agent_name=agent_name,
-            agent_picture=agent_picture,
-            title=title,
-            markdown=markdown,
-            cover=cover,
-            slug=slug,
-            excerpt=excerpt,
-            tags=tags,
-        )
+            post_create = AgentPostCreate(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                agent_picture=agent_picture,
+                title=title,
+                markdown=markdown,
+                cover=cover,
+                slug=slug,
+                excerpt=excerpt,
+                tags=tags,
+            )
 
-        post = await create_agent_post(post_create)
+            post = await create_agent_post(post_create)
 
-        activity_create = AgentActivityCreate(
-            agent_id=agent_id,
-            agent_name=agent_name,
-            agent_picture=agent_picture,
-            text=f"Published a new post: {title}",
-            post_id=post.id,
-        )
-        _ = await create_agent_activity(activity_create)
+            activity_create = AgentActivityCreate(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                agent_picture=agent_picture,
+                text=f"Published a new post: {title}",
+                post_id=post.id,
+            )
+            _ = await create_agent_activity(activity_create)
 
-        return f"Post created successfully with ID: {post.id}"
+            return f"Post created successfully with ID: {post.id}"
+        except ToolException:
+            raise
+        except Exception as e:
+            self.logger.error(f"create_post failed: {e}", exc_info=True)
+            raise ToolException(f"Failed to create post: {e}") from e

@@ -3,6 +3,7 @@
 from typing import override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 
 from intentkit.core.agent_activity import get_agent_activities
 from intentkit.core.system_skills.base import SystemSkill
@@ -30,25 +31,31 @@ class RecentActivitiesSkill(SystemSkill):
         Returns:
             A formatted string containing the agent's 10 most recent activities.
         """
-        context = self.get_context()
-        agent_id = context.agent_id
+        try:
+            context = self.get_context()
+            agent_id = context.agent_id
 
-        activities = await get_agent_activities(agent_id, limit=10)
+            activities = await get_agent_activities(agent_id, limit=10)
 
-        if not activities:
-            return "No recent activities found."
+            if not activities:
+                return "No recent activities found."
 
-        # Format activities into a readable string
-        result_lines = [f"Found {len(activities)} recent activities:"]
-        for i, activity in enumerate(activities, 1):
-            result_lines.append(f"\n--- Activity {i} (ID: {activity.id}) ---")
-            result_lines.append(f"Created: {activity.created_at.isoformat()}")
-            result_lines.append(f"Text: {activity.text}")
-            if activity.images:
-                result_lines.append(f"Images: {', '.join(activity.images)}")
-            if activity.video:
-                result_lines.append(f"Video: {activity.video}")
-            if activity.post_id:
-                result_lines.append(f"Related Post ID: {activity.post_id}")
+            # Format activities into a readable string
+            result_lines = [f"Found {len(activities)} recent activities:"]
+            for i, activity in enumerate(activities, 1):
+                result_lines.append(f"\n--- Activity {i} (ID: {activity.id}) ---")
+                result_lines.append(f"Created: {activity.created_at.isoformat()}")
+                result_lines.append(f"Text: {activity.text}")
+                if activity.images:
+                    result_lines.append(f"Images: {', '.join(activity.images)}")
+                if activity.video:
+                    result_lines.append(f"Video: {activity.video}")
+                if activity.post_id:
+                    result_lines.append(f"Related Post ID: {activity.post_id}")
 
-        return "\n".join(result_lines)
+            return "\n".join(result_lines)
+        except ToolException:
+            raise
+        except Exception as e:
+            self.logger.error(f"recent_activities failed: {e}", exc_info=True)
+            raise ToolException(f"Failed to retrieve recent activities: {e}") from e

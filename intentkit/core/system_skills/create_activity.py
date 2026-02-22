@@ -3,6 +3,7 @@
 from typing import override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.core.agent import get_agent
@@ -66,23 +67,29 @@ class CreateActivitySkill(SystemSkill):
         Returns:
             A message indicating success with the activity ID.
         """
-        context = self.get_context()
-        agent_id = context.agent_id
+        try:
+            context = self.get_context()
+            agent_id = context.agent_id
 
-        agent = await get_agent(agent_id)
-        agent_name = agent.name if agent else None
-        agent_picture = agent.picture if agent else None
+            agent = await get_agent(agent_id)
+            agent_name = agent.name if agent else None
+            agent_picture = agent.picture if agent else None
 
-        activity_create = AgentActivityCreate(
-            agent_id=agent_id,
-            agent_name=agent_name,
-            agent_picture=agent_picture,
-            text=text,
-            images=images,
-            video=video,
-            post_id=post_id,
-        )
+            activity_create = AgentActivityCreate(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                agent_picture=agent_picture,
+                text=text,
+                images=images,
+                video=video,
+                post_id=post_id,
+            )
 
-        activity = await create_agent_activity(activity_create)
+            activity = await create_agent_activity(activity_create)
 
-        return f"Activity created successfully with ID: {activity.id}"
+            return f"Activity created successfully with ID: {activity.id}"
+        except ToolException:
+            raise
+        except Exception as e:
+            self.logger.error(f"create_activity failed: {e}", exc_info=True)
+            raise ToolException(f"Failed to create activity: {e}") from e
