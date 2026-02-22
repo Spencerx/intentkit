@@ -37,13 +37,13 @@ dependencies = [
     "langchain-xai>=0.2.1",
     "langchain-deepseek>=0.1.4",
     "langchain-google-genai>=3.2.0",
+    "langchain-openrouter>=0.0.2",
     "langgraph>=0.6.1",
     "langgraph-checkpoint>=2.0.18",
     "langgraph-checkpoint-postgres>=2.0.16",
     "langgraph-prebuilt>=0.6.1",
     "openai>=1.59.6",
     # Blockchain / Web3
-
     "cdp-sdk>=1.31.1",
     "web3>=7.10.0",
     "eth-abi>=5.0.0",

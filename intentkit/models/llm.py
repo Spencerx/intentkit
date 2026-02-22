@@ -642,17 +642,15 @@ class OpenRouterLLM(LLMModel):
 
     @override
     async def create_instance(self, params: dict[str, Any] = {}) -> BaseChatModel:
-        """Create and return a ChatOpenAI instance configured for OpenRouter."""
-        from langchain_openai import ChatOpenAI
+        """Create and return a ChatOpenRouter instance."""
+        from langchain_openrouter import ChatOpenRouter
 
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
             "model": self.model_name,
             "api_key": config.openrouter_api_key,
-            "base_url": "https://openrouter.ai/api/v1",
-            "timeout": info.timeout,
-            "max_completion_tokens": 999,
+            "timeout": info.timeout * 1000,
         }
 
         # Add optional parameters based on model support
@@ -668,91 +666,7 @@ class OpenRouterLLM(LLMModel):
         # Update kwargs with params to allow overriding
         kwargs.update(params)
 
-        return ChatOpenAI(**kwargs)
-
-
-class EternalLLM(LLMModel):
-    """Eternal AI LLM configuration."""
-
-    @override
-    async def create_instance(self, params: dict[str, Any] = {}) -> BaseChatModel:
-        """Create and return a ChatOpenAI instance configured for Eternal AI."""
-        from langchain_openai import ChatOpenAI
-
-        info = await self.model_info()
-
-        # Override model name for Eternal AI
-        actual_model = "unsloth/Llama-3.3-70B-Instruct-bnb-4bit"
-
-        kwargs: dict[str, Any] = {
-            "model_name": actual_model,
-            "openai_api_key": config.eternal_api_key,
-            "openai_api_base": info.api_base,
-            "timeout": info.timeout,
-        }
-
-        # Add optional parameters based on model support
-        if info.supports_temperature:
-            kwargs["temperature"] = self.temperature
-
-        if info.supports_frequency_penalty:
-            kwargs["frequency_penalty"] = self.frequency_penalty
-
-        if info.supports_presence_penalty:
-            kwargs["presence_penalty"] = self.presence_penalty
-
-        # Update kwargs with params to allow overriding
-        kwargs.update(params)
-
-        return ChatOpenAI(**kwargs)
-
-
-class ReigentLLM(LLMModel):
-    """Reigent LLM configuration."""
-
-    @override
-    async def create_instance(self, params: dict[str, Any] = {}) -> BaseChatModel:
-        """Create and return a ChatOpenAI instance configured for Reigent."""
-        from langchain_openai import ChatOpenAI
-
-        info = await self.model_info()
-
-        kwargs: dict[str, Any] = {
-            "openai_api_key": config.reigent_api_key,
-            "openai_api_base": info.api_base,
-            "timeout": info.timeout,
-            "model_kwargs": {
-                # Override any specific parameters required for Reigent API
-                # The Reigent API requires 'tools' instead of 'functions' and might have some specific formatting requirements
-            },
-        }
-
-        # Update kwargs with params to allow overriding
-        kwargs.update(params)
-
-        return ChatOpenAI(**kwargs)
-
-
-class VeniceLLM(LLMModel):
-    """Venice LLM configuration."""
-
-    @override
-    async def create_instance(self, params: dict[str, Any] = {}) -> BaseChatModel:
-        """Create and return a ChatOpenAI instance configured for Venice."""
-        from langchain_openai import ChatOpenAI
-
-        info = await self.model_info()
-
-        kwargs: dict[str, Any] = {
-            "openai_api_key": config.venice_api_key,
-            "openai_api_base": info.api_base,
-            "timeout": info.timeout,
-        }
-
-        # Update kwargs with params to allow overriding
-        kwargs.update(params)
-
-        return ChatOpenAI(**kwargs)
+        return ChatOpenRouter(**kwargs)
 
 
 class GoogleLLM(LLMModel):
@@ -837,9 +751,6 @@ async def create_llm_model(
         LLMProvider.GOOGLE: GoogleLLM,
         LLMProvider.DEEPSEEK: DeepseekLLM,
         LLMProvider.XAI: XAILLM,
-        LLMProvider.ETERNAL: EternalLLM,
-        LLMProvider.REIGENT: ReigentLLM,
-        LLMProvider.VENICE: VeniceLLM,
         LLMProvider.OPENROUTER: OpenRouterLLM,
         LLMProvider.OLLAMA: OllamaLLM,
         LLMProvider.OPENAI: OpenAILLM,

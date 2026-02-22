@@ -165,18 +165,17 @@ class ToolBindingMiddleware(AgentMiddleware[AgentState, AgentContext]):
             }.values()
         )
 
+        if self.llm_model.model_name == "gpt-5-mini":
+            llm_params["reasoning_effort"] = "medium"
+
         if context.search or context.agent.has_search():
             if self.llm_model.info.supports_search:
-                tools.append({"type": "web_search"})
-                if (
-                    self.llm_model.info.provider == LLMProvider.OPENAI
-                    and self.llm_model.model_name == "gpt-5-mini"
-                ):
-                    llm_params["reasoning_effort"] = "medium"
-                if self.llm_model.info.provider == LLMProvider.XAI:
+                if self.llm_model.info.provider == LLMProvider.OPENAI:
+                    tools.append({"type": "web_search"})
+                elif self.llm_model.info.provider == LLMProvider.XAI:
                     tools.extend([{"type": "web_search"}, {"type": "x_search"}])
-                if self.llm_model.info.provider == LLMProvider.OPENROUTER:
-                    llm_params["extra_body"] = {"plugins": [{"id": "web"}]}
+                elif self.llm_model.info.provider == LLMProvider.OPENROUTER:
+                    llm_params["plugins"] = [{"id": "web"}]
             else:
                 logger.debug(
                     "Search requested but model does not support native search"
