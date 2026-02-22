@@ -17,9 +17,7 @@ def mock_runtime():
     mock_context = MagicMock(spec=AgentContext)
     mock_context.agent_id = agent_id
 
-    with patch(
-        "intentkit.core.system_skills.create_post.get_runtime"
-    ) as mock_get_runtime:
+    with patch("intentkit.core.system_skills.base.get_runtime") as mock_get_runtime:
         mock_get_runtime.return_value.context = mock_context
         yield mock_get_runtime
 
