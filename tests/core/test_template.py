@@ -55,8 +55,6 @@ async def test_create_agent_from_template(mock_process_agent_wallet):
         async def mock_refresh(instance):
             instance.created_at = datetime.now()
             instance.updated_at = datetime.now()
-            if hasattr(instance, "model") and instance.model is None:
-                instance.model = "gpt-5-mini"
 
         mock_session.refresh = AsyncMock(side_effect=mock_refresh)
 
@@ -93,7 +91,7 @@ async def test_create_agent_from_template(mock_process_agent_wallet):
         assert added_agent.description == "Created from template"
 
         # Verify inherited fields
-        # Verify inherited fields
+        assert added_agent.model == "gpt-4o"
         assert agent.model == "gpt-4o"
         assert agent.temperature == 0.5
         assert agent.prompt == "You are a template."
@@ -153,8 +151,6 @@ async def test_create_agent_from_template_without_team(mock_process_agent_wallet
         async def mock_refresh(instance):
             instance.created_at = datetime.now()
             instance.updated_at = datetime.now()
-            if hasattr(instance, "model") and instance.model is None:
-                instance.model = "gpt-5-mini"
 
         mock_session.refresh = AsyncMock(side_effect=mock_refresh)
 

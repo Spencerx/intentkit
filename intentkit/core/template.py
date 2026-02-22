@@ -160,10 +160,10 @@ async def create_agent_from_template(
     """
     async with get_session() as db:
         # Verify template exists
-        template_exists = await db.scalar(
-            select(TemplateTable.id).where(TemplateTable.id == data.template_id)
+        template_row = await db.scalar(
+            select(TemplateTable).where(TemplateTable.id == data.template_id)
         )
-        if template_exists is None:
+        if template_row is None:
             raise ValueError(f"Template '{data.template_id}' not found")
 
         # Set visibility based on team_id
@@ -179,6 +179,7 @@ async def create_agent_from_template(
             name=data.name,
             picture=data.picture,
             description=data.description,
+            model=template_row.model,
             readonly_wallet_address=data.readonly_wallet_address,
             weekly_spending_limit=data.weekly_spending_limit,
             extra_prompt=data.extra_prompt,
