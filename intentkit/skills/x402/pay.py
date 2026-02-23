@@ -3,10 +3,12 @@
 This skill performs a paid HTTP request with a configurable maximum payment amount.
 """
 
+import asyncio
 import logging
 from typing import Any, cast, override
 from urllib.parse import urlparse
 
+import aiohttp
 import httpx
 from epyxid import XID
 from langchain_core.tools import ArgsSchema, ToolException
@@ -167,16 +169,18 @@ class X402Pay(X402BaseSkill):
                     f"{exc} | last_payment_error={error_context}"
                 ) from exc
             raise ToolException(str(exc)) from exc
-        except httpx.TimeoutException as exc:
+        except (httpx.TimeoutException, asyncio.TimeoutError) as exc:
             raise ToolException(
-                f"Request to {url} timed out after {timeout} seconds"
+                f"Request to {url} or related operation timed out after {timeout} seconds"
             ) from exc
         except httpx.HTTPStatusError as exc:
             raise ToolException(
                 f"HTTP {exc.response.status_code} - {exc.response.text}"
             ) from exc
-        except httpx.RequestError as exc:
-            raise ToolException(f"Failed to connect to {url} - {str(exc)}") from exc
+        except (httpx.RequestError, aiohttp.ClientError) as exc:
+            raise ToolException(
+                f"Network error while connecting to {url} or RPC: {str(exc)}"
+            ) from exc
         except IntentKitAPIError as exc:
             raise ToolException(str(exc)) from exc
         except ToolException:

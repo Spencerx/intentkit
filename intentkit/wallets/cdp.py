@@ -1,11 +1,10 @@
-import asyncio
 import logging
 from decimal import Decimal
 from typing import Any, cast
 
 from cdp import CdpClient, EvmServerAccount, TransactionRequestEIP1559
 from eth_typing import HexStr
-from web3 import Web3
+from web3 import AsyncWeb3
 from web3.types import TxParams, Wei
 
 from intentkit.config.config import config
@@ -13,7 +12,7 @@ from intentkit.config.db import get_session
 from intentkit.models.agent import Agent, AgentTable
 from intentkit.models.agent_data import AgentData
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.wallets.web3 import get_web3_client
+from intentkit.wallets.web3 import get_async_web3_client
 
 _wallet_providers: dict[str, tuple[str, str, "CdpWalletProvider"]] = {}
 _cdp_client: CdpClient | None = None
@@ -21,32 +20,20 @@ _cdp_client: CdpClient | None = None
 logger = logging.getLogger(__name__)
 
 
-def _run_async(coroutine: Any) -> Any:
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    if loop.is_running():
-        new_loop = asyncio.new_event_loop()
-        try:
-            return new_loop.run_until_complete(coroutine)
-        finally:
-            new_loop.close()
-
-    return loop.run_until_complete(coroutine)
-
-
 class CdpWalletProvider:
     """CDP SDK backed wallet provider for unified on-chain skills."""
+
+    _cdp_client: CdpClient
+    _account: EvmServerAccount
+    _network: str
+    _web3: AsyncWeb3
 
     def __init__(
         self,
         cdp_client: CdpClient,
         account: EvmServerAccount,
         network: str,
-        web3_client: Web3,
+        web3_client: AsyncWeb3,
     ) -> None:
         self._cdp_client = cdp_client
         self._account = account
@@ -57,10 +44,10 @@ class CdpWalletProvider:
         return self._account.address
 
     async def get_balance(self) -> int:
-        checksum_address = Web3.to_checksum_address(self._account.address)
-        return await asyncio.to_thread(self._web3.eth.get_balance, checksum_address)
+        checksum_address = AsyncWeb3.to_checksum_address(self._account.address)
+        return await self._web3.eth.get_balance(checksum_address)
 
-    def send_transaction(self, tx_params: TxParams) -> str:
+    async def send_transaction(self, tx_params: TxParams) -> str:
         to = tx_params.get("to")
         if not to:
             raise IntentKitAPIError(
@@ -84,17 +71,15 @@ class CdpWalletProvider:
             value_int = 0
 
         request = TransactionRequestEIP1559(
-            to=Web3.to_checksum_address(str(to)),
+            to=AsyncWeb3.to_checksum_address(str(to)),
             value=value_int,
             data=cast(HexStr, data_hex),
         )
 
-        result = _run_async(
-            self._cdp_client.evm.send_transaction(
-                address=self._account.address,
-                transaction=request,
-                network=self._network,
-            )
+        result = await self._cdp_client.evm.send_transaction(
+            address=self._account.address,
+            transaction=request,
+            network=self._network,
         )
 
         if isinstance(result, str):
@@ -111,8 +96,7 @@ class CdpWalletProvider:
         timeout: float = 120,
         poll_interval: float = 1.0,
     ) -> dict[str, Any]:
-        receipt = await asyncio.to_thread(
-            self._web3.eth.wait_for_transaction_receipt,
+        receipt = await self._web3.eth.wait_for_transaction_receipt(
             cast(HexStr, tx_hash),
             timeout=timeout,
             poll_latency=poll_interval,
@@ -127,20 +111,20 @@ class CdpWalletProvider:
         args: list[Any] | None = None,
     ) -> Any:
         contract = self._web3.eth.contract(
-            address=Web3.to_checksum_address(contract_address),
+            address=AsyncWeb3.to_checksum_address(contract_address),
             abi=abi,
         )
         func = getattr(contract.functions, function_name)
-        return await asyncio.to_thread(func(*(args or [])).call)
+        return await func(*(args or [])).call()
 
-    def native_transfer(self, to: str, value: Decimal) -> str:
+    async def native_transfer(self, to: str, value: Decimal) -> str:
         value_wei = int(value * Decimal(10**18))
         tx_params: TxParams = {
-            "to": Web3.to_checksum_address(to),
+            "to": AsyncWeb3.to_checksum_address(to),
             "value": Wei(value_wei),
             "data": cast(HexStr, cast(object, "0x")),
         }
-        return self.send_transaction(tx_params)
+        return await self.send_transaction(tx_params)
 
 
 def get_cdp_client() -> CdpClient:
@@ -266,7 +250,7 @@ async def get_wallet_provider(agent: Agent) -> CdpWalletProvider:
         cdp_client=cdp_client,
         account=account,
         network=cdp_network,
-        web3_client=get_web3_client(network_id),
+        web3_client=get_async_web3_client(network_id),
     )
     _wallet_providers[agent.id] = (network_id, address, wallet_provider)
     return wallet_provider

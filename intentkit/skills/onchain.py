@@ -6,19 +6,18 @@ helpers for on-chain operations, supporting both CDP and Privy
 wallet providers.
 """
 
-import inspect
 from abc import ABCMeta
 from typing import TYPE_CHECKING
 
 from cdp import EvmServerAccount
-from web3 import Web3
+from web3 import AsyncWeb3
 
 from intentkit.skills.base import IntentKitSkill
 from intentkit.wallets import get_cdp_network as resolve_cdp_network
 from intentkit.wallets import get_evm_account as fetch_evm_account
 from intentkit.wallets import get_wallet_provider as unified_get_wallet_provider
 from intentkit.wallets import get_wallet_signer as unified_get_wallet_signer
-from intentkit.wallets.web3 import get_web3_client
+from intentkit.wallets.web3 import get_async_web3_client
 
 if TYPE_CHECKING:
     from intentkit.wallets import WalletProviderType, WalletSignerType
@@ -34,12 +33,12 @@ class IntentKitOnChainSkill(IntentKitSkill, metaclass=ABCMeta):
     agent's wallet_provider configuration (CDP or Privy).
     """
 
-    def web3_client(self) -> Web3:
+    def web3_client(self) -> AsyncWeb3:
         """
-        Get a Web3 client for the active agent network.
+        Get an AsyncWeb3 client for the active agent network.
 
         Returns:
-            Web3 instance configured for the agent's network.
+            AsyncWeb3 instance configured for the agent's network.
 
         Raises:
             ValueError: If network_id is not configured.
@@ -49,7 +48,7 @@ class IntentKitOnChainSkill(IntentKitSkill, metaclass=ABCMeta):
         network_id = agent.network_id
         if network_id is None:
             raise ValueError("Agent network_id is not configured")
-        return get_web3_client(network_id)
+        return get_async_web3_client(network_id)
 
     async def get_evm_account(self) -> EvmServerAccount:
         """
@@ -185,16 +184,7 @@ class IntentKitOnChainSkill(IntentKitSkill, metaclass=ABCMeta):
             IntentKitAPIError: If the wallet provider is not configured.
         """
         provider = await self.get_wallet_provider()
-
-        # Handle both sync (CDP) and async (Privy) address getters
-        address_result = provider.get_address()
-        if inspect.iscoroutine(address_result):
-            # It's a coroutine (Privy)
-            address: str = await address_result
-        else:
-            address = address_result
-
-        return address
+        return provider.get_address()
 
     def get_agent_wallet_provider_type(self) -> str | None:
         """

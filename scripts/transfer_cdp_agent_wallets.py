@@ -78,18 +78,18 @@ async def transfer_usdc(
     network_id: str,
 ) -> tuple[str, str]:
     from intentkit.skills.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
-    from intentkit.wallets.web3 import get_web3_client
+    from intentkit.wallets.web3 import get_async_web3_client
 
     token_address = TOKEN_ADDRESSES_BY_SYMBOLS.get(network_id, {}).get("USDC")
     if not token_address:
         return "0", "skip:no_usdc_address"
 
-    web3_client = get_web3_client(network_id)
+    web3_client = get_async_web3_client(network_id)
     contract = web3_client.eth.contract(
         address=Web3.to_checksum_address(token_address),
         abi=ERC20_ABI,
     )
-    balance = contract.functions.balanceOf(
+    balance = await contract.functions.balanceOf(
         Web3.to_checksum_address(wallet_address)
     ).call()
     if not isinstance(balance, int) or balance <= 0:
@@ -121,10 +121,12 @@ async def transfer_eth(
     network_id: str,
     gas_reserve_wei: int,
 ) -> tuple[str, str]:
-    from intentkit.wallets.web3 import get_web3_client
+    from intentkit.wallets.web3 import get_async_web3_client
 
-    web3_client = get_web3_client(network_id)
-    balance_wei = web3_client.eth.get_balance(Web3.to_checksum_address(wallet_address))
+    web3_client = get_async_web3_client(network_id)
+    balance_wei = await web3_client.eth.get_balance(
+        Web3.to_checksum_address(wallet_address)
+    )
     transferable_wei = compute_transferable_eth_wei(balance_wei, gas_reserve_wei)
     if transferable_wei <= 0:
         return "0", "skip:no_balance"

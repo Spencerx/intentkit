@@ -5,7 +5,7 @@ import sys
 from decimal import Decimal
 
 from sqlalchemy import select
-from web3 import Web3
+from web3 import AsyncWeb3
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,17 +31,17 @@ async def get_balances(
     network_id: str,
 ) -> tuple[Decimal, Decimal]:
     from intentkit.skills.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
-    from intentkit.wallets.web3 import get_web3_client
+    from intentkit.wallets.web3 import get_async_web3_client
 
     if not wallet_address:
         return Decimal(0), Decimal(0)
 
     try:
-        web3_client = get_web3_client(network_id)
-        checksum_address = Web3.to_checksum_address(wallet_address)
+        web3_client = get_async_web3_client(network_id)
+        checksum_address = AsyncWeb3.to_checksum_address(wallet_address)
 
         # ETH Balance
-        eth_wei = web3_client.eth.get_balance(checksum_address)
+        eth_wei = await web3_client.eth.get_balance(checksum_address)
         eth_balance = Decimal(eth_wei) / Decimal(10**18)
 
         # USDC Balance
@@ -49,10 +49,10 @@ async def get_balances(
         token_address = TOKEN_ADDRESSES_BY_SYMBOLS.get(network_id, {}).get("USDC")
         if token_address:
             contract = web3_client.eth.contract(
-                address=Web3.to_checksum_address(token_address),
+                address=AsyncWeb3.to_checksum_address(token_address),
                 abi=ERC20_ABI,
             )
-            usdc_raw = contract.functions.balanceOf(checksum_address).call()
+            usdc_raw = await contract.functions.balanceOf(checksum_address).call()
             usdc_balance = Decimal(usdc_raw) / Decimal(10**USDC_DECIMALS)
 
         return eth_balance, usdc_balance

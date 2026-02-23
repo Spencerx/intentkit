@@ -238,7 +238,7 @@ class EnsoWalletApprove(EnsoBaseTool):
                 wallet_provider = await self.get_enso_wallet_provider(context)
                 tx_data = json_dict.get("tx", {})
                 if tx_data:
-                    tx_hash = wallet_provider.send_transaction(
+                    tx_hash = await wallet_provider.send_transaction(
                         {
                             "to": tx_data.get("to"),
                             "data": tx_data.get("data", "0x"),
@@ -247,7 +247,7 @@ class EnsoWalletApprove(EnsoBaseTool):
                         }
                     )
 
-                    wallet_provider.wait_for_transaction_receipt(tx_hash)
+                    await wallet_provider.wait_for_transaction_receipt(tx_hash)
                     artifact.txHash = tx_hash
                 else:
                     artifact.txHash = "0x0000000000000000000000000000000000000000000000000000000000000000"

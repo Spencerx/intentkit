@@ -6,19 +6,17 @@ both CDP and Safe/Privy wallet providers, enabling on-chain skills to
 work regardless of the underlying wallet implementation.
 """
 
-import asyncio
-import inspect
 import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from eth_typing import ChecksumAddress, HexStr
-from web3 import Web3
+from web3 import AsyncWeb3
 from web3.types import TxParams, Wei
 
 from intentkit.utils.error import IntentKitAPIError
 from intentkit.wallets import get_wallet_provider
-from intentkit.wallets.web3 import get_web3_client
+from intentkit.wallets.web3 import get_async_web3_client
 
 if TYPE_CHECKING:
     from intentkit.models.agent import Agent
@@ -44,7 +42,7 @@ class EvmWallet:
     _network_id: str
     _chain_id: int | None
     _address: str | None
-    _w3: Web3
+    _w3: AsyncWeb3
 
     def __init__(
         self,
@@ -64,7 +62,7 @@ class EvmWallet:
         self._network_id = network_id
         self._chain_id = chain_id
         self._address = None
-        self._w3 = get_web3_client(network_id)
+        self._w3 = get_async_web3_client(network_id)
 
     @classmethod
     async def create(cls, agent: "Agent") -> "EvmWallet":
@@ -89,19 +87,14 @@ class EvmWallet:
 
         provider = await get_wallet_provider(agent)
 
-        w3 = get_web3_client(agent.network_id)
+        w3 = get_async_web3_client(agent.network_id)
         try:
-            chain_id = w3.eth.chain_id
+            chain_id = await w3.eth.chain_id
         except Exception:
             chain_id = None
 
         wallet = cls(provider, agent.network_id, chain_id)
-
-        address_result = provider.get_address()
-        if inspect.iscoroutine(address_result):
-            wallet._address = await address_result
-        else:
-            wallet._address = address_result
+        wallet._address = provider.get_address()
 
         return wallet
 
@@ -130,7 +123,7 @@ class EvmWallet:
         return self._chain_id
 
     @property
-    def w3(self) -> Web3:
+    def w3(self) -> AsyncWeb3:
         """Get the Web3 instance for this network."""
         return self._w3
 
@@ -142,13 +135,10 @@ class EvmWallet:
             Balance in wei as an integer.
         """
         if hasattr(self._provider, "get_balance"):
-            result = self._provider.get_balance()
-            if inspect.iscoroutine(result):
-                return await result
-            return int(result)
+            return await self._provider.get_balance()
 
-        checksum_addr = Web3.to_checksum_address(self.address)
-        return self._w3.eth.get_balance(cast(ChecksumAddress, checksum_addr))
+        checksum_addr = AsyncWeb3.to_checksum_address(self.address)
+        return await self._w3.eth.get_balance(cast(ChecksumAddress, checksum_addr))
 
     async def send_transaction(
         self,
@@ -199,12 +189,12 @@ class EvmWallet:
             return result.tx_hash or ""
 
         tx_params: TxParams = {
-            "to": Web3.to_checksum_address(to),
+            "to": AsyncWeb3.to_checksum_address(to),
             "value": Wei(value),
             "data": cast(HexStr, data_hex),
         }
         try:
-            return self._provider.send_transaction(tx_params)
+            return await self._provider.send_transaction(tx_params)
         except Exception as e:
             raise IntentKitAPIError(
                 500, "TransactionFailed", f"Failed to send transaction: {e}"
@@ -238,11 +228,11 @@ class EvmWallet:
             )
 
         contract = self._w3.eth.contract(
-            address=Web3.to_checksum_address(contract_address),
+            address=AsyncWeb3.to_checksum_address(contract_address),
             abi=abi,
         )
         func = getattr(contract.functions, function_name)
-        return func(*(args or [])).call()
+        return await func(*(args or [])).call()
 
     async def native_transfer(self, to: str, value: Decimal) -> str:
         """
@@ -256,10 +246,7 @@ class EvmWallet:
             Transaction hash.
         """
         if hasattr(self._provider, "native_transfer"):
-            result = self._provider.native_transfer(to, value)
-            if inspect.iscoroutine(result):
-                return await result
-            return str(result)
+            return await self._provider.native_transfer(to, value)
 
         value_wei = int(value * Decimal(10**18))
         return await self.send_transaction(to=to, value=value_wei)
@@ -289,8 +276,7 @@ class EvmWallet:
             )
             return dict(result)
 
-        receipt = await asyncio.to_thread(
-            self._w3.eth.wait_for_transaction_receipt,
+        receipt = await self._w3.eth.wait_for_transaction_receipt(
             cast(HexStr, tx_hash),
             timeout=timeout,
             poll_latency=poll_interval,

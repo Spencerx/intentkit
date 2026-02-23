@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from intentkit.abstracts.graph import AgentContext
 from intentkit.core.system_skills.create_post import CreatePostInput, CreatePostSkill
 from intentkit.models.agent_activity import AgentActivityTable
 from intentkit.models.agent_post import AgentPostTable
@@ -56,9 +55,11 @@ def mock_db_session():
 
 
 @pytest.mark.asyncio
-async def test_create_post_success(mock_runtime, mock_db_session):
+async def test_create_post_success(mock_db_session):
     """Test successful post creation."""
     skill = CreatePostSkill()
+    mock_context = MagicMock()
+    mock_context.agent_id = "test_agent_123"
 
     title = "Test Post Title"
     markdown = "This is the content."
@@ -69,9 +70,12 @@ async def test_create_post_success(mock_runtime, mock_db_session):
     mock_agent = MagicMock()
     mock_agent.name = "Test Agent"
     mock_agent.picture = "https://example.com/avatar.png"
-    with patch(
-        "intentkit.core.agent.get_agent",
-        new=AsyncMock(return_value=mock_agent),
+    with (
+        patch("intentkit.core.agent.get_agent", new=AsyncMock(return_value=mock_agent)),
+        patch(
+            "intentkit.core.system_skills.create_post.CreatePostSkill.get_context",
+            return_value=mock_context,
+        ),
     ):
         result = await skill._arun(
             title=title, markdown=markdown, slug=slug, excerpt=excerpt, tags=tags

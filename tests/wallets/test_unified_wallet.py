@@ -120,7 +120,11 @@ class TestEvmWallet:
         mock_provider.get_address.return_value = "0x123"
 
         mock_w3 = MagicMock()
-        mock_w3.eth.chain_id = 8453
+        import asyncio
+
+        chain_id_mock = asyncio.Future()
+        chain_id_mock.set_result(8453)
+        mock_w3.eth.chain_id = chain_id_mock
 
         with (
             patch(
@@ -129,7 +133,7 @@ class TestEvmWallet:
                 return_value=mock_provider,
             ),
             patch(
-                "intentkit.wallets.evm_wallet.get_web3_client",
+                "intentkit.wallets.evm_wallet.get_async_web3_client",
                 return_value=mock_w3,
             ),
         ):
@@ -214,7 +218,7 @@ class TestPrivyWalletSigner:
             wallet_address=wallet_address,
         )
 
-        from eth_utils import to_checksum_address
+        from eth_utils.address import to_checksum_address
 
         expected_address = to_checksum_address(wallet_address)
         assert signer.address == expected_address

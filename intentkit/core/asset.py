@@ -9,7 +9,7 @@ from decimal import Decimal
 import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import update
-from web3 import Web3
+from web3 import AsyncWeb3
 
 from intentkit.config.config import config
 from intentkit.config.db import get_session
@@ -18,7 +18,7 @@ from intentkit.core.agent import get_agent
 from intentkit.models.agent import Agent, AgentTable
 from intentkit.models.agent_data import AgentData
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.wallets.web3 import get_web3_client
+from intentkit.wallets.web3 import get_async_web3_client
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class AgentAssets(BaseModel):
 
 
 async def _get_token_balance(
-    web3_client: Web3, wallet_address: str, token_address: str
+    web3_client: AsyncWeb3, wallet_address: str, token_address: str
 ) -> Decimal:
     """Get ERC-20 token balance for a wallet address."""
     try:
@@ -87,10 +87,10 @@ async def _get_token_balance(
             address=web3_client.to_checksum_address(token_address), abi=erc20_abi
         )
 
-        balance_wei = contract.functions.balanceOf(
+        balance_wei = await contract.functions.balanceOf(
             web3_client.to_checksum_address(wallet_address)
         ).call()
-        decimals = contract.functions.decimals().call()
+        decimals = await contract.functions.decimals().call()
 
         # Convert from wei to token units using actual decimals
         balance = Decimal(balance_wei) / Decimal(10**decimals)
@@ -100,10 +100,10 @@ async def _get_token_balance(
         return Decimal("0")
 
 
-async def _get_eth_balance(web3_client: Web3, wallet_address: str) -> Decimal:
+async def _get_eth_balance(web3_client: AsyncWeb3, wallet_address: str) -> Decimal:
     """Get ETH balance for a wallet address."""
     try:
-        balance_wei = web3_client.eth.get_balance(
+        balance_wei = await web3_client.eth.get_balance(
             web3_client.to_checksum_address(wallet_address)
         )
         balance = Decimal(balance_wei) / Decimal(10**18)
@@ -146,7 +146,7 @@ async def _get_wallet_net_worth(wallet_address: str, network_id: str | None) -> 
 
 
 async def _build_assets_list(
-    agent: Agent, agent_data: AgentData, web3_client: Web3
+    agent: Agent, agent_data: AgentData, web3_client: AsyncWeb3
 ) -> list[Asset]:
     """Build the assets list based on network conditions and agent configuration."""
     assets: list[Asset] = []
@@ -212,7 +212,7 @@ async def agent_asset(agent_id: str) -> AgentAssets:
         assets_result = AgentAssets(net_worth="0", tokens=[])
     else:
         try:
-            web3_client = get_web3_client(str(agent.network_id))
+            web3_client = get_async_web3_client(str(agent.network_id))
             tokens = await _build_assets_list(agent, agent_data, web3_client)
             net_worth = await _get_wallet_net_worth(
                 agent_data.evm_wallet_address, str(agent.network_id)

@@ -6,7 +6,6 @@ from eth_abi.abi import encode
 from eth_account import Account
 from eth_utils.address import to_checksum_address
 from eth_utils.crypto import keccak
-from web3 import AsyncWeb3
 from web3.types import TxParams, TxReceipt, Wei
 
 from intentkit.config.config import config
@@ -23,6 +22,7 @@ from intentkit.wallets.privy_types import (
     TransactionResult,
     WalletProvider,
 )
+from intentkit.wallets.web3 import get_async_web3_client
 
 logger = logging.getLogger(__name__)
 
@@ -362,7 +362,7 @@ class SafeWalletProvider(WalletProvider):
         self.safe_client = SafeClient(network_id, rpc_url)
         self.master_wallet_private_key: str | None = config.master_wallet_private_key
 
-    async def get_address(self) -> str:
+    def get_address(self) -> str:
         """Get the Safe smart account address."""
         return self.safe_address
 
@@ -447,7 +447,7 @@ class SafeWalletProvider(WalletProvider):
                 )
 
                 # e. Send transaction via Master Wallet
-                w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc_url))
+                w3 = get_async_web3_client(self.network_id)
                 master_account = Account.from_key(self.master_wallet_private_key)
 
                 # Get nonce and gas price for master wallet
@@ -1064,7 +1064,7 @@ async def deploy_safe_with_allowance(
             owner_address=owner_address,
             salt_nonce=salt_nonce,
             chain_id=chain_config.chain_id,
-            rpc_url=rpc_url,
+            network_id=network_id,
             singleton_address=chain_config.safe_singleton_address,
         )
         result["tx_hashes"].append({"deploy_safe": deploy_tx_hash})
@@ -1122,6 +1122,7 @@ async def deploy_safe_with_allowance(
                 owner_address=owner_address,
                 allowance_module_address=chain_config.allowance_module_address,
                 chain_id=chain_config.chain_id,
+                network_id=network_id,
                 rpc_url=rpc_url,
                 nonce=current_nonce,
             )
@@ -1146,6 +1147,7 @@ async def deploy_safe_with_allowance(
                 reset_time_minutes=7 * 24 * 60,
                 allowance_module_address=chain_config.allowance_module_address,
                 chain_id=chain_config.chain_id,
+                network_id=network_id,
                 rpc_url=rpc_url,
                 nonce=current_nonce,
             )
@@ -1160,7 +1162,7 @@ async def _deploy_safe(
     owner_address: str,
     salt_nonce: int,
     chain_id: int,
-    rpc_url: str,
+    network_id: str,
     singleton_address: str,
 ) -> tuple[str, str]:
     """Deploy a new Safe via the ProxyFactory using master wallet.
@@ -1172,7 +1174,7 @@ async def _deploy_safe(
         owner_address: The address that will own the Safe (Privy wallet address)
         salt_nonce: Salt for deterministic address generation
         chain_id: The chain ID to deploy on
-        rpc_url: RPC URL for the chain
+        network_id: The network ID for Web3 client connection
         singleton_address: The Safe singleton (implementation) address to use
 
     Returns:
@@ -1201,7 +1203,7 @@ async def _deploy_safe(
     )
 
     # Use master wallet to send transaction
-    w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc_url))
+    w3 = get_async_web3_client(network_id)
     master_account = Account.from_key(config.master_wallet_private_key)
 
     logger.info(
@@ -1503,7 +1505,7 @@ async def _send_transaction_with_master_wallet(
     to: str,
     data: bytes,
     chain_id: int,
-    rpc_url: str,
+    network_id: str,
     gas_limit: int = 300000,
     return_receipt: Literal[True] = True,
 ) -> tuple[str, TxReceipt]: ...
@@ -1514,7 +1516,7 @@ async def _send_transaction_with_master_wallet(
     to: str,
     data: bytes,
     chain_id: int,
-    rpc_url: str,
+    network_id: str,
     gas_limit: int = 300000,
     return_receipt: Literal[False] = False,
 ) -> str: ...
@@ -1524,7 +1526,7 @@ async def _send_transaction_with_master_wallet(
     to: str,
     data: bytes,
     chain_id: int,
-    rpc_url: str,
+    network_id: str,
     gas_limit: int = 300000,
     return_receipt: bool = False,
 ) -> str | tuple[str, TxReceipt]:
@@ -1534,7 +1536,7 @@ async def _send_transaction_with_master_wallet(
         to: Target address
         data: Transaction data
         chain_id: Chain ID
-        rpc_url: RPC URL
+        network_id: Network ID
         gas_limit: Gas limit (default: 300000)
         return_receipt: If True, return (tx_hash, receipt) tuple instead of just tx_hash
 
@@ -1548,7 +1550,7 @@ async def _send_transaction_with_master_wallet(
             "MASTER_WALLET_PRIVATE_KEY not configured",
         )
 
-    w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(rpc_url))
+    w3 = get_async_web3_client(network_id)
     master_account = Account.from_key(config.master_wallet_private_key)
 
     try:
@@ -1619,7 +1621,7 @@ async def _send_safe_transaction_with_master_wallet(
     safe_address: str,
     exec_data: bytes,
     chain_id: int,
-    rpc_url: str,
+    network_id: str,
 ) -> str:
     """Send a Safe transaction using master wallet to pay for gas.
 
@@ -1631,7 +1633,7 @@ async def _send_safe_transaction_with_master_wallet(
         safe_address: The Safe contract address
         exec_data: Encoded execTransaction call data (including signatures)
         chain_id: Chain ID
-        rpc_url: RPC URL
+        network_id: Network ID
 
     Returns:
         Transaction hash
@@ -1647,7 +1649,7 @@ async def _send_safe_transaction_with_master_wallet(
         to=safe_address,
         data=exec_data,
         chain_id=chain_id,
-        rpc_url=rpc_url,
+        network_id=network_id,
         gas_limit=500000,  # Safe txs can be heavy
         return_receipt=True,
     )
@@ -1716,6 +1718,7 @@ async def _enable_allowance_module(
     owner_address: str,
     allowance_module_address: str,
     chain_id: int,
+    network_id: str,
     rpc_url: str,
     nonce: int | None = None,
 ) -> str:
@@ -1796,7 +1799,7 @@ async def _enable_allowance_module(
         safe_address=safe_address,
         exec_data=exec_data,
         chain_id=chain_id,
-        rpc_url=rpc_url,
+        network_id=network_id,
     )
 
     return tx_hash
@@ -1813,6 +1816,7 @@ async def _set_spending_limit(
     reset_time_minutes: int,
     allowance_module_address: str,
     chain_id: int,
+    network_id: str,
     rpc_url: str,
     nonce: int | None = None,
 ) -> str:
@@ -1928,7 +1932,7 @@ async def _set_spending_limit(
         safe_address=safe_address,
         exec_data=exec_data,
         chain_id=chain_id,
-        rpc_url=rpc_url,
+        network_id=network_id,
     )
 
     return tx_hash
@@ -2052,7 +2056,7 @@ async def execute_gasless_transaction(
         safe_address=safe_address,
         exec_data=exec_data,
         chain_id=chain_config.chain_id,
-        rpc_url=rpc_url,
+        network_id=network_id,
     )
 
     logger.info(
@@ -2127,7 +2131,7 @@ async def _execute_allowance_transfer_gasless(
             to=allowance_module,
             data=exec_data,
             chain_id=chain_config.chain_id,
-            rpc_url=rpc_url,
+            network_id=network_id,
             gas_limit=200000,  # Allowance transfers are cheaper
             return_receipt=False,
         )

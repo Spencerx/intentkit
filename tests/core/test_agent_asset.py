@@ -107,7 +107,9 @@ async def test_agent_asset_success(monkeypatch):
 
     monkeypatch.setattr(asset_module, "get_agent", mock_get_agent)
     monkeypatch.setattr(asset_module, "AgentData", DummyAgentData)
-    monkeypatch.setattr(asset_module, "get_web3_client", lambda network: MagicMock())
+    monkeypatch.setattr(
+        asset_module, "get_async_web3_client", lambda network: MagicMock()
+    )
     monkeypatch.setattr(asset_module, "_build_assets_list", mock_build_assets_list)
     monkeypatch.setattr(
         asset_module, "_get_wallet_net_worth", mock_get_wallet_net_worth

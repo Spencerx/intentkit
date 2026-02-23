@@ -1,31 +1,45 @@
+import asyncio
 from typing import cast
 
-from web3 import Web3
+import aiohttp
+from web3 import AsyncWeb3
+from web3.providers.rpc.utils import ExceptionRetryConfiguration
 
 from intentkit.config.config import config
 from intentkit.utils.chain import ChainProvider
 
-_web3_client_cache: dict[str, Web3] = {}
+_async_web3_client_cache: dict[str, AsyncWeb3] = {}
 
 
-def get_web3_client(network_id: str) -> Web3:
-    """Get a Web3 client for the specified network.
+def get_async_web3_client(network_id: str) -> AsyncWeb3:
+    """Get an Async Web3 client for the specified network with auto-retry.
 
     Args:
         network_id: The network ID to get the Web3 client for
 
     Returns:
-        Web3: A Web3 client instance for the specified network
+        AsyncWeb3: An Async Web3 client instance for the specified network
     """
-    if network_id in _web3_client_cache:
-        return _web3_client_cache[network_id]
+    if network_id in _async_web3_client_cache:
+        return _async_web3_client_cache[network_id]
 
     chain_provider = cast(ChainProvider, config.chain_provider)
     chain = chain_provider.get_chain_config(network_id)
-    web3_client = Web3(Web3.HTTPProvider(chain.rpc_url))
-    _web3_client_cache[network_id] = web3_client
+
+    # Configure provider with retry middleware
+    retry_config = ExceptionRetryConfiguration(
+        errors=(aiohttp.ClientError, asyncio.TimeoutError, TimeoutError),
+        retries=5,
+    )
+    provider = AsyncWeb3.AsyncHTTPProvider(
+        chain.rpc_url,
+        exception_retry_configuration=retry_config,
+    )
+    web3_client = AsyncWeb3(provider)
+
+    _async_web3_client_cache[network_id] = web3_client
 
     return web3_client
 
 
-__all__ = ["get_web3_client"]
+__all__ = ["get_async_web3_client"]

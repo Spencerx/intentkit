@@ -5,7 +5,7 @@ import httpx
 from cdp import EvmServerAccount, TransactionRequestEIP1559
 from langchain_core.tools import ArgsSchema
 from pydantic import BaseModel, Field
-from web3 import Web3
+from web3 import AsyncWeb3
 from web3.exceptions import TimeExhausted
 
 from intentkit.skills.lifi.base import LiFiBaseTool
@@ -275,7 +275,7 @@ class TokenExecute(LiFiBaseTool):
         self,
         evm_account: EvmServerAccount,
         quote_data: dict[str, Any],
-        web3: Web3,
+        web3: AsyncWeb3,
         network_id: str,
         wallet_address: str,
     ) -> str | None:
@@ -312,7 +312,7 @@ class TokenExecute(LiFiBaseTool):
         quote_data: dict[str, Any],
         from_address: str,
         network_id: str,
-        web3: Web3,
+        web3: AsyncWeb3,
     ) -> str:
         """Execute the main transfer transaction."""
         transaction_request = quote_data.get("transactionRequest")
@@ -345,7 +345,7 @@ class TokenExecute(LiFiBaseTool):
     ) -> TransactionRequestEIP1559:
         """Convert prepared transaction parameters to an EIP-1559 request."""
         request_kwargs: dict[str, Any] = {
-            "to": Web3.to_checksum_address(tx_params["to"]),
+            "to": AsyncWeb3.to_checksum_address(tx_params["to"]),
             "data": tx_params.get("data", "0x"),
         }
 
@@ -361,14 +361,12 @@ class TokenExecute(LiFiBaseTool):
         return TransactionRequestEIP1559(**request_kwargs)
 
     async def _wait_for_receipt(
-        self, web3: Web3, tx_hash: str
+        self, web3: AsyncWeb3, tx_hash: str
     ) -> dict[str, Any] | None:
-        """Wait for a transaction receipt using Web3 in a non-blocking way."""
+        """Wait for a transaction receipt."""
 
         try:
-            receipt = await asyncio.to_thread(
-                web3.eth.wait_for_transaction_receipt, tx_hash
-            )
+            receipt = await web3.eth.wait_for_transaction_receipt(tx_hash)
         except TimeExhausted as exc:
             self.logger.error("LiFi_Execution_Error: %s", str(exc))
             raise Exception(
@@ -499,24 +497,24 @@ class TokenExecute(LiFiBaseTool):
         token_address: str,
         approval_address: str,
         amount: str,
-        web3: Web3,
+        web3: AsyncWeb3,
         network_id: str,
         wallet_address: str,
     ) -> str | None:
         """Check if token allowance is sufficient and set approval if needed."""
         try:
             # Normalize addresses
-            token_address = Web3.to_checksum_address(token_address)
-            approval_address = Web3.to_checksum_address(approval_address)
-            wallet_checksum = Web3.to_checksum_address(wallet_address)
+            token_address = AsyncWeb3.to_checksum_address(token_address)
+            approval_address = AsyncWeb3.to_checksum_address(approval_address)
+            wallet_checksum = AsyncWeb3.to_checksum_address(wallet_address)
 
             contract = web3.eth.contract(address=token_address, abi=ERC20_ABI)
 
             # Check current allowance
             try:
-                current_allowance = await asyncio.to_thread(
-                    contract.functions.allowance(wallet_checksum, approval_address).call
-                )
+                current_allowance = await contract.functions.allowance(
+                    wallet_checksum, approval_address
+                ).call()
 
                 required_amount = int(amount)
 

@@ -1,3 +1,4 @@
+import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -26,7 +27,9 @@ class TestNativeWalletProviderBasics:
         mock_w3 = MagicMock()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -49,7 +52,9 @@ class TestNativeWalletProviderBasics:
         mock_w3 = MagicMock()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -68,10 +73,12 @@ class TestNativeWalletProviderBasics:
         }
 
         mock_w3 = MagicMock()
-        mock_w3.eth.get_balance.return_value = 12345
+        mock_w3.eth.get_balance = AsyncMock(return_value=12345)
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -90,10 +97,15 @@ class TestNativeWalletProviderTransactions:
         }
 
         mock_w3 = MagicMock()
-        mock_w3.eth.get_transaction_count.return_value = 1
-        mock_w3.eth.chain_id = 8453
-        mock_w3.eth.estimate_gas.return_value = 21000
-        mock_w3.eth.fee_history.return_value = {"baseFeePerGas": [1000]}
+        mock_w3.eth.get_transaction_count = AsyncMock(return_value=1)
+        # In native.py the calls are like "await self._w3.eth.chain_id".
+        # A simpler way is: async def mock_chain_id(): return 8453.
+        # Let's see how native.py access chain_id. It's var = await w3.eth.chain_id.
+        chain_id_mock = asyncio.Future()
+        chain_id_mock.set_result(8453)
+        mock_w3.eth.chain_id = chain_id_mock
+        mock_w3.eth.estimate_gas = AsyncMock(return_value=21000)
+        mock_w3.eth.fee_history = AsyncMock(return_value={"baseFeePerGas": [1000]})
 
         class _Signed:
             raw_transaction = b"raw"
@@ -102,10 +114,12 @@ class TestNativeWalletProviderTransactions:
         mock_account.sign_transaction.return_value = _Signed()
         from hexbytes import HexBytes
 
-        mock_w3.eth.send_raw_transaction.return_value = HexBytes("0xabc")
+        mock_w3.eth.send_raw_transaction = AsyncMock(return_value=HexBytes("0xabc"))
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=mock_account),
         ):
             provider = get_wallet_provider(native_data)
@@ -125,11 +139,19 @@ class TestNativeWalletProviderTransactions:
         }
 
         mock_w3 = MagicMock()
-        mock_w3.eth.get_transaction_count.return_value = 2
-        mock_w3.eth.chain_id = 8453
-        mock_w3.eth.estimate_gas.return_value = 30000
-        mock_w3.eth.fee_history.side_effect = Exception("no fee history")
-        mock_w3.eth.gas_price = 99
+        mock_w3.eth.get_transaction_count = AsyncMock(return_value=2)
+        chain_id_mock = asyncio.Future()
+        chain_id_mock.set_result(8453)
+        mock_w3.eth.chain_id = chain_id_mock
+        mock_w3.eth.estimate_gas = AsyncMock(return_value=30000)
+        mock_w3.eth.fee_history = AsyncMock(side_effect=Exception("no fee history"))
+
+        async def mock_gas_price():
+            return 99
+
+        gas_price_mock = asyncio.Future()
+        gas_price_mock.set_result(99)
+        mock_w3.eth.gas_price = gas_price_mock
 
         class _Signed:
             raw_transaction = b"raw"
@@ -142,10 +164,12 @@ class TestNativeWalletProviderTransactions:
         mock_account.sign_transaction.side_effect = _sign_tx
         from hexbytes import HexBytes
 
-        mock_w3.eth.send_raw_transaction.return_value = HexBytes("0xdef")
+        mock_w3.eth.send_raw_transaction = AsyncMock(return_value=HexBytes("0xdef"))
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=mock_account),
         ):
             provider = get_wallet_provider(native_data)
@@ -165,9 +189,15 @@ class TestNativeWalletProviderTransactions:
         }
 
         mock_w3 = MagicMock()
+        mock_w3.eth.get_transaction_count = AsyncMock(return_value=1)
+        import asyncio
+
+        chain_id_mock = asyncio.Future()
+        chain_id_mock.set_result(8453)
+        mock_w3.eth.chain_id = chain_id_mock
 
         class _Func:
-            def build_transaction(self, _):
+            async def build_transaction(self, _):
                 return {"data": "0xabcdef"}
 
         class _Functions:
@@ -180,7 +210,9 @@ class TestNativeWalletProviderTransactions:
         mock_w3.eth.contract.return_value = _Contract()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -213,12 +245,18 @@ class TestNativeWalletProviderTransactions:
         mock_w3 = MagicMock()
 
         class _BalanceOf:
-            def call(self):
+            pass
+
+        async_call = asyncio.Future()
+        async_call.set_result(777)
+
+        class AsyncBalanceOf:
+            async def call(self):
                 return 777
 
         class _Functions:
             def balanceOf(self, _):
-                return _BalanceOf()
+                return AsyncBalanceOf()
 
         class _Contract:
             functions = _Functions()
@@ -226,7 +264,9 @@ class TestNativeWalletProviderTransactions:
         mock_w3.eth.contract.return_value = _Contract()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -236,7 +276,8 @@ class TestNativeWalletProviderTransactions:
 
         assert bal == 777
 
-    def test_native_transfer_success(self):
+    @pytest.mark.asyncio
+    async def test_native_transfer_success(self):
         native_data = {
             "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE21",
             "private_key": "0x0123",
@@ -246,7 +287,9 @@ class TestNativeWalletProviderTransactions:
         mock_w3 = MagicMock()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -257,7 +300,7 @@ class TestNativeWalletProviderTransactions:
         with patch.object(
             provider, "execute_transaction", new=AsyncMock(side_effect=_ok)
         ) as mock_exec:
-            txh = provider.native_transfer(
+            txh = await provider.native_transfer(
                 to="0x0000000000000000000000000000000000000001",
                 value=Decimal("1.5"),
             )
@@ -267,7 +310,8 @@ class TestNativeWalletProviderTransactions:
         assert kwargs["to"] == "0x0000000000000000000000000000000000000001"
         assert kwargs["value"] == int(Decimal("1.5") * Decimal(10**18))
 
-    def test_native_transfer_failure_raises(self):
+    @pytest.mark.asyncio
+    async def test_native_transfer_failure_raises(self):
         native_data = {
             "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE21",
             "private_key": "0x0123",
@@ -277,7 +321,9 @@ class TestNativeWalletProviderTransactions:
         mock_w3 = MagicMock()
 
         with (
-            patch("intentkit.wallets.native.get_web3_client", return_value=mock_w3),
+            patch(
+                "intentkit.wallets.native.get_async_web3_client", return_value=mock_w3
+            ),
             patch("eth_account.Account.from_key", return_value=MagicMock()),
         ):
             provider = get_wallet_provider(native_data)
@@ -289,7 +335,7 @@ class TestNativeWalletProviderTransactions:
             provider, "execute_transaction", new=AsyncMock(side_effect=_fail)
         ):
             with pytest.raises(IntentKitAPIError):
-                provider.native_transfer(
+                await provider.native_transfer(
                     to="0x0000000000000000000000000000000000000001",
                     value=Decimal("0.1"),
                 )

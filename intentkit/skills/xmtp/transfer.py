@@ -98,8 +98,8 @@ class XmtpTransfer(XmtpBaseTool):
                 )
 
                 # Get token symbol and decimals
-                token_symbol = contract.functions.symbol().call()
-                decimals = contract.functions.decimals().call()
+                token_symbol = await contract.functions.symbol().call()
+                decimals = await contract.functions.decimals().call()
 
                 # Validate symbol matches currency (case insensitive)
                 if token_symbol.upper() != currency.upper():

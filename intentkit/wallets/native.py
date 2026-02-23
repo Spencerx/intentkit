@@ -12,12 +12,13 @@ from typing import Any
 from eth_account import Account
 from eth_account.datastructures import SignedMessage, SignedTransaction
 from eth_account.messages import SignableMessage
+from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
-from web3 import Web3
+from web3 import AsyncWeb3
 from web3.types import TxParams, Wei
 
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.wallets.web3 import get_web3_client
+from intentkit.wallets.web3 import get_async_web3_client
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,12 @@ class NativeWalletProvider:
         on-chain operations.
     """
 
+    _address: ChecksumAddress
+    _private_key: str
+    _network_id: str
+    _account: Any
+    _w3: AsyncWeb3
+
     def __init__(
         self,
         address: str,
@@ -52,23 +59,24 @@ class NativeWalletProvider:
             private_key: The private key (hex string with 0x prefix).
             network_id: The network identifier (e.g., 'base-mainnet').
         """
-        self._address = Web3.to_checksum_address(address)
+        self._address = AsyncWeb3.to_checksum_address(address)
         self._private_key = private_key
         self._network_id = network_id
         self._account = Account.from_key(private_key)
-        self._w3 = get_web3_client(network_id)
+        self._w3 = get_async_web3_client(network_id)
 
     def get_address(self) -> str:
         """Get the wallet's public address."""
-        return self._address
+        return str(self._address)
 
     async def get_address_async(self) -> str:
         """Get the wallet's public address (async version)."""
-        return self._address
+        return str(self._address)
 
     async def get_balance(self, chain_id: int | None = None) -> int:
         """Get native token balance in wei."""
-        return self._w3.eth.get_balance(self._address)
+        _ = chain_id  # Unused
+        return await self._w3.eth.get_balance(self._address)
 
     async def execute_transaction(
         self,
@@ -89,40 +97,39 @@ class NativeWalletProvider:
             TransactionResult with success status and tx hash.
         """
         try:
-            nonce = self._w3.eth.get_transaction_count(self._address)
+            nonce = await self._w3.eth.get_transaction_count(self._address)
+            current_chain_id = await self._w3.eth.chain_id
 
             tx_params: TxParams = {
                 "nonce": nonce,
-                "to": Web3.to_checksum_address(to),
+                "to": AsyncWeb3.to_checksum_address(to),
                 "value": Wei(value),
                 "data": HexBytes(data) if data else b"",
-                "chainId": chain_id or self._w3.eth.chain_id,
+                "chainId": chain_id or current_chain_id,
                 "gas": 21000,
             }
             if data:
                 try:
-                    tx_params["gas"] = Wei(self._w3.eth.estimate_gas(tx_params))
+                    tx_params["gas"] = Wei(await self._w3.eth.estimate_gas(tx_params))
                 except Exception as e:
                     logger.warning(f"Gas estimation failed, using default: {e}")
                     tx_params["gas"] = Wei(100000)
 
             try:
-                fee_history = self._w3.eth.fee_history(1, "latest")
+                fee_history = await self._w3.eth.fee_history(1, "latest")
                 base_fee = fee_history["baseFeePerGas"][0]
                 tx_params["maxFeePerGas"] = Wei(int(base_fee * 2))
                 tx_params["maxPriorityFeePerGas"] = Wei(int(base_fee * 0.1))
             except Exception as e:
                 logger.warning(f"Failed to get fee history, using legacy gas: {e}")
-                tx_params["gasPrice"] = Wei(self._w3.eth.gas_price)
+                tx_params["gasPrice"] = Wei(await self._w3.eth.gas_price)
 
             signed_tx = self._account.sign_transaction(tx_params)
-            tx_hash = self._w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
             return TransactionResult(
                 success=True,
-                tx_hash=tx_hash.hex()
-                if isinstance(tx_hash, HexBytes)
-                else str(tx_hash),
+                tx_hash=tx_hash.hex(),
             )
 
         except Exception as e:
@@ -162,18 +169,21 @@ class NativeWalletProvider:
 
         try:
             contract = self._w3.eth.contract(
-                address=Web3.to_checksum_address(token_address),
+                address=AsyncWeb3.to_checksum_address(token_address),
                 abi=erc20_abi,
             )
 
-            data = contract.functions.transfer(
-                Web3.to_checksum_address(to),
+            nonce = await self._w3.eth.get_transaction_count(self._address)
+            current_chain_id = await self._w3.eth.chain_id
+
+            data = await contract.functions.transfer(
+                AsyncWeb3.to_checksum_address(to),
                 amount,
             ).build_transaction(
                 {
                     "from": self._address,
-                    "nonce": self._w3.eth.get_transaction_count(self._address),
-                    "chainId": chain_id or self._w3.eth.chain_id,
+                    "nonce": nonce,
+                    "chainId": chain_id or current_chain_id,
                 }
             )
 
@@ -198,6 +208,7 @@ class NativeWalletProvider:
         chain_id: int | None = None,
     ) -> int:
         """Get ERC20 token balance."""
+        _ = chain_id  # Unused
         erc20_abi = [
             {
                 "constant": True,
@@ -209,12 +220,12 @@ class NativeWalletProvider:
         ]
 
         contract = self._w3.eth.contract(
-            address=Web3.to_checksum_address(token_address),
+            address=AsyncWeb3.to_checksum_address(token_address),
             abi=erc20_abi,
         )
-        return contract.functions.balanceOf(self._address).call()
+        return await contract.functions.balanceOf(self._address).call()
 
-    def native_transfer(self, to: str, value: Decimal) -> str:
+    async def native_transfer(self, to: str, value: Decimal) -> str:
         """Transfer native tokens (ETH/MATIC/etc).
 
         Args:
@@ -224,14 +235,10 @@ class NativeWalletProvider:
         Returns:
             Transaction hash as a hex string.
         """
-        import asyncio
-
         value_wei = int(value * Decimal(10**18))
-        result = asyncio.run(
-            self.execute_transaction(
-                to=to,
-                value=value_wei,
-            )
+        result = await self.execute_transaction(
+            to=to,
+            value=value_wei,
         )
         if not result.success:
             raise IntentKitAPIError(
@@ -245,6 +252,9 @@ class NativeWalletProvider:
 class NativeWalletSigner:
     """Native wallet signer compatible with eth_account interfaces."""
 
+    _address: ChecksumAddress
+    _account: Any
+
     def __init__(self, address: str, private_key: str) -> None:
         """Initialize the native wallet signer.
 
@@ -252,13 +262,13 @@ class NativeWalletSigner:
             address: The wallet address.
             private_key: The private key (hex string with 0x prefix).
         """
-        self._address = Web3.to_checksum_address(address)
+        self._address = AsyncWeb3.to_checksum_address(address)
         self._account = Account.from_key(private_key)
 
     @property
     def address(self) -> str:
         """Get the wallet address."""
-        return self._address
+        return str(self._address)
 
     def sign_message(self, signable_message: SignableMessage) -> SignedMessage:
         """Sign a message (EIP-191 personal_sign).

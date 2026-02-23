@@ -6,10 +6,12 @@ transport flow while keeping v1 seller compatibility.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from typing import Any, cast, override
 
+import aiohttp
 import httpx
 from x402 import max_amount, x402Client
 from x402.http.x402_http_client import x402HTTPClient
@@ -89,6 +91,10 @@ def _signature_to_bytes(signature: Any) -> bytes:
 def _normalize_payment_error(exc: Exception) -> str:
     if isinstance(exc, ValueError):
         return f"Invalid payment required response: {exc}"
+    if isinstance(exc, asyncio.TimeoutError):
+        return f"Timeout during RPC or payment operation: {exc}"
+    if isinstance(exc, aiohttp.ClientError):
+        return f"Network error during RPC or payment operation: {exc}"
     return f"{type(exc).__name__}: {exc}"
 
 
