@@ -12,6 +12,7 @@ The module uses a global cache to store initialized agents for better performanc
 
 # pyright: reportImportCycles=false
 
+import asyncio
 import importlib
 import logging
 import re
@@ -23,6 +24,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
 
+import httpx
 import sqlalchemy
 from epyxid import XID
 from langchain.agents import create_agent as create_langchain_agent
@@ -884,6 +886,24 @@ async def stream_agent_raw(
                         error_message = await error_message_create.save()
                         yield error_message
                         return
+    except (httpx.TimeoutException, asyncio.TimeoutError):
+        logger.error(
+            f"Agent request timed out for {user_message.agent_id}",
+            extra={"thread_id": thread_id},
+        )
+        error_message_create = await ChatMessageCreate.from_system_message(
+            SystemMessageType.TIMEOUT_ERROR,
+            agent_id=user_message.agent_id,
+            chat_id=user_message.chat_id,
+            user_id=user_message.user_id or "",
+            author_id=user_message.agent_id,
+            thread_type=user_message.author_type,
+            reply_to=user_message.id,
+            time_cost=time.perf_counter() - start,
+        )
+        error_message = await error_message_create.save()
+        yield error_message
+        return
     except SQLAlchemyError as e:
         error_traceback = traceback.format_exc()
         logger.error(

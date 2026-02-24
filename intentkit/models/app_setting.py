@@ -24,6 +24,7 @@ class SystemMessageType(str, Enum):
     SKILL_INTERRUPTED = "skill_interrupted"
     HOURLY_BUDGET_EXCEEDED = "hourly_budget_exceeded"
     RECURSION_LIMIT_EXCEEDED = "recursion_limit_exceeded"
+    TIMEOUT_ERROR = "timeout_error"
 
 
 # Default system messages
@@ -36,6 +37,7 @@ DEFAULT_SYSTEM_MESSAGES = {
     "skill_interrupted": "You were interrupted after executing a skill. Please retry with caution to avoid repeating the skill.",
     "hourly_budget_exceeded": "Hourly budget exceeded. Please try again later.",
     "recursion_limit_exceeded": "The agent reached the maximum recursion limit. Please type 'continue' to resume execution.",
+    "timeout_error": "Network request timed out or the LLM is overloaded. Please try again.",
 }
 
 # In-memory cache for app settings

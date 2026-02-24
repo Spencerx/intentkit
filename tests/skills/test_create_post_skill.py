@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from intentkit.abstracts.graph import AgentContext
 from intentkit.core.system_skills.create_post import CreatePostInput, CreatePostSkill
 from intentkit.models.agent_activity import AgentActivityTable
 from intentkit.models.agent_post import AgentPostTable

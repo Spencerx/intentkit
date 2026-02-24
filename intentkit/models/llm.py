@@ -447,6 +447,7 @@ class OpenAILLM(LLMModel):
             "model_name": self.model_name,
             "openai_api_key": config.openai_api_key,
             "timeout": info.timeout,
+            "max_retries": 3,
             "use_responses_api": True,
         }
 
@@ -528,6 +529,7 @@ class XAILLM(LLMModel):
             "openai_api_key": config.xai_api_key,
             "openai_api_base": "https://api.x.ai/v1",
             "timeout": info.timeout,
+            "max_retries": 3,
             "use_responses_api": True,
         }
 
@@ -651,6 +653,7 @@ class OpenRouterLLM(LLMModel):
             "model": self.model_name,
             "api_key": config.openrouter_api_key,
             "timeout": info.timeout * 1000,
+            "max_retries": 3,
         }
 
         # Add optional parameters based on model support
@@ -683,6 +686,7 @@ class GoogleLLM(LLMModel):
             "model": self.model_name,
             "google_api_key": config.google_api_key,
             "timeout": info.timeout,
+            "max_retries": 3,
         }
 
         # Add optional parameters based on model support
