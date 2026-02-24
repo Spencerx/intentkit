@@ -83,7 +83,7 @@ export function SkillCallBadge({ skillCall, isLoading }: SkillCallBadgeProps) {
             Object.keys(skillCall.parameters).length > 0 && (
               <div>
                 <div className="font-medium text-muted-foreground mb-1">
-                  Parameters:
+                  Request Parameters:
                 </div>
                 <pre className="bg-background p-2 rounded overflow-x-auto text-[10px] leading-relaxed">
                   {JSON.stringify(skillCall.parameters, null, 2)}
@@ -95,12 +95,10 @@ export function SkillCallBadge({ skillCall, isLoading }: SkillCallBadgeProps) {
           {skillCall.success && skillCall.response && (
             <div>
               <div className="font-medium text-muted-foreground mb-1">
-                Response:
+                Raw Response:
               </div>
-              <pre className="bg-background p-2 rounded overflow-x-auto text-[10px] leading-relaxed max-h-40 overflow-y-auto">
-                {skillCall.response.length > 500
-                  ? `${skillCall.response.substring(0, 500)}...`
-                  : skillCall.response}
+              <pre className="bg-background p-2 rounded overflow-x-auto text-[10px] leading-relaxed max-h-96 overflow-y-auto whitespace-pre-wrap">
+                {skillCall.response}
               </pre>
             </div>
           )}
@@ -117,12 +115,7 @@ export function SkillCallBadge({ skillCall, isLoading }: SkillCallBadgeProps) {
             </div>
           )}
 
-          {/* Credit cost if available */}
-          {skillCall.credit_cost !== undefined && skillCall.credit_cost > 0 && (
-            <div className="text-muted-foreground">
-              Credit cost: {skillCall.credit_cost}
-            </div>
-          )}
+
         </div>
       )}
     </div>

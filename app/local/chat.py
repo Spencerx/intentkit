@@ -329,9 +329,7 @@ async def list_messages(
     )
     # Return as ChatMessagesResponse object
     return ChatMessagesResponse(
-        data=[
-            ChatMessage.model_validate(m).sanitize_privacy() for m in messages_to_return
-        ],
+        data=[ChatMessage.model_validate(m) for m in messages_to_return],
         has_more=has_more,
         next_cursor=next_cursor,
     )
@@ -417,7 +415,7 @@ async def send_message(
     else:
         response_messages = await execute_agent(user_message)
         # Return messages list directly for compatibility with stream mode
-        return [message.sanitize_privacy() for message in response_messages]
+        return response_messages
 
 
 @chat_router.post(
@@ -485,7 +483,7 @@ async def retry_message(
 
         if not last_user_message:
             # If no user message found, just return the last message
-            return [last_message.sanitize_privacy()]
+            return [last_message]
 
         # Get all messages after the last user message
         messages_after_user = await db.scalars(
@@ -500,13 +498,10 @@ async def retry_message(
 
         messages_list = messages_after_user.all()
         if messages_list:
-            return [
-                ChatMessage.model_validate(msg).sanitize_privacy()
-                for msg in messages_list
-            ]
+            return [ChatMessage.model_validate(msg) for msg in messages_list]
         else:
             # Fallback to just the last message if no messages found after user message
-            return [last_message.sanitize_privacy()]
+            return [last_message]
 
     # If last message is from skill, provide warning message
     if last_message.author_type == AuthorType.SKILL:
@@ -521,7 +516,7 @@ async def retry_message(
             time_cost=0.0,
         )
         error_message = await error_message_create.save()
-        return [last_message.sanitize_privacy(), error_message.sanitize_privacy()]
+        return [last_message, error_message]
 
     # If last message is from user, generate a new response
     # Create a new user message for retry (non-streaming only)
@@ -552,7 +547,7 @@ async def retry_message(
     response_messages = await execute_agent(retry_user_message)
 
     # Return messages list directly for compatibility with send_message
-    return [message.sanitize_privacy() for message in response_messages]
+    return response_messages
 
 
 # =============================================================================
@@ -605,6 +600,5 @@ async def get_skill_history(
     messages = [ChatMessage.model_validate(message) for message in messages[::-1]]
 
     # Sanitize privacy for all messages
-    messages = [message.sanitize_privacy() for message in messages]
 
     return messages
