@@ -123,6 +123,10 @@ export default function AgentChatPage() {
   useEffect(() => {
     if (!agentId) return;
 
+    // Do not let URL changes reset state while we are sending a message
+    // because Next.js router transitions may cause searchParams to lag behind local state
+    if (isSending) return;
+
     // Handle explicit new thread from URL
     if (searchParams.get("new") === "true") {
       if (!isNewThread) {
@@ -179,6 +183,7 @@ export default function AgentChatPage() {
     currentThreadId,
     isNewThread,
     router,
+    isSending,
   ]);
 
   useEffect(() => {
