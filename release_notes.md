@@ -1,14 +1,9 @@
-## New Features
-
-- Added support for Langchain OpenRouter.
-
 ## Bug Fixes
 
-- Fixed an issue causing bugs in tests.
+- Fixed an issue where "new conversation" in the agent chat interface would flicker or require multiple clicks.
 
 ## Improvements
 
-- Improved exception handling for system skills.
-- Updated project dependencies.
+- Refactored the wallet interface to be fully asynchronous, improving performance and consistency across different wallet providers (Native, CDP, Safe).
 
-Full Changelog: [v0.11.4...v0.11.5](https://github.com/crestalnetwork/intentkit/compare/v0.11.4...v0.11.5)
+Full Changelog: [v0.11.5...v0.11.6](https://github.com/crestalnetwork/intentkit/compare/v0.11.5...v0.11.6)

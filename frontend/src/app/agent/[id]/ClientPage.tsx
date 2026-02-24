@@ -123,6 +123,17 @@ export default function AgentChatPage() {
   useEffect(() => {
     if (!agentId) return;
 
+    // Handle explicit new thread from URL
+    if (searchParams.get("new") === "true") {
+      if (!isNewThread) {
+        setIsNewThread(true);
+        setCurrentThreadId(null);
+        setMessages([]);
+      }
+      setHasInitialized(true);
+      return;
+    }
+
     const threadFromUrl = searchParams.get("thread");
     if (threadFromUrl) {
       if (currentThreadId !== threadFromUrl || isNewThread) {
@@ -211,8 +222,6 @@ export default function AgentChatPage() {
   // Thread actions
   const handleSelectThread = useCallback(
     (threadId: string) => {
-      setCurrentThreadId(threadId);
-      setIsNewThread(false);
       setError(null);
       router.push(buildChatThreadPath(agentId, threadId));
     },
@@ -220,11 +229,7 @@ export default function AgentChatPage() {
   );
 
   const handleNewThread = useCallback(() => {
-    setIsNewThread(true);
-    setCurrentThreadId(null);
-    setMessages([]);
-    setError(null);
-    router.push(buildChatThreadPath(agentId, null));
+    router.push(`/agent/${agentId}?new=true`);
   }, [agentId, router]);
 
   const handleUpdateTitle = useCallback(
@@ -251,14 +256,10 @@ export default function AgentChatPage() {
               new Date(b.updated_at).getTime() -
               new Date(a.updated_at).getTime(),
           );
-          setCurrentThreadId(sorted[0].id);
-          setIsNewThread(false);
           router.replace(buildChatThreadPath(agentId, sorted[0].id));
         } else {
-          setIsNewThread(true);
-          setCurrentThreadId(null);
           setMessages([]);
-          router.replace(buildChatThreadPath(agentId, null));
+          router.replace(`/agent/${agentId}?new=true`);
         }
       }
     },
