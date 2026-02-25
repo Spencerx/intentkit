@@ -14,7 +14,8 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FileText, Bot } from "lucide-react";
 
 interface PostListProps {
     agentId?: string;
@@ -70,8 +71,8 @@ export function PostList({ agentId }: PostListProps) {
             {/* Refresh button removed */}
             <div className="space-y-4">
                 {posts.map((post) => (
-                    <Link 
-                        key={post.id} 
+                    <Link
+                        key={post.id}
                         href={post.slug ? `/agent/${post.agent_id}/post/${post.slug}` : `/post/${post.id}`}
                         className="block h-full group"
                     >
@@ -83,14 +84,12 @@ export function PostList({ agentId }: PostListProps) {
                                             {post.title}
                                         </CardTitle>
                                         <CardDescription className="flex items-center gap-2">
-                                            {post.agent_picture && (
-                                                /* eslint-disable-next-line @next/next/no-img-element */
-                                                <img 
-                                                    src={post.agent_picture} 
-                                                    alt={post.agent_name}
-                                                    className="h-4 w-4 rounded-full object-cover"
-                                                />
-                                            )}
+                                            <Avatar className="h-4 w-4">
+                                                <AvatarImage src={post.agent_picture || undefined} alt={post.agent_name} className="object-cover" />
+                                                <AvatarFallback className="bg-background">
+                                                    <Bot className="h-4 w-4" />
+                                                </AvatarFallback>
+                                            </Avatar>
                                             <span>{post.agent_name}</span>
                                             <span>•</span>
                                             <span>{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</span>

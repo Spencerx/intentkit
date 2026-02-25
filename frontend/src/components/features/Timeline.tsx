@@ -9,6 +9,8 @@ import {
     CardHeader,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import Link from "next/link";
 
 function getActivityIcon(type: string) {
     switch (type) {
@@ -82,54 +84,45 @@ export function Timeline({ agentId, agentPicture }: TimelineProps) {
             <div className="relative border-l border-muted pl-6 ml-4 space-y-8">
                 {activities.map((activity) => (
                     <div key={activity.id} className="relative">
-                        <span className="absolute -left-10 top-0 flex h-8 w-8 items-center justify-center rounded-full border bg-background text-muted-foreground overflow-hidden">
-                            {agentId ? (
-                                agentPicture ? (
-                                    /* eslint-disable-next-line @next/next/no-img-element */
-                                    <img 
-                                        src={agentPicture} 
-                                        alt="Agent" 
-                                        className="h-full w-full object-cover"
-                                    />
-                                ) : (
-                                    <Bot className="h-4 w-4" />
-                                )
-                            ) : activity.agent_picture ? (
-                                /* eslint-disable-next-line @next/next/no-img-element */
-                                <img 
-                                    src={activity.agent_picture} 
-                                    alt="Agent" 
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                getActivityIcon(activity.activity_type || "default")
-                            )}
-                        </span>
+                        <Link href={`/agent/${activity.agent_id || agentId}/activities`} className="absolute -left-10 top-0 flex h-8 w-8 hover:opacity-80 transition-opacity">
+                            <Avatar className="h-full w-full border bg-background text-muted-foreground">
+                                <AvatarImage src={(agentId ? agentPicture : activity.agent_picture) || undefined} alt="Agent" className="object-cover" />
+                                <AvatarFallback className="bg-background">
+                                    {agentId ? (
+                                        <Bot className="h-4 w-4" />
+                                    ) : (
+                                        getActivityIcon(activity.activity_type || "default")
+                                    )}
+                                </AvatarFallback>
+                            </Avatar>
+                        </Link>
                         <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                                <span className="font-semibold">{activity.agent_name || activity.agent_id}</span>
+                                <Link href={`/agent/${activity.agent_id || agentId}/activities`} className="font-semibold hover:underline">
+                                    {activity.agent_name || activity.agent_id}
+                                </Link>
                                 <span className="text-sm text-muted-foreground">
                                     {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
                                 </span>
                             </div>
                             <p className="text-sm text-foreground">{activity.text || activity.description}</p>
-                            
+
                             {/* Images */}
                             {activity.images && activity.images.length > 0 && (
                                 <div className="mt-2 grid grid-cols-2 gap-2 max-w-md">
                                     {activity.images.map((img, idx) => (
                                         /* eslint-disable-next-line @next/next/no-img-element */
-                                        <img 
-                                            key={idx} 
-                                            src={img} 
-                                            alt="Activity attachment" 
-                                            className="rounded-md border object-cover w-full h-auto" 
+                                        <img
+                                            key={idx}
+                                            src={img}
+                                            alt="Activity attachment"
+                                            className="rounded-md border object-cover w-full h-auto"
                                         />
                                     ))}
                                 </div>
                             )}
 
-                             {/* Video */}
+                            {/* Video */}
                             {activity.video && (
                                 <div className="mt-2">
                                     <video controls className="rounded-md border max-w-md w-full">
