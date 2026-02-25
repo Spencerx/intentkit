@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.clients import get_twitter_client
@@ -48,7 +49,7 @@ class TwitterGetUserTweets(TwitterBaseTool):
         try:
             user_id = kwargs.get("user_id")
             if not user_id:
-                raise ValueError("User ID is required")
+                raise ToolException("User ID is required")
 
             # Hardcode max_results to 10
             max_results = 10

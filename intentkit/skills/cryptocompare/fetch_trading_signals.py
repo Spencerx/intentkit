@@ -3,6 +3,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cryptocompare.base import CryptoCompareBaseTool
@@ -72,14 +73,14 @@ class CryptoCompareFetchTradingSignals(CryptoCompareBaseTool):
             # Get API key from context
             api_key = skill_config.get("api_key")
             if not api_key:
-                raise ValueError("CryptoCompare API key not found in configuration")
+                raise ToolException("CryptoCompare API key not found in configuration")
 
             # Fetch trading signals data directly
             signals_data = await self.fetch_trading_signals(api_key, from_symbol)
 
             # Check for errors
             if "error" in signals_data:
-                raise ValueError(signals_data["error"])
+                raise ToolException(signals_data["error"])
 
             # Convert to list of TradingSignal objects
             result = []

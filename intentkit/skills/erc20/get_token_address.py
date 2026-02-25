@@ -3,6 +3,7 @@
 from typing import Any, override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.erc20.base import ERC20BaseTool
@@ -66,8 +67,9 @@ Supported tokens vary by network:
             network_id = self.get_agent_network_id()
 
             if not network_id:
-                return "Error: Agent network is not configured. Please set the network_id in the agent configuration."
-
+                raise ToolException(
+                    "Error: Agent network is not configured. Please set the network_id in the agent configuration."
+                )
             # Look up the token address
             token_address = get_token_address_by_symbol(network_id, symbol)
 
@@ -90,4 +92,4 @@ Supported tokens vary by network:
                 )
 
         except Exception as e:
-            return f"Error getting token address: {e!s}"
+            raise ToolException(f"Error getting token address: {e!s}")

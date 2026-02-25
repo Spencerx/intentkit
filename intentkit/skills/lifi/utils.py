@@ -8,6 +8,7 @@ from decimal import ROUND_DOWN, Decimal, InvalidOperation
 from typing import Any
 
 import httpx
+from langchain_core.tools.base import ToolException
 from web3 import Web3
 
 # Constants
@@ -290,18 +291,18 @@ def convert_chain_to_id(chain: str) -> int:
     if chain_lower in chain_mapping:
         return chain_mapping[chain_lower]
 
-    raise ValueError(f"Unsupported chain identifier: {chain}")
+    raise ToolException(f"Unsupported chain identifier: {chain}")
 
 
 def convert_amount_to_wei(amount: str, token_symbol: str = "ETH") -> str:
     """Convert a token amount into the smallest denomination expected by LiFi."""
 
     if amount is None:
-        raise ValueError("Amount is required")
+        raise ToolException("Amount is required")
 
     normalized_amount = amount.strip()
     if not normalized_amount:
-        raise ValueError("Amount cannot be empty")
+        raise ToolException("Amount cannot be empty")
 
     # If the user already provided an integer amount without a decimal point,
     # assume it is already in the token's smallest denomination.
@@ -419,7 +420,7 @@ def prepare_transaction_params(
     data = transaction_request.get("data", "0x")
 
     if not to_address:
-        raise Exception("Transaction request is missing destination address")
+        raise ToolException("Transaction request is missing destination address")
 
     tx_params: dict[str, Any] = {
         "to": Web3.to_checksum_address(to_address),

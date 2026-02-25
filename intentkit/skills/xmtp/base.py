@@ -1,5 +1,7 @@
 from typing import Literal
 
+from langchain_core.tools.base import ToolException
+
 from intentkit.skills.onchain import IntentKitOnChainSkill
 
 
@@ -44,7 +46,7 @@ class XmtpBaseTool(IntentKitOnChainSkill):
         """
         if network_id not in self.CHAIN_ID_HEX_BY_NETWORK:
             supported_networks = ", ".join(self.CHAIN_ID_HEX_BY_NETWORK.keys())
-            raise ValueError(
+            raise ToolException(
                 f"XMTP {skill_name} supports the following networks: {supported_networks}. "
                 f"Current agent network: {network_id}"
             )
@@ -64,7 +66,7 @@ class XmtpBaseTool(IntentKitOnChainSkill):
         """
         if network_id not in self.NETWORK_FOR_CDP_MAPPING:
             supported_networks = ", ".join(self.NETWORK_FOR_CDP_MAPPING.keys())
-            raise ValueError(
+            raise ToolException(
                 f"CDP swap does not support network: {network_id}. "
                 f"Supported networks: {supported_networks}"
             )

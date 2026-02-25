@@ -2,6 +2,7 @@ from typing import Any, cast, override
 
 from cdp.actions.evm.swap.types import QuoteSwapResult, SwapUnavailableResult
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.models.chat import ChatMessageAttachment, ChatMessageAttachmentType
@@ -61,26 +62,26 @@ class XmtpSwap(XmtpBaseTool):
             or not from_address.startswith("0x")
             or len(from_address) != 42
         ):
-            raise ValueError("from_address must be a valid Ethereum address")
+            raise ToolException("from_address must be a valid Ethereum address")
 
         if not from_token or not from_token.startswith("0x") or len(from_token) != 42:
-            raise ValueError("from_token must be a valid token contract address")
+            raise ToolException("from_token must be a valid token contract address")
 
         if not to_token or not to_token.startswith("0x") or len(to_token) != 42:
-            raise ValueError("to_token must be a valid token contract address")
+            raise ToolException("to_token must be a valid token contract address")
 
         if from_token.lower() == to_token.lower():
-            raise ValueError("from_token and to_token cannot be the same")
+            raise ToolException("from_token and to_token cannot be the same")
 
         try:
             amount_int = int(from_amount)
             if amount_int <= 0:
-                raise ValueError("from_amount must be a positive integer")
+                raise ToolException("from_amount must be a positive integer")
         except ValueError as e:
-            raise ValueError(f"from_amount must be a valid positive integer: {e}")
+            raise ToolException(f"from_amount must be a valid positive integer: {e}")
 
         if slippage_bps < 0 or slippage_bps > 10000:
-            raise ValueError("slippage_bps must be between 0 and 10000 (0% to 100%)")
+            raise ToolException("slippage_bps must be between 0 and 10000 (0% to 100%)")
 
         # Resolve agent context and target network
         context = self.get_context()
@@ -94,7 +95,7 @@ class XmtpSwap(XmtpBaseTool):
             "optimism-mainnet",
         ]
         if agent.network_id not in supported_networks:
-            raise ValueError(
+            raise ToolException(
                 f"Swap only supported on {', '.join(supported_networks)}. Current: {agent.network_id}"
             )
 
@@ -129,7 +130,7 @@ class XmtpSwap(XmtpBaseTool):
 
             # Check if swap is available
             if not quote_result.liquidity_available:
-                raise ValueError(
+                raise ToolException(
                     "Swap unavailable due to insufficient liquidity or other issues."
                 )
 
@@ -137,7 +138,7 @@ class XmtpSwap(XmtpBaseTool):
             quote: QuoteSwapResult = cast(QuoteSwapResult, quote_result)
 
         except Exception as e:  # pragma: no cover - defensive
-            raise ValueError(f"Failed to create swap quote via CDP: {e!s}")
+            raise ToolException(f"Failed to create swap quote via CDP: {e!s}")
 
         # Extract transaction data from QuoteSwapResult
         # CDP returns a single transaction object with all necessary data
@@ -146,7 +147,7 @@ class XmtpSwap(XmtpBaseTool):
         # Validate that we have the required fields from CDP
         # Note: Pydantic model guarantees these fields exist, but keeping checks for safety isn't harmful
         if not hasattr(quote, "to") or not hasattr(quote, "data"):
-            raise ValueError(
+            raise ToolException(
                 "CDP swap quote missing required transaction fields (to, data)"
             )
 

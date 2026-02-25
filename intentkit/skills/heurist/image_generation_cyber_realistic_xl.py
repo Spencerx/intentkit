@@ -3,6 +3,7 @@ import logging
 import httpx
 from epyxid import XID
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.clients.s3 import get_cdn_url, store_image
@@ -153,8 +154,8 @@ class ImageGenerationCyberRealisticXL(HeuristBaseTool):
                 full_error = f"Heurist API error: {e}"
 
             logger.error(full_error)
-            raise Exception(full_error)
+            raise ToolException(full_error)
 
         except Exception as e:
             logger.error(f"Error generating image with Heurist: {e}")
-            raise Exception(f"Error generating image with Heurist: {str(e)}")
+            raise ToolException(f"Error generating image with Heurist: {str(e)}")

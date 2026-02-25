@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.slack.base import SlackBaseTool
@@ -86,7 +87,9 @@ class SlackScheduleMessage(SlackBaseTool):
                     "thread_ts": thread_ts,
                 }
             else:
-                raise Exception(f"Error scheduling message: {response.get('error')}")
+                raise ToolException(
+                    f"Error scheduling message: {response.get('error')}"
+                )
 
         except Exception as e:
-            raise Exception(f"Error scheduling message: {str(e)}")
+            raise ToolException(f"Error scheduling message: {str(e)}")

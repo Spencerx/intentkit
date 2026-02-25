@@ -3,6 +3,7 @@
 from typing import Any, override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -72,8 +73,9 @@ Important notes:
             )
 
             if not token_details:
-                return f"Error: Could not fetch token details for {contract_address}. Please verify the token address is correct."
-
+                raise ToolException(
+                    f"Error: Could not fetch token details for {contract_address}. Please verify the token address is correct."
+                )
             return (
                 f"Balance of {token_details.name} ({token_details.symbol}) at address "
                 f"{checksum_address} is {token_details.formatted_balance} "
@@ -81,4 +83,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error getting balance: {e!s}"
+            raise ToolException(f"Error getting balance: {e!s}")

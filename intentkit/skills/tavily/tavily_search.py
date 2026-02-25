@@ -2,6 +2,7 @@ import logging
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.config.config import config
@@ -90,8 +91,9 @@ class TavilySearch(TavilyBaseTool):
         else:
             api_key = config.tavily_api_key
         if not api_key:
-            return "Error: No Tavily API key provided in the configuration."
-
+            raise ToolException(
+                "Error: No Tavily API key provided in the configuration."
+            )
         # Limit max_results to a reasonable range
         max_results = max(1, min(max_results, 10))
 
@@ -113,8 +115,9 @@ class TavilySearch(TavilyBaseTool):
                     logger.error(
                         f"tavily.py: Error from Tavily API: {response.status_code} - {response.text}"
                     )
-                    return f"Error searching the web: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error searching the web: {response.status_code} - {response.text}"
+                    )
                 data = response.json()
                 results = data.get("results", [])
 

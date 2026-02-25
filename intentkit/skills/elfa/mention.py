@@ -3,6 +3,7 @@
 from typing import Any
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from .base import ElfaBaseTool
@@ -185,7 +186,7 @@ class ElfaSearchMentions(ElfaBaseTool):
 
         # Validate that at least one search criteria is provided
         if not keywords and not accountName:
-            raise ValueError("Either keywords or accountName must be provided")
+            raise ToolException("Either keywords or accountName must be provided")
 
         # Prepare parameters according to API spec
         params = {

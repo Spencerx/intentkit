@@ -39,7 +39,7 @@ async def make_elfa_request(
         ToolException: If there's an error with the API request
     """
     if not api_key:
-        raise ValueError("Elfa API key not found")
+        raise ToolException("Elfa API key not found")
 
     url = f"{base_url}/{endpoint}"
     headers = {

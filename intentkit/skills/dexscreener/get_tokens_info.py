@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from intentkit.skills.dexscreener.base import DexScreenerBaseTool
@@ -39,9 +40,9 @@ class GetTokensInfoInput(BaseModel):
     @classmethod
     def validate_token_addresses(cls, v: list[str]) -> list[str]:
         if not v:
-            raise ValueError("At least one token address is required")
+            raise ToolException("At least one token address is required")
         if len(v) > MAX_TOKENS_BATCH:
-            raise ValueError(f"Maximum {MAX_TOKENS_BATCH} token addresses allowed")
+            raise ToolException(f"Maximum {MAX_TOKENS_BATCH} token addresses allowed")
         # Remove duplicates while preserving order
         seen = set()
         unique_addresses = []

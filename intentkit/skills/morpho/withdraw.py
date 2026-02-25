@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -68,7 +69,7 @@ Important notes:
 
             # Check if network is supported
             if network_id not in SUPPORTED_NETWORKS:
-                return (
+                raise ToolException(
                     f"Error: Morpho is not supported on network {network_id}. "
                     f"Supported networks: {', '.join(SUPPORTED_NETWORKS)}"
                 )
@@ -76,8 +77,7 @@ Important notes:
             # Validate assets amount
             assets_decimal = Decimal(assets)
             if assets_decimal <= Decimal("0"):
-                return "Error: Assets amount must be greater than 0"
-
+                raise ToolException("Error: Assets amount must be greater than 0")
             w3 = Web3()
             checksum_vault = w3.to_checksum_address(vault_address)
             checksum_receiver = w3.to_checksum_address(receiver)
@@ -112,4 +112,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error withdrawing from Morpho Vault: {e!s}"
+            raise ToolException(f"Error withdrawing from Morpho Vault: {e!s}")

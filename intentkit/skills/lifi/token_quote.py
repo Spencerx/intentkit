@@ -2,6 +2,7 @@ from typing import Any
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.lifi.base import LiFiBaseTool
@@ -122,8 +123,7 @@ class TokenQuote(LiFiBaseTool):
                     return "Connection error. Unable to reach LiFi service. Please check your internet connection."
                 except Exception as e:
                     self.logger.error("LiFi_API_Error: %s", str(e))
-                    return f"Error making API request: {str(e)}"
-
+                    raise ToolException(f"Error making API request: {str(e)}")
                 # Handle response
                 data, error = handle_api_response(
                     response, from_token, from_chain, to_token, to_chain

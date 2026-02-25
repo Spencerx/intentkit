@@ -99,7 +99,7 @@ class AlloraGetPrice(AlloraBaseTool):
         """
         api_key = self.get_api_key()
         if not api_key:
-            raise ValueError("Allora API key not found")
+            raise ToolException("Allora API key not found")
 
         url = f"{base_url}/consumer/price/ethereum-11155111/{token}/{time_frame}"
         headers = {

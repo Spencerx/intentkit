@@ -1,6 +1,7 @@
 """ERC721 mint skill."""
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -66,7 +67,7 @@ Important notes:
 
             # Validate that destination is not the contract itself
             if checksum_contract.lower() == checksum_destination.lower():
-                return (
+                raise ToolException(
                     "Error: Destination address is the same as the contract address. "
                     "Please provide a valid recipient address."
                 )
@@ -102,4 +103,6 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error minting NFT {contract_address} to {destination}: {e!s}"
+            raise ToolException(
+                f"Error minting NFT {contract_address} to {destination}: {e!s}"
+            )

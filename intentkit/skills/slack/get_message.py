@@ -1,6 +1,7 @@
 from typing import Any
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.slack.base import SlackBaseTool, SlackMessage
@@ -78,7 +79,7 @@ class SlackGetMessage(SlackBaseTool):
                         ]
                     }
                 else:
-                    raise Exception(f"Message with timestamp {ts} not found")
+                    raise ToolException(f"Message with timestamp {ts} not found")
 
             # Get messages from a thread
             elif thread_ts:
@@ -94,7 +95,7 @@ class SlackGetMessage(SlackBaseTool):
                         "has_more": response.get("has_more", False),
                     }
                 else:
-                    raise Exception(
+                    raise ToolException(
                         f"Error getting thread messages: {response.get('error')}"
                     )
 
@@ -110,12 +111,12 @@ class SlackGetMessage(SlackBaseTool):
                         "has_more": response.get("has_more", False),
                     }
                 else:
-                    raise Exception(
+                    raise ToolException(
                         f"Error getting channel messages: {response.get('error')}"
                     )
 
         except Exception as e:
-            raise Exception(f"Error getting messages: {str(e)}")
+            raise ToolException(f"Error getting messages: {str(e)}")
 
     def _format_message(self, message: dict[str, Any], channel_id: str) -> SlackMessage:
         """Format the message data into a SlackMessage model.

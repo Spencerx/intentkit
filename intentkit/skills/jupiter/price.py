@@ -1,4 +1,5 @@
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.jupiter.base import JupiterBaseTool
@@ -93,7 +94,7 @@ class JupiterGetPrice(JupiterBaseTool):
             return "\n".join([table_header] + table_rows)
 
         except Exception as e:
-            return f"Error fetching price: {e}"
+            raise ToolException(f"Error fetching price: {e}")
 
     def _get_common_tokens(self) -> dict[str, str]:
         # Import here to avoid circular or just access base one?

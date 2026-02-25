@@ -50,7 +50,7 @@ class TwitterRetweet(TwitterBaseTool):
             # Get authenticated user's ID
             user_id = twitter.self_id
             if not user_id:
-                raise ValueError("Failed to get authenticated user ID.")
+                raise ToolException("Failed to get authenticated user ID.")
 
             # Retweet the tweet using tweepy client
             response = await client.retweet(

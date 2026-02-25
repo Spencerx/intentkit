@@ -33,9 +33,9 @@ class SupabaseBaseTool(IntentKitSkill):
             supabase_key = config.get("public_key") or config.get("supabase_key")
 
         if not supabase_url:
-            raise ValueError("supabase_url is required in config")
+            raise ToolException("supabase_url is required in config")
         if not supabase_key:
-            raise ValueError("supabase_key is required in config")
+            raise ToolException("supabase_key is required in config")
 
         return supabase_url, supabase_key
 

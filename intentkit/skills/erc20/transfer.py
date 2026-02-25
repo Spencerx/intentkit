@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -79,7 +80,7 @@ Important notes:
             token_details = await get_token_details(wallet, contract_address)
 
             if not token_details:
-                return (
+                raise ToolException(
                     f"Error: Could not fetch token details for {contract_address}. "
                     "Please verify the token address is correct."
                 )
@@ -89,7 +90,7 @@ Important notes:
 
             # Check token balance
             if token_details.balance < amount_in_atomic_units:
-                return (
+                raise ToolException(
                     f"Error: Insufficient {token_details.name} ({contract_address}) token balance. "
                     f"Requested to send {amount} of {token_details.name}, "
                     f"but only {token_details.formatted_balance} is available."
@@ -97,7 +98,7 @@ Important notes:
 
             # Guardrails to prevent loss of funds
             if contract_address.lower() == destination_address.lower():
-                return (
+                raise ToolException(
                     "Error: Transfer destination is the token contract address. "
                     "Refusing transfer to prevent loss of funds."
                 )
@@ -108,7 +109,7 @@ Important notes:
                 wallet, destination_address
             )
             if destination_token_details:
-                return (
+                raise ToolException(
                     "Error: Transfer destination is an ERC20 token contract. "
                     "Refusing to transfer to prevent loss of funds."
                 )
@@ -135,4 +136,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error transferring the asset: {e!s}"
+            raise ToolException(f"Error transferring the asset: {e!s}")

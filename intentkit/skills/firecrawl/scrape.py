@@ -3,6 +3,7 @@ import logging
 import httpx
 from langchain_core.documents import Document
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.firecrawl.base import FirecrawlBaseTool
@@ -131,8 +132,9 @@ class FirecrawlScrape(FirecrawlBaseTool):
         # Get the API key from the agent's configuration
         api_key = self.get_api_key()
         if not api_key:
-            return "Error: No Firecrawl API key provided in the configuration."
-
+            raise ToolException(
+                "Error: No Firecrawl API key provided in the configuration."
+            )
         # Validate and set defaults
         if formats is None:
             formats = ["markdown"]
@@ -174,7 +176,7 @@ class FirecrawlScrape(FirecrawlBaseTool):
                     logger.error(
                         f"firecrawl_scrape: Error from Firecrawl API: {response.status_code} - {response.text}"
                     )
-                    return (
+                    raise ToolException(
                         f"Error scraping URL: {response.status_code} - {response.text}"
                     )
 
@@ -182,8 +184,7 @@ class FirecrawlScrape(FirecrawlBaseTool):
 
                 if not data.get("success"):
                     error_msg = data.get("error", "Unknown error occurred")
-                    return f"Error scraping URL: {error_msg}"
-
+                    raise ToolException(f"Error scraping URL: {error_msg}")
                 result_data = data.get("data", {})
 
                 # Format the results based on requested formats

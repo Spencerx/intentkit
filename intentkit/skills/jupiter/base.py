@@ -1,6 +1,7 @@
 from typing import Any, Mapping
 
 import httpx
+from langchain_core.tools.base import ToolException
 
 from intentkit.skills.base import IntentKitSkill
 
@@ -63,7 +64,7 @@ class JupiterBaseTool(IntentKitSkill):
                 return response.json()
             except httpx.HTTPError as e:
                 self.logger.error(f"Jupiter API error: {e}")
-                raise RuntimeError(f"Jupiter API request failed: {e}")
+                raise ToolException(f"Jupiter API request failed: {e}")
 
     def _resolve_token_mint(self, symbol_or_mint: str) -> str:
         """Resolve a symbol to a mint address if possible, otherwise return as is."""

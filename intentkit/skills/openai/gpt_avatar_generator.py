@@ -6,6 +6,7 @@ import logging
 import openai
 from epyxid import XID
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.clients.s3 import get_cdn_url, store_image_bytes
@@ -95,8 +96,8 @@ class GPTAvatarGenerator(OpenAIBaseTool):
 
         except openai.OpenAIError as e:
             error_message = f"OpenAI API error: {str(e)}"
-            raise Exception(error_message)
+            raise ToolException(error_message)
 
         except Exception as e:
             error_message = f"Error generating avatar with GPT-Image-1-Mini: {str(e)}"
-            raise Exception(error_message)
+            raise ToolException(error_message)

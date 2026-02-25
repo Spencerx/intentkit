@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel
 
 from intentkit.clients import get_twitter_client
@@ -60,7 +61,7 @@ class TwitterGetTimeline(TwitterBaseTool):
 
             user_id = twitter.self_id
             if not user_id:
-                raise ValueError("Failed to get Twitter user ID.")
+                raise ToolException("Failed to get Twitter user ID.")
 
             timeline = await client.get_home_timeline(
                 user_auth=twitter.use_key,

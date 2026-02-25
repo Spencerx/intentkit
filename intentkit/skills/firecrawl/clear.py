@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.models.skill import AgentSkillData
@@ -51,11 +52,11 @@ class FirecrawlClearIndexedContent(FirecrawlBaseTool):
         agent_id = context.agent_id
 
         if not agent_id:
-            return "Error: Agent ID not available for clearing content."
-
+            raise ToolException("Error: Agent ID not available for clearing content.")
         if not confirm:
-            return "Error: You must set confirm=true to clear all indexed content."
-
+            raise ToolException(
+                "Error: You must set confirm=true to clear all indexed content."
+            )
         logger.info(
             f"firecrawl_clear: Starting clear indexed content operation for agent {agent_id}"
         )
@@ -79,4 +80,4 @@ class FirecrawlClearIndexedContent(FirecrawlBaseTool):
                 f"firecrawl_clear: Error clearing indexed content for agent {agent_id}: {e}",
                 exc_info=True,
             )
-            return f"Error clearing indexed content: {str(e)}"
+            raise ToolException(f"Error clearing indexed content: {str(e)}")

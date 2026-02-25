@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 from cdp import EvmServerAccount, TransactionRequestEIP1559
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import AsyncWeb3
 from web3.exceptions import TimeExhausted
@@ -94,7 +95,7 @@ class TokenExecute(LiFiBaseTool):
     def _format_quote_result(self, data: dict[str, Any]) -> str:
         """Format the quote result in a readable format."""
         if self.quote_tool is None:
-            raise RuntimeError("Quote tool is not initialized")
+            raise ToolException("Quote tool is not initialized")
         # Use the same formatting as token_quote
         return self.quote_tool._format_quote_result(data)
 
@@ -254,8 +255,7 @@ class TokenExecute(LiFiBaseTool):
             return "Connection error. Unable to reach LiFi service. Please check your internet connection."
         except Exception as e:
             self.logger.error("LiFi_API_Error: %s", str(e))
-            return f"Error making API request: {str(e)}"
-
+            raise ToolException(f"Error making API request: {str(e)}")
         # Handle response
         data, error = handle_api_response(
             response, from_token, from_chain, to_token, to_chain
@@ -304,7 +304,7 @@ class TokenExecute(LiFiBaseTool):
             )
         except Exception as e:
             self.logger.error("LiFi_Token_Approval_Error: %s", str(e))
-            raise Exception(f"Failed to approve token: {str(e)}")
+            raise ToolException(f"Failed to approve token: {str(e)}")
 
     async def _execute_transfer_transaction(
         self,
@@ -332,13 +332,13 @@ class TokenExecute(LiFiBaseTool):
             # Wait for confirmation
             receipt = await self._wait_for_receipt(web3, tx_hash)
             if not receipt or receipt.get("status") != 1:
-                raise Exception(f"Transaction failed: {tx_hash}")
+                raise ToolException(f"Transaction failed: {tx_hash}")
 
             return tx_hash
 
         except Exception as e:
             self.logger.error("LiFi_Execution_Error: %s", str(e))
-            raise Exception(f"Failed to execute transaction: {str(e)}")
+            raise ToolException(f"Failed to execute transaction: {str(e)}")
 
     def _build_transaction_request(
         self, tx_params: dict[str, Any]
@@ -369,7 +369,7 @@ class TokenExecute(LiFiBaseTool):
             receipt = await web3.eth.wait_for_transaction_receipt(tx_hash)
         except TimeExhausted as exc:
             self.logger.error("LiFi_Execution_Error: %s", str(exc))
-            raise Exception(
+            raise ToolException(
                 f"Transaction not confirmed before timeout: {tx_hash}"
             ) from exc
         except Exception as exc:
@@ -550,10 +550,10 @@ class TokenExecute(LiFiBaseTool):
             receipt = await self._wait_for_receipt(web3, approval_tx_hash)
 
             if not receipt or receipt.get("status") != 1:
-                raise Exception(f"Approval transaction failed: {approval_tx_hash}")
+                raise ToolException(f"Approval transaction failed: {approval_tx_hash}")
 
             return approval_tx_hash
 
         except Exception as e:
             self.logger.error(f"Token approval failed: {str(e)}")
-            raise Exception(f"Failed to approve token transfer: {str(e)}")
+            raise ToolException(f"Failed to approve token transfer: {str(e)}")

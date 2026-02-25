@@ -1,6 +1,7 @@
 from typing import cast, override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3.exceptions import ContractLogicError
 
@@ -60,7 +61,7 @@ class XmtpTransfer(XmtpBaseTool):
         agent = context.agent
 
         if not agent.network_id:
-            raise ValueError("Agent network_id is not configured")
+            raise ToolException("Agent network_id is not configured")
 
         # Validate network and get chain ID
         chain_id_hex = self.validate_network_and_get_chain_id(
@@ -103,18 +104,18 @@ class XmtpTransfer(XmtpBaseTool):
 
                 # Validate symbol matches currency (case insensitive)
                 if token_symbol.upper() != currency.upper():
-                    raise ValueError(
+                    raise ToolException(
                         f"Token symbol mismatch: contract symbol is '{token_symbol}', "
                         f"but currency parameter is '{currency}'"
                     )
 
             except ContractLogicError:
-                raise ValueError(
+                raise ToolException(
                     f"Invalid ERC20 contract address: {token_contract_address}. "
                     "The address does not point to a valid ERC20 token contract."
                 )
             except Exception as e:
-                raise ValueError(
+                raise ToolException(
                     f"Failed to validate ERC20 contract {token_contract_address}: {str(e)}"
                 )
         else:
@@ -122,7 +123,7 @@ class XmtpTransfer(XmtpBaseTool):
             decimals = 18
             # Validate currency is ETH for native transfers
             if currency.upper() != "ETH":
-                raise ValueError(
+                raise ToolException(
                     f"For native transfers, currency must be 'ETH', got '{currency}'"
                 )
 

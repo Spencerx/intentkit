@@ -3,6 +3,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cryptocompare.base import CryptoCompareBaseTool, CryptoCurrency
@@ -70,14 +71,14 @@ class CryptoCompareFetchTopMarketCap(CryptoCompareBaseTool):
             # Get API key from context
             api_key = skill_config.get("api_key")
             if not api_key:
-                raise ValueError("CryptoCompare API key not found in configuration")
+                raise ToolException("CryptoCompare API key not found in configuration")
 
             # Fetch top market cap data directly
             market_cap_data = await self.fetch_top_market_cap(api_key, limit, to_symbol)
 
             # Check for errors
             if "error" in market_cap_data:
-                raise ValueError(market_cap_data["error"])
+                raise ToolException(market_cap_data["error"])
 
             # Convert to list of CryptoCurrency objects
             result = []

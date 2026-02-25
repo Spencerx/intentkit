@@ -1,6 +1,7 @@
 from typing import Any
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.slack.base import SlackBaseTool, SlackChannel
@@ -60,7 +61,7 @@ class SlackGetChannel(SlackBaseTool):
                         channels[channel["id"]] = self._format_channel(channel)
                     return channels
                 else:
-                    raise Exception(f"Error getting channels: {response['error']}")
+                    raise ToolException(f"Error getting channels: {response['error']}")
 
             # First try to find by channel_id if provided
             if channel_id:
@@ -68,7 +69,7 @@ class SlackGetChannel(SlackBaseTool):
                 if response["ok"]:
                     return self._format_channel(response["channel"])
                 else:
-                    raise Exception(f"Error getting channel: {response['error']}")
+                    raise ToolException(f"Error getting channel: {response['error']}")
 
             # Otherwise try to find by channel_name
             if channel_name:
@@ -82,12 +83,12 @@ class SlackGetChannel(SlackBaseTool):
                     for channel in response["channels"]:
                         if channel["name"] == channel_name.lstrip("#"):
                             return self._format_channel(channel)
-                    raise ValueError(f"Channel {channel_name} not found")
+                    raise ToolException(f"Channel {channel_name} not found")
                 else:
-                    raise Exception(f"Error getting channels: {response['error']}")
+                    raise ToolException(f"Error getting channels: {response['error']}")
 
         except Exception as e:
-            raise Exception(f"Error getting channel information: {str(e)}")
+            raise ToolException(f"Error getting channel information: {str(e)}")
 
     def _format_channel(self, channel: dict[str, Any]) -> SlackChannel:
         """Format the channel data into a SlackChannel model.

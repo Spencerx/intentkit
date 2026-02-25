@@ -3,6 +3,7 @@ from datetime import datetime
 
 import pytz
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.common.base import CommonBaseTool
@@ -70,7 +71,7 @@ class CurrentTime(CommonBaseTool):
                     "Australia/Sydney",
                 ]
                 suggestion_str = ", ".join([f"'{tz}'" for tz in common_timezones])
-                return (
+                raise ToolException(
                     f"Error: Unknown timezone '{timezone}'. Using UTC instead.\n"
                     f"Some common timezone options: {suggestion_str}"
                 )

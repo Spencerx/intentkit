@@ -3,6 +3,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cryptocompare.base import CryptoCompareBaseTool, CryptoExchange
@@ -77,7 +78,7 @@ class CryptoCompareFetchTopExchanges(CryptoCompareBaseTool):
             # Get API key from context
             api_key = skill_config.get("api_key")
             if not api_key:
-                raise ValueError("CryptoCompare API key not found in configuration")
+                raise ToolException("CryptoCompare API key not found in configuration")
 
             # Fetch top exchanges data directly
             exchanges_data = await self.fetch_top_exchanges(
@@ -86,7 +87,7 @@ class CryptoCompareFetchTopExchanges(CryptoCompareBaseTool):
 
             # Check for errors
             if "error" in exchanges_data:
-                raise ValueError(exchanges_data["error"])
+                raise ToolException(exchanges_data["error"])
 
             # Convert to list of CryptoExchange objects
             result = []

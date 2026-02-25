@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel
 
 from intentkit.skills.cdp.base import CDPBaseTool
@@ -67,4 +68,4 @@ No inputs required - returns the balance for the connected wallet address.
             )
 
         except Exception as e:
-            return f"Error getting balance: {e!s}"
+            raise ToolException(f"Error getting balance: {e!s}")

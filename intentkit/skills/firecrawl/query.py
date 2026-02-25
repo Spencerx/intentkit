@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.firecrawl.base import FirecrawlBaseTool
@@ -53,7 +54,9 @@ class FirecrawlQueryIndexedContent(FirecrawlBaseTool):
 
             context = self.get_context()
             if not context or not context.agent_id:
-                raise ValueError("Agent ID is required but not found in configuration")
+                raise ToolException(
+                    "Agent ID is required but not found in configuration"
+                )
 
             agent_id = context.agent_id
 

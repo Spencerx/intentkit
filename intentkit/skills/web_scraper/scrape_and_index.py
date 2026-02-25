@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.web_scraper.base import WebScraperBaseTool
@@ -84,7 +85,9 @@ class ScrapeAndIndex(WebScraperBaseTool):
 
             context = self.get_context()
             if not context or not context.agent_id:
-                raise ValueError("Agent ID is required but not found in configuration")
+                raise ToolException(
+                    "Agent ID is required but not found in configuration"
+                )
 
             agent_id = context.agent_id
 
@@ -106,12 +109,14 @@ class ScrapeAndIndex(WebScraperBaseTool):
 
             if not valid_urls:
                 logger.error(f"[{agent_id}] No valid URLs provided")
-                return "Error: No valid URLs provided. URLs must start with http:// or https://"
-
+                raise ToolException(
+                    "Error: No valid URLs provided. URLs must start with http:// or https://"
+                )
             if total_chunks == 0:
                 logger.error(f"[{agent_id}] No content extracted from URLs")
-                return "Error: No content could be extracted from the provided URLs."
-
+                raise ToolException(
+                    "Error: No content could be extracted from the provided URLs."
+                )
             # Get current storage size for response
             current_size = await vector_manager.get_content_size(agent_id)
             size_limit_reached = len(valid_urls) < len(urls)
@@ -187,7 +192,9 @@ class QueryIndexedContent(WebScraperBaseTool):
 
             context = self.get_context()
             if not context or not context.agent_id:
-                raise ValueError("Agent ID is required but not found in configuration")
+                raise ToolException(
+                    "Agent ID is required but not found in configuration"
+                )
 
             agent_id = context.agent_id
 

@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.dapplooker.base import DappLookerBaseTool
@@ -79,12 +80,14 @@ class DappLookerTokenData(DappLookerBaseTool):
         # Get the API key from the agent's configuration or environment variable
         api_key = self.get_api_key()
         if not api_key:
-            return "Error: No DappLooker API key provided in the configuration or environment."
-
+            raise ToolException(
+                "Error: No DappLooker API key provided in the configuration or environment."
+            )
         # Validate input
         if not token_tickers and not token_addresses:
-            return "Error: Either token_tickers or token_addresses must be provided."
-
+            raise ToolException(
+                "Error: Either token_tickers or token_addresses must be provided."
+            )
         # Check for common non-AI agent tokens that won't be in the database
         # Only check if using token_tickers, not relevant for token_addresses
         if (
@@ -140,8 +143,9 @@ class DappLookerTokenData(DappLookerBaseTool):
                     logger.error(
                         f"dapplooker_token_data.py: Error from DappLooker API: {response.status_code} - {response.text}"
                     )
-                    return f"Error retrieving token data: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error retrieving token data: {response.status_code} - {response.text}"
+                    )
                 # Parse the API response
                 response_json = response.json()
                 logger.debug(
@@ -159,8 +163,7 @@ class DappLookerTokenData(DappLookerBaseTool):
                         logger.error(
                             f"dapplooker_token_data.py: Error parsing JSON: {e}"
                         )
-                        return f"Error processing token data: {e}"
-
+                        raise ToolException(f"Error processing token data: {e}")
                 # Extract the data array from the response
                 # The API returns {"success": true, "data": [...]}
                 if isinstance(response_json, dict) and "data" in response_json:
@@ -224,8 +227,9 @@ class DappLookerTokenData(DappLookerBaseTool):
             if isinstance(data, dict):
                 data = [data]
             else:
-                return f"Error: Unexpected data format received from API: {type(data)}"
-
+                raise ToolException(
+                    f"Error: Unexpected data format received from API: {type(data)}"
+                )
         formatted_results = "# AI Agent Token Market Data\n\n"
 
         for token in data:

@@ -4,6 +4,7 @@ import logging
 import aiohttp
 import openai
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from PIL import Image
 from pydantic import BaseModel, Field
 
@@ -69,7 +70,7 @@ class ImageToText(OpenAIBaseTool):
             async with aiohttp.ClientSession() as session:
                 async with session.get(image) as response:
                     if response.status != 200:
-                        raise Exception(
+                        raise ToolException(
                             f"Failed to download image from URL: {response.status}"
                         )
 
@@ -120,4 +121,4 @@ class ImageToText(OpenAIBaseTool):
 
         except Exception as e:
             logger.error(f"Error converting image to text: {e}")
-            raise Exception(f"Error converting image to text: {str(e)}")
+            raise ToolException(f"Error converting image to text: {str(e)}")

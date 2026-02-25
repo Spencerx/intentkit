@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 import openai
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.web_scraper.base import WebScraperBaseTool
@@ -297,11 +298,14 @@ Extract the URLs now:"""
             # Validate base URL
             parsed_url = urlparse(base_url)
             if not parsed_url.netloc:
-                return "Error: Invalid base URL provided. Please provide a valid URL (e.g., https://example.com)"
-
+                raise ToolException(
+                    "Error: Invalid base URL provided. Please provide a valid URL (e.g., https://example.com)"
+                )
             context = self.get_context()
             if not context or not context.agent_id:
-                raise ValueError("Agent ID is required but not found in configuration")
+                raise ToolException(
+                    "Agent ID is required but not found in configuration"
+                )
 
             agent_id = context.agent_id
 
@@ -314,8 +318,9 @@ Extract the URLs now:"""
                 logger.error(
                     f"[{agent_id}] No accessible sitemaps found for {base_url}"
                 )
-                return f"Error: No accessible sitemaps found for {base_url}. The website might not have sitemaps or they might be inaccessible."
-
+                raise ToolException(
+                    f"Error: No accessible sitemaps found for {base_url}. The website might not have sitemaps or they might be inaccessible."
+                )
             logger.info(
                 f"[{agent_id}] Found {len(found_sitemaps)} sitemap(s). Extracting URLs with AI..."
             )
@@ -374,8 +379,9 @@ Extract the URLs now:"""
                 logger.error(
                     f"[{agent_id}] No valid URLs found in sitemaps after filtering"
                 )
-                return f"Error: No valid URLs found in sitemaps after filtering. Found sitemaps: {', '.join(found_sitemaps)}"
-
+                raise ToolException(
+                    f"Error: No valid URLs found in sitemaps after filtering. Found sitemaps: {', '.join(found_sitemaps)}"
+                )
             logger.info(
                 f"[{agent_id}] Extracted {len(unique_urls)} URLs from sitemaps. Scraping and indexing..."
             )
@@ -392,8 +398,9 @@ Extract the URLs now:"""
                 logger.error(
                     f"[{agent_id}] No content could be extracted from discovered URLs"
                 )
-                return f"Error: No content could be extracted from the discovered URLs. Found sitemaps: {', '.join(found_sitemaps)}"
-
+                raise ToolException(
+                    f"Error: No content could be extracted from the discovered URLs. Found sitemaps: {', '.join(found_sitemaps)}"
+                )
             # Get current storage size for response
             current_size = await vector_manager.get_content_size(agent_id)
             size_limit_reached = len(valid_urls) < len(unique_urls)

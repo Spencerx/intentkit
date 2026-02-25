@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cookiefun.base import CookieFunBaseTool, logger
@@ -92,16 +93,16 @@ class SearchAccounts(CookieFunBaseTool):
 
         if not searchQuery:
             logger.error("No search query provided")
-            return "Error: searchQuery is required."
-
+            raise ToolException("Error: searchQuery is required.")
         try:
             # Get context to retrieve API key
             api_key = self.get_api_key()
 
             if not api_key:
                 logger.error("No API key provided for CookieFun API")
-                return "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
-
+                raise ToolException(
+                    "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
+                )
             # Prepare request payload
             payload = {"searchQuery": searchQuery}
 
@@ -211,8 +212,7 @@ class SearchAccounts(CookieFunBaseTool):
                         "error", "Unknown error - check API response format"
                     )
                     logger.error("Error in API response: %s", error_msg)
-                    return f"Error searching accounts: {error_msg}"
-
+                    raise ToolException(f"Error searching accounts: {error_msg}")
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %d - %s", e.response.status_code, e.response.text)
             return f"HTTP error occurred: {e.response.status_code} - {e.response.text}"

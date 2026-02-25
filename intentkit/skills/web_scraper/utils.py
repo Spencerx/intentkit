@@ -14,6 +14,7 @@ from typing import Any
 
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_core.tools.base import ToolException
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -72,7 +73,7 @@ class VectorStoreManager:
             return self._embedding_api_key
         if config.openai_api_key:
             return config.openai_api_key
-        raise ValueError("OpenAI API key is not configured")
+        raise ToolException("OpenAI API key is not configured")
 
     def create_embeddings(self) -> OpenAIEmbeddings:
         """Create OpenAI embeddings using the resolved API key."""
@@ -654,7 +655,7 @@ async def index_documents(
     split_docs = DocumentProcessor.create_chunks(documents, chunk_size, chunk_overlap)
 
     if not split_docs:
-        raise ValueError("No content could be processed into chunks")
+        raise ToolException("No content could be processed into chunks")
 
     # Handle vector store
     vector_store, was_merged = await vector_manager.merge_with_existing(
@@ -679,7 +680,7 @@ def handle_skill_errors(operation_name: str):
                 return await func(*args, **kwargs)
             except Exception as e:
                 logger.error(f"Error in {operation_name}: {e}")
-                return f"Error {operation_name}: {str(e)}"
+                raise ToolException(f"Error {operation_name}: {str(e)}")
 
         return wrapper
 

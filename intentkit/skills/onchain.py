@@ -10,6 +10,7 @@ from abc import ABCMeta
 from typing import TYPE_CHECKING
 
 from cdp import EvmServerAccount
+from langchain_core.tools.base import ToolException
 from web3 import AsyncWeb3
 
 from intentkit.skills.base import IntentKitSkill
@@ -47,7 +48,7 @@ class IntentKitOnChainSkill(IntentKitSkill, metaclass=ABCMeta):
         agent = context.agent
         network_id = agent.network_id
         if network_id is None:
-            raise ValueError("Agent network_id is not configured")
+            raise ToolException("Agent network_id is not configured")
         return get_async_web3_client(network_id)
 
     async def get_evm_account(self) -> EvmServerAccount:

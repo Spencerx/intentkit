@@ -4,6 +4,7 @@ import logging
 import httpx
 from langchain_core.documents import Document
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.firecrawl.base import FirecrawlBaseTool
@@ -144,8 +145,9 @@ class FirecrawlCrawl(FirecrawlBaseTool):
         # Get the API key from the agent's configuration
         api_key = self.get_api_key()
         if not api_key:
-            return "Error: No Firecrawl API key provided in the configuration."
-
+            raise ToolException(
+                "Error: No Firecrawl API key provided in the configuration."
+            )
         # Validate and set defaults
         if formats is None:
             formats = ["markdown"]
@@ -193,18 +195,19 @@ class FirecrawlCrawl(FirecrawlBaseTool):
                     logger.error(
                         f"firecrawl_crawl: Error from Firecrawl API: {response.status_code} - {response.text}"
                     )
-                    return f"Error starting crawl: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error starting crawl: {response.status_code} - {response.text}"
+                    )
                 crawl_data = response.json()
 
                 if not crawl_data.get("success"):
                     error_msg = crawl_data.get("error", "Unknown error occurred")
-                    return f"Error starting crawl: {error_msg}"
-
+                    raise ToolException(f"Error starting crawl: {error_msg}")
                 crawl_id = crawl_data.get("id")
                 if not crawl_id:
-                    return "Error: No crawl ID returned from Firecrawl API"
-
+                    raise ToolException(
+                        "Error: No crawl ID returned from Firecrawl API"
+                    )
                 # Poll for crawl completion
                 max_polls = 60  # Maximum 5 minutes of polling (60 * 5 seconds)
                 poll_count = 0
@@ -223,8 +226,9 @@ class FirecrawlCrawl(FirecrawlBaseTool):
                         logger.error(
                             f"firecrawl_crawl: Error checking crawl status: {status_response.status_code} - {status_response.text}"
                         )
-                        return f"Error checking crawl status: {status_response.status_code} - {status_response.text}"
-
+                        raise ToolException(
+                            f"Error checking crawl status: {status_response.status_code} - {status_response.text}"
+                        )
                     status_data = status_response.json()
                     status = status_data.get("status")
 

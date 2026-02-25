@@ -3,6 +3,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cryptocompare.base import CryptoCompareBaseTool, CryptoNews
@@ -61,14 +62,14 @@ class CryptoCompareFetchNews(CryptoCompareBaseTool):
             # Get API key from context
             api_key = skill_config.get("api_key")
             if not api_key:
-                raise ValueError("CryptoCompare API key not found in configuration")
+                raise ToolException("CryptoCompare API key not found in configuration")
 
             # Fetch news data directly
             news_data = await self.fetch_news(api_key, token)
 
             # Check for errors
             if "error" in news_data:
-                raise ValueError(news_data["error"])
+                raise ToolException(news_data["error"])
 
             # Convert to list of CryptoNews objects
             result = []

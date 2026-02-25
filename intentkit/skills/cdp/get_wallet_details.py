@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel
 
 from intentkit.skills.cdp.base import CDPBaseTool
@@ -87,4 +88,4 @@ No inputs required.
 - Native Balance: {formatted_balance} {native_symbol}"""
 
         except Exception as e:
-            return f"Error getting wallet details: {e!s}"
+            raise ToolException(f"Error getting wallet details: {e!s}")

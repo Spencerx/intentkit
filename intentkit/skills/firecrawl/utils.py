@@ -6,6 +6,7 @@ from typing import Any
 
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_core.tools.base import ToolException
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -72,7 +73,7 @@ class FirecrawlVectorStoreManager:
             return self._embedding_api_key
         if config.openai_api_key:
             return config.openai_api_key
-        raise ValueError("OpenAI API key not found in system configuration")
+        raise ToolException("OpenAI API key not found in system configuration")
 
     def create_embeddings(self) -> OpenAIEmbeddings:
         """Create OpenAI embeddings instance."""

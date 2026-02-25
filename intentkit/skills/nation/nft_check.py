@@ -3,6 +3,7 @@ import logging
 import httpx
 from eth_utils import is_address
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from .base import NationBaseTool
@@ -39,13 +40,13 @@ class NftCheck(NationBaseTool):
         if not nation_wallet_address:
             nation_wallet_address = context.user_id
             if not nation_wallet_address:
-                raise ValueError(
+                raise ToolException(
                     "Nation wallet address is not provided and not found in context"
                 )
 
         # Validate the normalized address
         if not is_address(nation_wallet_address):
-            raise ValueError(
+            raise ToolException(
                 f"Invalid Ethereum wallet address: {nation_wallet_address}"
             )
 
@@ -54,7 +55,7 @@ class NftCheck(NationBaseTool):
         api_key = self.get_api_key()
 
         if not api_key:
-            raise ValueError("Backend API key not found")
+            raise ToolException("Backend API key not found")
 
         headers = {"Accept": "application/json", "x-api-key": api_key}
 
@@ -66,8 +67,9 @@ class NftCheck(NationBaseTool):
                     logger.error(
                         f"nft_check.py: Error from API: {response.status_code} - {response.text}"
                     )
-                    return f"Error fetching NFT data: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error fetching NFT data: {response.status_code} - {response.text}"
+                    )
                 data = response.json()
                 nfts = data.get("nfts", [])
 

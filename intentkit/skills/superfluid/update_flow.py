@@ -1,6 +1,7 @@
 """Superfluid update_flow skill - Update an existing money stream."""
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -105,4 +106,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error updating flow: {e!s}"
+            raise ToolException(f"Error updating flow: {e!s}")

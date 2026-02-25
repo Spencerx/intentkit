@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from ens import ENS
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -87,7 +88,7 @@ Important notes:
 
             # Validate network
             if network_id not in SUPPORTED_NETWORKS:
-                return (
+                raise ToolException(
                     f"Error: Basename registration is only supported on Base networks. "
                     f"Current network: {network_id}. "
                     f"Supported networks: {', '.join(SUPPORTED_NETWORKS)}"
@@ -169,8 +170,8 @@ Important notes:
         except Exception as e:
             error_msg = str(e)
             if "insufficient funds" in error_msg.lower():
-                return (
+                raise ToolException(
                     f"Error registering basename: Insufficient ETH balance. "
                     f"Registration requires {amount} ETH plus gas fees."
                 )
-            return f"Error registering basename: {error_msg}"
+            raise ToolException(f"Error registering basename: {error_msg}")

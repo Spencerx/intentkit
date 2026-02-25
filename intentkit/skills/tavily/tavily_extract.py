@@ -2,6 +2,7 @@ import logging
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.tavily.base import TavilyBaseTool
@@ -80,8 +81,9 @@ class TavilyExtract(TavilyBaseTool):
         # Get the API key from the agent's configuration
         api_key = self.get_api_key()
         if not api_key:
-            return "Error: No Tavily API key provided in the configuration."
-
+            raise ToolException(
+                "Error: No Tavily API key provided in the configuration."
+            )
         # Validate extract_depth
         if extract_depth not in ["basic", "advanced"]:
             extract_depth = "basic"
@@ -106,8 +108,9 @@ class TavilyExtract(TavilyBaseTool):
                     logger.error(
                         f"tavily_extract.py: Error from Tavily API: {response.status_code} - {response.text}"
                     )
-                    return f"Error extracting web page content: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error extracting web page content: {response.status_code} - {response.text}"
+                    )
                 data = response.json()
                 results = data.get("results", [])
 

@@ -1,6 +1,7 @@
 """Superfluid delete_flow skill - Delete an existing money stream."""
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -95,4 +96,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error deleting flow: {e!s}"
+            raise ToolException(f"Error deleting flow: {e!s}")

@@ -3,6 +3,7 @@ from enum import Enum
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.github.base import GitHubBaseTool
@@ -113,8 +114,9 @@ class GitHubSearch(GitHubBaseTool):
                     logger.error(
                         f"github_search.py: Error from GitHub API: {response.status_code} - {response.text}"
                     )
-                    return f"Error searching GitHub: {response.status_code} - {response.text}"
-
+                    raise ToolException(
+                        f"Error searching GitHub: {response.status_code} - {response.text}"
+                    )
                 data = response.json()
                 items = data.get("items", [])
 

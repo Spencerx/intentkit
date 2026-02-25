@@ -2,6 +2,7 @@ from typing import Any
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel
 
 from intentkit.skills.cookiefun.base import CookieFunBaseTool, logger
@@ -37,8 +38,9 @@ class GetSectors(CookieFunBaseTool):
 
             if not api_key:
                 logger.error("No API key provided for CookieFun API")
-                return "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
-
+                raise ToolException(
+                    "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
+                )
             # Make API request
             headers = {**DEFAULT_HEADERS, "x-api-key": api_key}
 
@@ -115,8 +117,7 @@ class GetSectors(CookieFunBaseTool):
                         "error", "Unknown error - check API response format"
                     )
                     logger.error("Error in API response: %s", error_msg)
-                    return f"Error fetching sectors: {error_msg}"
-
+                    raise ToolException(f"Error fetching sectors: {error_msg}")
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %d - %s", e.response.status_code, e.response.text)
             return f"HTTP error occurred: {e.response.status_code} - {e.response.text}"

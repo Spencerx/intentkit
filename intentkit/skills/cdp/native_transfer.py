@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cdp.base import CDPBaseTool
@@ -66,7 +67,7 @@ Important notes:
 
             if balance_wei < value_wei:
                 balance_decimal = Decimal(balance_wei) / Decimal(10**18)
-                return (
+                raise ToolException(
                     f"Error: Insufficient balance. "
                     f"Requested to send {value}, but only {balance_decimal} is available. "
                     "Note: You also need additional funds for gas fees."
@@ -100,4 +101,4 @@ Important notes:
             )
 
         except Exception as e:
-            return f"Error during transfer: {e!s}"
+            raise ToolException(f"Error during transfer: {e!s}")

@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.web_scraper.base import WebScraperBaseTool
@@ -84,7 +85,7 @@ class DocumentIndexer(WebScraperBaseTool):
 
         context = self.get_context()
         if not context or not context.agent_id:
-            raise ValueError("Agent ID is required but not found in configuration")
+            raise ToolException("Agent ID is required but not found in configuration")
 
         agent_id = context.agent_id
 
@@ -93,8 +94,9 @@ class DocumentIndexer(WebScraperBaseTool):
         # Validate content
         if not DocumentProcessor.validate_content(text_content):
             logger.error(f"[{agent_id}] Content validation failed - too short")
-            return "Error: Text content is too short. Please provide at least 10 characters of content."
-
+            raise ToolException(
+                "Error: Text content is too short. Please provide at least 10 characters of content."
+            )
         # Create document with metadata
         document = DocumentProcessor.create_document(
             text_content,

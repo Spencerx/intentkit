@@ -1,6 +1,7 @@
 """ERC721 get_balance skill."""
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -75,4 +76,6 @@ Returns the number of NFTs owned by the address for the specified collection.
             )
 
         except Exception as e:
-            return f"Error getting NFT balance for contract {contract_address}: {e!s}"
+            raise ToolException(
+                f"Error getting NFT balance for contract {contract_address}: {e!s}"
+            )

@@ -1,4 +1,5 @@
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.jupiter.base import JupiterBaseTool
@@ -85,4 +86,4 @@ class JupiterGetQuote(JupiterBaseTool):
             )
 
         except Exception as e:
-            return f"Error fetching quote: {e}"
+            raise ToolException(f"Error fetching quote: {e}")

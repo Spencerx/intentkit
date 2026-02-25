@@ -2,6 +2,7 @@ from typing import Any
 
 import httpx
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 
 from intentkit.skills.cookiefun.base import CookieFunBaseTool, logger
@@ -52,16 +53,16 @@ class GetAccountSmartFollowers(CookieFunBaseTool):
         # Validate input parameters
         if not username and not userId:
             logger.error("Neither username nor userId provided")
-            return "Error: Either username or userId must be provided."
-
+            raise ToolException("Error: Either username or userId must be provided.")
         try:
             # Get context to retrieve API key
             api_key = self.get_api_key()
 
             if not api_key:
                 logger.error("No API key provided for CookieFun API")
-                return "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
-
+                raise ToolException(
+                    "Error: No API key provided for CookieFun API. Please configure the API key in the agent settings."
+                )
             # Prepare request payload
             payload = {}
             if username:
@@ -167,8 +168,7 @@ class GetAccountSmartFollowers(CookieFunBaseTool):
                         "error", "Unknown error - check API response format"
                     )
                     logger.error("Error in API response: %s", error_msg)
-                    return f"Error fetching smart followers: {error_msg}"
-
+                    raise ToolException(f"Error fetching smart followers: {error_msg}")
         except httpx.HTTPStatusError as e:
             logger.error("HTTP error: %d - %s", e.response.status_code, e.response.text)
             return f"HTTP error occurred: {e.response.status_code} - {e.response.text}"

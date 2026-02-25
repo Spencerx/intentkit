@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import override
 
 from langchain_core.tools import ArgsSchema
+from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field
 from web3 import Web3
 
@@ -63,8 +64,9 @@ Important notes:
             # Get WETH address for this network
             weth_address = get_weth_address(network_id)
             if not weth_address:
-                return f"Error: WETH not supported on network {network_id}"
-
+                raise ToolException(
+                    f"Error: WETH not supported on network {network_id}"
+                )
             # Convert human-readable ETH amount to wei (ETH has 18 decimals)
             amount_decimal = Decimal(amount_to_wrap)
             amount_in_wei = int(amount_decimal * Decimal(10**18))
@@ -74,7 +76,7 @@ Important notes:
 
             if eth_balance < amount_in_wei:
                 eth_balance_formatted = Decimal(eth_balance) / Decimal(10**18)
-                return (
+                raise ToolException(
                     f"Error: Insufficient ETH balance. "
                     f"Requested to wrap {amount_to_wrap} ETH, "
                     f"but only {eth_balance_formatted} ETH is available. "
@@ -101,4 +103,4 @@ Important notes:
             return f"Wrapped {amount_to_wrap} ETH to WETH.\nTransaction hash: {tx_hash}"
 
         except Exception as e:
-            return f"Error wrapping ETH: {e!s}"
+            raise ToolException(f"Error wrapping ETH: {e!s}")
