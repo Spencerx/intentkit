@@ -16,6 +16,7 @@ from typing import Callable, override
 from redis import Redis
 
 from intentkit.utils.alert import is_alert_enabled, send_alert
+from intentkit.utils.logging import ContextFilter
 
 # Global sync Redis client for alert handler
 _sync_redis_client: Redis | None = None
@@ -207,6 +208,8 @@ def setup_alert_handler(
     time_window: int = 60,
     level: int = logging.ERROR,
     logger_name: str | None = None,
+    env: str = "unknown",
+    release: str = "unknown",
 ) -> RateLimitedAlertHandler | None:
     """
     Set up alert handler using the unified alert system.
@@ -256,8 +259,11 @@ def setup_alert_handler(
         level=level,
         rate_limit_key="alert",
     )
+    handler.addFilter(ContextFilter(env=env, release=release))
     handler.setFormatter(
-        logging.Formatter("🚨 %(levelname)s | %(name)s\n\n%(message)s")
+        logging.Formatter(
+            "🚨 %(levelname)s | %(name)s\n📦 %(release)s | 🌍 %(env)s\n\n%(message)s"
+        )
     )
 
     target_logger = (

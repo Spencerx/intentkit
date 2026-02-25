@@ -24,6 +24,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, cast
 
+import httpcore
 import httpx
 import sqlalchemy
 from epyxid import XID
@@ -886,7 +887,7 @@ async def stream_agent_raw(
                         error_message = await error_message_create.save()
                         yield error_message
                         return
-    except (httpx.TimeoutException, asyncio.TimeoutError):
+    except (httpx.TimeoutException, httpcore.ReadTimeout, asyncio.TimeoutError):
         logger.error(
             f"Agent request timed out for {user_message.agent_id}",
             extra={"thread_id": thread_id},

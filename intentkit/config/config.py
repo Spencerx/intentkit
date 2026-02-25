@@ -239,6 +239,8 @@ class Config:
             redis_db=self.redis_db,
             redis_password=self.redis_password,
             redis_ssl=self.redis_ssl,
+            env=self.env,
+            release=self.release,
         )
 
     @overload
