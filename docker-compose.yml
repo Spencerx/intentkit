@@ -33,7 +33,7 @@ services:
       - rustfs_data:/data
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/health" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -193,6 +193,12 @@ services:
       - CHOKIDAR_USEPOLLING=1
     ports:
       - "3000:3000"
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     command: npm run dev
 
@@ -217,4 +223,9 @@ services:
       - REDIS_HOST=redis
       - INTERNAL_BASE_URL=http://api:8000
       - TG_NEW_AGENT_POLL_INTERVAL=10
+    healthcheck:
+      test: [ "CMD", "find", "/tmp/healthy", "-mmin", "-2" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped

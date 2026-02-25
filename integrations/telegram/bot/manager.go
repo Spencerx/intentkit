@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -15,13 +16,13 @@ import (
 )
 
 type Manager struct {
-	db         *gorm.DB
-	cfg        *config.Config
-	apiClient  *api.Client
-	bots       map[string]*telego.Bot
+	db          *gorm.DB
+	cfg         *config.Config
+	apiClient   *api.Client
+	bots        map[string]*telego.Bot
 	cancelFuncs map[string]context.CancelFunc
-	mu         sync.RWMutex
-	stopCh     chan struct{}
+	mu          sync.RWMutex
+	stopCh      chan struct{}
 }
 
 func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client) *Manager {
@@ -49,6 +50,15 @@ func (m *Manager) Start() {
 		case <-m.stopCh:
 			return
 		}
+	}
+}
+
+const heartbeatFile = "/tmp/healthy"
+
+// writeHeartbeat writes a heartbeat file for Docker healthcheck.
+func writeHeartbeat() {
+	if err := os.WriteFile(heartbeatFile, []byte("ok"), 0644); err != nil {
+		slog.Error("Failed to write heartbeat file", "error", err)
 	}
 }
 
@@ -88,6 +98,8 @@ func (m *Manager) syncBots() {
 		}
 	}
 	m.mu.Unlock()
+	// Write heartbeat after successful sync
+	writeHeartbeat()
 }
 
 func (m *Manager) ensureBotRunning(agent *store.Agent) {
@@ -126,7 +138,7 @@ func (m *Manager) ensureBotRunning(agent *store.Agent) {
 		cancel()
 		return
 	}
-	
+
 	go func() {
 		for update := range updates {
 			if update.Message != nil {
@@ -151,18 +163,18 @@ func (m *Manager) updateAgentData(agentID string, bot *telego.Bot) error {
 
 	username := me.Username
 	fullName := me.FirstName + " " + me.LastName
-    if me.LastName == "" {
-        fullName = me.FirstName
-    }
-    
-    idStr := fmt.Sprintf("%d", me.ID)
+	if me.LastName == "" {
+		fullName = me.FirstName
+	}
+
+	idStr := fmt.Sprintf("%d", me.ID)
 
 	// Upsert AgentData
-    // We use FirstOrCreate to ensure the record exists, then Update to set values
-    var agentData store.AgentData
-    if err := m.db.FirstOrCreate(&agentData, store.AgentData{ID: agentID}).Error; err != nil {
-        return err
-    }
+	// We use FirstOrCreate to ensure the record exists, then Update to set values
+	var agentData store.AgentData
+	if err := m.db.FirstOrCreate(&agentData, store.AgentData{ID: agentID}).Error; err != nil {
+		return err
+	}
 
 	return m.db.Model(&store.AgentData{}).Where("id = ?", agentID).Updates(map[string]interface{}{
 		"telegram_id":       idStr,
