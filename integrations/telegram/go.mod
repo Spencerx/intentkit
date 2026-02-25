@@ -1,9 +1,9 @@
 module github.com/crestalnetwork/intentkit/integrations/telegram
 
-go 1.25.7
+go 1.26.0
 
 require (
-	github.com/go-resty/resty/v2 v2.17.1
+	github.com/go-resty/resty/v2 v2.17.2
 	github.com/hack-fan/config v0.0.0-20200528030741-0a9be90586b6
 	github.com/joho/godotenv v1.5.1
 	github.com/mymmrac/telego v1.6.0
@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
@@ -37,7 +37,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.69.0 // indirect
-	github.com/valyala/fastjson v1.6.7 // indirect
+	github.com/valyala/fastjson v1.6.10 // indirect
 	golang.org/x/arch v0.24.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
