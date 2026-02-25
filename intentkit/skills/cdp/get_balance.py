@@ -1,6 +1,7 @@
 """CDP get_balance skill - Get native token balance."""
 
 from decimal import Decimal
+from typing import override
 
 from langchain_core.tools import ArgsSchema
 from langchain_core.tools.base import ToolException
@@ -31,6 +32,7 @@ No inputs required - returns the balance for the connected wallet address.
 """
     args_schema: ArgsSchema | None = GetBalanceInput
 
+    @override
     async def _arun(self) -> str:
         """Get the native currency balance for the connected wallet.
 
@@ -38,6 +40,9 @@ No inputs required - returns the balance for the connected wallet address.
             A message containing the wallet address and balance information.
         """
         try:
+            # Ensure the wallet provider is CDP
+            self.ensure_cdp_provider()
+
             # Get the unified wallet
             wallet = await self.get_unified_wallet()
 
@@ -67,5 +72,7 @@ No inputs required - returns the balance for the connected wallet address.
                 f"- {formatted_balance} {native_symbol}"
             )
 
+        except ToolException:
+            raise
         except Exception as e:
             raise ToolException(f"Error getting balance: {e!s}")

@@ -1,6 +1,7 @@
 """CDP native_transfer skill - Transfer native tokens."""
 
 from decimal import Decimal
+from typing import override
 
 from langchain_core.tools import ArgsSchema
 from langchain_core.tools.base import ToolException
@@ -38,6 +39,7 @@ Important notes:
 """
     args_schema: ArgsSchema | None = NativeTransferInput
 
+    @override
     async def _arun(
         self,
         to: str,
@@ -53,6 +55,9 @@ Important notes:
             A message containing the transfer details and transaction hash.
         """
         try:
+            # Ensure the wallet provider is CDP
+            self.ensure_cdp_provider()
+
             # Get the unified wallet
             wallet = await self.get_unified_wallet()
 
@@ -93,12 +98,14 @@ Important notes:
             )
 
             # Wait for receipt
-            await wallet.wait_for_transaction_receipt(tx_hash)
+            await wallet.wait_for_receipt(tx_hash)
 
             return (
                 f"Transferred {value} {native_symbol} to {to}\n"
                 f"Transaction hash: {tx_hash}"
             )
 
+        except ToolException:
+            raise
         except Exception as e:
             raise ToolException(f"Error during transfer: {e!s}")

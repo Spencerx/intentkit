@@ -1,6 +1,7 @@
 """CDP get_wallet_details skill - Get connected wallet details."""
 
 from decimal import Decimal
+from typing import override
 
 from langchain_core.tools import ArgsSchema
 from langchain_core.tools.base import ToolException
@@ -35,6 +36,7 @@ No inputs required.
 """
     args_schema: ArgsSchema | None = GetWalletDetailsInput
 
+    @override
     async def _arun(self) -> str:
         """Get details about the connected wallet.
 
@@ -42,6 +44,9 @@ No inputs required.
             A formatted string containing wallet details and network information.
         """
         try:
+            # Ensure the wallet provider is CDP
+            self.ensure_cdp_provider()
+
             # Get the unified wallet
             wallet = await self.get_unified_wallet()
 
@@ -70,12 +75,13 @@ No inputs required.
             network_display = info["display"]
 
             # Determine provider type
-            if wallet.is_cdp_provider():
+            provider_type = self.get_agent_wallet_provider_type()
+            if provider_type == "cdp":
                 provider_name = "CDP (Coinbase Developer Platform)"
-            elif wallet.is_safe_provider():
+            elif provider_type == "privy":
                 provider_name = "Safe (Smart Account)"
             else:
-                provider_name = "Unknown"
+                provider_name = str(provider_type)
 
             return f"""Wallet Details:
 - Provider: {provider_name}
@@ -87,5 +93,7 @@ No inputs required.
 - Native Balance: {balance_wei} wei
 - Native Balance: {formatted_balance} {native_symbol}"""
 
+        except ToolException:
+            raise
         except Exception as e:
             raise ToolException(f"Error getting wallet details: {e!s}")

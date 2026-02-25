@@ -1,7 +1,6 @@
 """CDP wallet interaction skills.
 
-This module provides wallet skills that work with any EVM-compatible wallet
-(CDP, Safe/Privy). CDP-specific operations like swap are handled separately.
+This module provides wallet skills that require a CDP wallet provider.
 """
 
 from typing import TypedDict
@@ -63,8 +62,7 @@ async def get_skills(
 def available() -> bool:
     """Check if this skill category is available based on system config.
 
-    CDP wallet skills (get_balance, get_wallet_details, native_transfer) are
-    available for any EVM-compatible wallet (CDP, Safe/Privy).
-    They don't require specific CDP credentials since they work with any wallet.
+    CDP wallet skills are globally available but require the agent's
+    wallet provider to be configured as 'cdp'.
     """
     return True
