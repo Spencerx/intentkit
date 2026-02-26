@@ -1,6 +1,7 @@
 import json
 import logging
 from decimal import Decimal
+from typing import Any
 
 from intentkit.config.config import config
 from intentkit.models.agent import Agent
@@ -279,3 +280,98 @@ async def process_agent_wallet(
         )
 
     return agent_data
+
+
+def _resolve_safe_rpc_url(network_id: str, privy_wallet_data: dict[str, Any]) -> str:
+    rpc_url = privy_wallet_data.get("rpc_url")
+    if not rpc_url and config.chain_provider:
+        try:
+            chain_config = config.chain_provider.get_chain_config(network_id)
+            rpc_url = chain_config.rpc_url
+        except Exception as e:
+            logger.warning(f"Failed to get RPC URL from chain provider: {e}")
+
+    if not rpc_url:
+        from intentkit.wallets.privy import CHAIN_CONFIGS
+
+        chain_config = CHAIN_CONFIGS.get(network_id)
+        if chain_config and chain_config.rpc_url:
+            rpc_url = chain_config.rpc_url
+
+    if not rpc_url:
+        raise IntentKitAPIError(
+            500,
+            "RpcUrlNotConfigured",
+            f"RPC URL not configured for network {network_id}",
+        )
+
+    return rpc_url
+
+
+async def set_agent_safe_token_spending_limit(
+    agent_id: str,
+    token_address: str,
+    spending_limit: float,
+) -> dict[str, Any]:
+    """Set token spending limit for a Safe agent using agent-level inputs only."""
+    from intentkit.core.agent.queries import get_agent
+    from intentkit.wallets.privy import PrivyClient, set_safe_token_spending_limit
+
+    agent = await get_agent(agent_id)
+    if not agent:
+        raise IntentKitAPIError(
+            status_code=404,
+            key="AgentNotFound",
+            message=f"Agent with ID '{agent_id}' not found",
+        )
+    if agent.wallet_provider != "safe":
+        raise IntentKitAPIError(
+            400,
+            "SafeWalletRequired",
+            "Token spending limits can only be set for agents using wallet_provider='safe'.",
+        )
+
+    agent_data = await AgentData.get(agent_id)
+    if not agent_data.privy_wallet_data:
+        raise IntentKitAPIError(
+            400,
+            "PrivyWalletDataMissing",
+            "Privy wallet data is missing for this Safe wallet agent.",
+        )
+
+    try:
+        privy_wallet_data = json.loads(agent_data.privy_wallet_data)
+    except json.JSONDecodeError as e:
+        raise IntentKitAPIError(
+            500,
+            "PrivyWalletDataInvalid",
+            "Privy wallet data is corrupted and cannot be parsed.",
+        ) from e
+
+    try:
+        privy_wallet_id = privy_wallet_data["privy_wallet_id"]
+        privy_wallet_address = privy_wallet_data["privy_wallet_address"]
+        safe_address = privy_wallet_data["smart_wallet_address"]
+    except KeyError as e:
+        raise IntentKitAPIError(
+            500,
+            "PrivyWalletDataIncomplete",
+            "Privy wallet data is missing required fields.",
+        ) from e
+
+    network_id = (
+        privy_wallet_data.get("network_id") or agent.network_id or "base-mainnet"
+    )
+    rpc_url = _resolve_safe_rpc_url(network_id, privy_wallet_data)
+
+    privy_client = PrivyClient()
+    return await set_safe_token_spending_limit(
+        privy_client=privy_client,
+        privy_wallet_id=privy_wallet_id,
+        privy_wallet_address=privy_wallet_address,
+        safe_address=safe_address,
+        token_address=token_address,
+        spending_limit=spending_limit,
+        network_id=network_id,
+        rpc_url=rpc_url,
+    )

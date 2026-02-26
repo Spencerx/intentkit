@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast, overload
 
 import httpx
@@ -1106,54 +1107,36 @@ async def deploy_safe_with_allowance(
         current_nonce = await _get_safe_nonce(predicted_address, rpc_url)
 
     if weekly_spending_limit_usdc is not None:
-        module_enabled = await _is_module_enabled(
-            rpc_url=rpc_url,
-            safe_address=predicted_address,
-            module_address=chain_config.allowance_module_address,
-        )
-        result["allowance_module_enabled"] = module_enabled
-
-        if weekly_spending_limit_usdc > 0 and not module_enabled:
-            logger.info("Enabling Allowance Module")
-            enable_tx_hash = await _enable_allowance_module(
-                privy_client=privy_client,
-                privy_wallet_id=privy_wallet_id,
-                safe_address=predicted_address,
-                owner_address=owner_address,
-                allowance_module_address=chain_config.allowance_module_address,
-                chain_id=chain_config.chain_id,
-                network_id=network_id,
-                rpc_url=rpc_url,
-                nonce=current_nonce,
+        if not chain_config.usdc_address:
+            logger.warning(
+                "Weekly USDC spending limit was provided, but USDC address is not "
+                + f"configured for network {network_id}"
             )
-            result["tx_hashes"].append({"enable_module": enable_tx_hash})
-            result["allowance_module_enabled"] = True
-            current_nonce += 1
-
-        if chain_config.usdc_address and (
-            weekly_spending_limit_usdc > 0 or module_enabled
-        ):
+        else:
             logger.info(
                 f"Setting weekly spending limit: {weekly_spending_limit_usdc} USDC"
             )
-            limit_tx_hash = await _set_spending_limit(
+            limit_result = await set_safe_token_spending_limit(
                 privy_client=privy_client,
                 privy_wallet_id=privy_wallet_id,
+                privy_wallet_address=owner_address,
                 safe_address=predicted_address,
-                owner_address=owner_address,
-                delegate_address=owner_address,
                 token_address=chain_config.usdc_address,
-                allowance_amount=int(weekly_spending_limit_usdc * 1_000_000),
-                reset_time_minutes=7 * 24 * 60,
-                allowance_module_address=chain_config.allowance_module_address,
-                chain_id=chain_config.chain_id,
+                spending_limit=weekly_spending_limit_usdc,
+                token_decimals=6,
                 network_id=network_id,
                 rpc_url=rpc_url,
+                reset_time_minutes=7 * 24 * 60,
                 nonce=current_nonce,
             )
-            result["tx_hashes"].append({"set_spending_limit": limit_tx_hash})
-            result["spending_limit_configured"] = True
-            current_nonce += 1
+            result["tx_hashes"].extend(limit_result["tx_hashes"])
+            result["allowance_module_enabled"] = limit_result[
+                "allowance_module_enabled"
+            ]
+            result["spending_limit_configured"] = limit_result[
+                "spending_limit_configured"
+            ]
+            current_nonce = limit_result["next_nonce"]
 
     return result
 
@@ -1936,6 +1919,163 @@ async def _set_spending_limit(
     )
 
     return tx_hash
+
+
+async def _get_erc20_decimals(rpc_url: str, token_address: str) -> int:
+    """Read ERC20 decimals() from chain."""
+    web3 = get_async_web3_client(rpc_url)
+    token_contract = web3.eth.contract(
+        address=to_checksum_address(token_address),
+        abi=[
+            {
+                "inputs": [],
+                "name": "decimals",
+                "outputs": [{"name": "", "type": "uint8"}],
+                "stateMutability": "view",
+                "type": "function",
+            }
+        ],
+    )
+    decimals = await token_contract.functions.decimals().call()
+    if not isinstance(decimals, int) or decimals < 0:
+        raise IntentKitAPIError(
+            400,
+            "InvalidTokenDecimals",
+            "Token decimals returned by contract is invalid.",
+        )
+    return decimals
+
+
+async def set_safe_token_spending_limit(
+    privy_client: PrivyClient,
+    privy_wallet_id: str,
+    privy_wallet_address: str,
+    safe_address: str,
+    token_address: str,
+    spending_limit: float,
+    network_id: str,
+    rpc_url: str,
+    token_decimals: int | None = None,
+    reset_time_minutes: int = 7 * 24 * 60,
+    delegate_address: str | None = None,
+    nonce: int | None = None,
+) -> dict[str, Any]:
+    """Set or update Safe spending limit for an arbitrary ERC20 token.
+
+    Calling this again with the same token address overwrites the previous
+    limit for that token.
+    """
+    if spending_limit < 0:
+        raise IntentKitAPIError(
+            400,
+            "InvalidSpendingLimit",
+            "Spending limit must be greater than or equal to 0.",
+        )
+    if reset_time_minutes < 0 or reset_time_minutes > 65535:
+        raise IntentKitAPIError(
+            400,
+            "InvalidResetTimeMinutes",
+            "reset_time_minutes must be between 0 and 65535.",
+        )
+
+    chain_config = CHAIN_CONFIGS.get(network_id)
+    if not chain_config:
+        raise ValueError(f"Unsupported network: {network_id}")
+
+    safe_checksum = to_checksum_address(safe_address)
+    owner_checksum = to_checksum_address(privy_wallet_address)
+    delegate_checksum = (
+        to_checksum_address(delegate_address) if delegate_address else owner_checksum
+    )
+    token_checksum = to_checksum_address(token_address)
+    if token_decimals is None:
+        token_decimals = await _get_erc20_decimals(rpc_url, token_checksum)
+    if token_decimals < 0:
+        raise IntentKitAPIError(
+            400,
+            "InvalidTokenDecimals",
+            "Token decimals must be greater than or equal to 0.",
+        )
+
+    try:
+        scaled_limit = Decimal(str(spending_limit)) * (Decimal(10) ** token_decimals)
+    except InvalidOperation as exc:
+        raise IntentKitAPIError(
+            400,
+            "InvalidSpendingLimit",
+            "Spending limit is not a valid number.",
+        ) from exc
+
+    if scaled_limit != scaled_limit.to_integral_value():
+        raise IntentKitAPIError(
+            400,
+            "InvalidSpendingLimitPrecision",
+            "Spending limit has more precision than token decimals allow.",
+        )
+
+    allowance_amount = int(scaled_limit)
+    if allowance_amount > (2**96 - 1):
+        raise IntentKitAPIError(
+            400,
+            "SpendingLimitTooLarge",
+            "Spending limit exceeds uint96 maximum supported by Allowance Module.",
+        )
+
+    module_enabled = await _is_module_enabled(
+        rpc_url=rpc_url,
+        safe_address=safe_checksum,
+        module_address=chain_config.allowance_module_address,
+    )
+
+    tx_hashes: list[dict[str, str]] = []
+    current_nonce = (
+        nonce if nonce is not None else await _get_safe_nonce(safe_checksum, rpc_url)
+    )
+
+    if allowance_amount > 0 and not module_enabled:
+        logger.info("Enabling Allowance Module")
+        enable_tx_hash = await _enable_allowance_module(
+            privy_client=privy_client,
+            privy_wallet_id=privy_wallet_id,
+            safe_address=safe_checksum,
+            owner_address=owner_checksum,
+            allowance_module_address=chain_config.allowance_module_address,
+            chain_id=chain_config.chain_id,
+            network_id=network_id,
+            rpc_url=rpc_url,
+            nonce=current_nonce,
+        )
+        tx_hashes.append({"enable_module": enable_tx_hash})
+        module_enabled = True
+        current_nonce += 1
+
+    spending_limit_configured = False
+    if allowance_amount > 0 or module_enabled:
+        limit_tx_hash = await _set_spending_limit(
+            privy_client=privy_client,
+            privy_wallet_id=privy_wallet_id,
+            safe_address=safe_checksum,
+            owner_address=owner_checksum,
+            delegate_address=delegate_checksum,
+            token_address=token_checksum,
+            allowance_amount=allowance_amount,
+            reset_time_minutes=reset_time_minutes,
+            allowance_module_address=chain_config.allowance_module_address,
+            chain_id=chain_config.chain_id,
+            network_id=network_id,
+            rpc_url=rpc_url,
+            nonce=current_nonce,
+        )
+        tx_hashes.append({"set_spending_limit": limit_tx_hash})
+        spending_limit_configured = True
+        current_nonce += 1
+
+    return {
+        "allowance_module_enabled": module_enabled,
+        "spending_limit_configured": spending_limit_configured,
+        "tx_hashes": tx_hashes,
+        "next_nonce": current_nonce,
+    }
 
 
 # =============================================================================

@@ -17,6 +17,7 @@ from intentkit.wallets.privy_safe import (
     deploy_safe_with_allowance,
     execute_gasless_transaction,
     get_wallet_provider,
+    set_safe_token_spending_limit,
     transfer_erc20_gasless,
 )
 from intentkit.wallets.privy_signer import PrivyWalletSigner, get_wallet_signer
@@ -75,6 +76,7 @@ __all__ = [
     "_send_safe_transaction_with_master_wallet",
     "_send_transaction_with_master_wallet",
     "_set_spending_limit",
+    "set_safe_token_spending_limit",
     "_wait_for_safe_deployed",
     "create_privy_safe_wallet",
     "deploy_safe_with_allowance",

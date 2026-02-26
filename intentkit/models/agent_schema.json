@@ -55,9 +55,7 @@
       "order": 10
     }
   ],
-  "required": [
-    "name"
-  ],
+  "required": ["name"],
   "properties": {
     "name": {
       "title": "Agent Name",
@@ -153,10 +151,7 @@
       "type": "string",
       "description": "Strategy for managing short-term memory when context limit is reached. 'trim' removes oldest messages, 'summarize' creates summaries.",
       "default": "trim",
-      "enum": [
-        "trim",
-        "summarize"
-      ],
+      "enum": ["trim", "summarize"],
       "x-group": "llm",
       "x-advanced": true
     },
@@ -322,10 +317,7 @@
             "x-group": "autonomous"
           }
         },
-        "required": [
-          "name",
-          "prompt"
-        ]
+        "required": ["name", "prompt"]
       },
       "description": "Set automated prompts and schedules for your agent.",
       "x-group": "autonomous",
@@ -335,17 +327,9 @@
       "title": "Wallet Provider",
       "type": "string",
       "description": "Provider of the agent's wallet, choose cdp if you want the agent to have it's own wallet.",
-      "enum": [
-        "cdp",
-        "readonly",
-        "none"
-      ],
-      "x-enum-title": [
-        "Coinbase Server Wallet V2",
-        "Readonly Wallet",
-        "None"
-      ],
-      "default": "cdp",
+      "enum": ["cdp", "readonly", "none"],
+      "x-enum-title": ["Coinbase Server Wallet V2", "Readonly Wallet", "None"],
+      "default": "none",
       "x-group": "onchain"
     },
     "network_id": {
@@ -382,9 +366,7 @@
         "x-group": "onchain"
       }
     },
-    "required": [
-      "readonly_wallet_address"
-    ]
+    "required": ["readonly_wallet_address"]
   },
   "additionalProperties": true
 }
