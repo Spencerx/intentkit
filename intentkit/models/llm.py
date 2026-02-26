@@ -117,7 +117,7 @@ def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
                     "supports_structured_output": _parse_bool(
                         row.get("supports_structured_output")
                     ),
-                    "has_reasoning": _parse_bool(row.get("has_reasoning")),
+                    "reasoning_effort": row.get("reasoning_effort", "").strip() or None,
                     "supports_search": _parse_bool(row.get("supports_search")),
                     "supports_temperature": _parse_bool(
                         row.get("supports_temperature")
@@ -229,7 +229,7 @@ class LLMModelInfoTable(Base):
     supports_structured_output: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
-    has_reasoning: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reasoning_effort: Mapped[str | None] = mapped_column(String, nullable=True)
     supports_search: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -286,7 +286,9 @@ class LLMModelInfo(BaseModel):
     supports_structured_output: bool = (
         False  # Whether the model supports structured output
     )
-    has_reasoning: bool = False  # Whether the model has strong reasoning capabilities
+    reasoning_effort: str | None = (
+        None  # Reasoning effort level: "xhigh", "high", "medium", "low", "minimal", "none", or None
+    )
     supports_search: bool = (
         False  # Whether the model supports native search functionality
     )
@@ -493,10 +495,8 @@ class OpenAILLM(LLMModel):
         if info.api_base:
             kwargs["openai_api_base"] = info.api_base
 
-        if self.model_name == "gpt-5-mini" or self.model_name == "gpt-5-nano":
-            kwargs["reasoning_effort"] = "minimal"
-        elif self.model_name == "gpt-5.1-codex":
-            kwargs["reasoning_effort"] = "high"
+        if info.reasoning_effort and info.reasoning_effort != "none":
+            kwargs["reasoning_effort"] = info.reasoning_effort
 
         # Update kwargs with params to allow overriding
         kwargs.update(params)
@@ -695,6 +695,9 @@ class OpenRouterLLM(LLMModel):
         if info.supports_presence_penalty:
             kwargs["presence_penalty"] = self.presence_penalty
 
+        if info.reasoning_effort:
+            kwargs["reasoning"] = {"effort": info.reasoning_effort}
+
         # Update kwargs with params to allow overriding
         kwargs.update(params)
 
@@ -710,13 +713,18 @@ class GoogleLLM(LLMModel):
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         info = await self.model_info()
+        use_vertexai = config.google_genai_use_vertexai is True
 
         kwargs: dict[str, Any] = {
             "model": self.model_name,
-            "google_api_key": config.google_api_key,
+            "api_key": config.google_api_key,
             "timeout": info.timeout,
             "max_retries": 3,
         }
+        if use_vertexai:
+            kwargs["vertexai"] = True
+            if config.google_cloud_project:
+                kwargs["project"] = config.google_cloud_project
 
         # Add optional parameters based on model support
         if info.supports_temperature:

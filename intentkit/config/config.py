@@ -140,6 +140,10 @@ class Config:
         # LLM providers
         self.openai_api_key: str | None = self.load("OPENAI_API_KEY")
         self.google_api_key: str | None = self.load("GOOGLE_API_KEY")
+        self.google_genai_use_vertexai: bool = (
+            self.load("GOOGLE_GENAI_USE_VERTEXAI", "false") == "true"
+        )
+        self.google_cloud_project: str | None = self.load("GOOGLE_CLOUD_PROJECT")
         self.deepseek_api_key: str | None = self.load("DEEPSEEK_API_KEY")
         self.xai_api_key: str | None = self.load("XAI_API_KEY")
         self.eternal_api_key: str | None = self.load("ETERNAL_API_KEY")
