@@ -1,3 +1,13 @@
+## v0.11.9
+
+### New Features
+- Added support for setting per-token spending limits on Safe wallets — agents can now have independent spending limits for any ERC20 token, not just USDC
+
+### Improvements & Bug Fixes
+- Refactored Safe spending limit internals to share a unified implementation
+
+[Full Changelog](https://github.com/crestalnetwork/intentkit/compare/v0.11.8...v0.11.9)
+
 ## v0.11.8
 
 ### New Features
