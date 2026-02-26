@@ -1,3 +1,17 @@
+# Release v0.11.8
+
+## New Features
+- Update LLM reasoning effort config and add Google Vertex AI support
+- Add support for Qwen 3.5
+- Improve side bar UI
+- Automatically generate chat titles
+
+## Improvements & Bug Fixes
+- Refactor model provider implementation
+- Fix chat avatar display issues
+
+Full Changelog: [v0.11.7...v0.11.8](https://github.com/crestalnetwork/intentkit/compare/v0.11.7...v0.11.8)
+
 # Release v0.11.7
 
 ## Bug Fixes & Improvements
