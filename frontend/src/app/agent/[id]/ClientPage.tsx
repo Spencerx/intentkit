@@ -661,9 +661,14 @@ export default function AgentChatPage() {
             )}
             {isSending && (
               <div className="flex w-full gap-2 max-w-[85%]">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-primary text-primary-foreground">
-                  <Bot className="h-4 w-4" />
-                </div>
+                <Avatar className="h-8 w-8 border">
+                  {cachedAvatar ? (
+                    <AvatarImage src={cachedAvatar} alt={displayName} />
+                  ) : null}
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    <Bot className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex items-center gap-1 rounded-lg bg-muted px-4 py-2">
                   <span className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.3s]" />
                   <span className="h-2 w-2 animate-bounce rounded-full bg-foreground/50 [animation-delay:-0.15s]" />
