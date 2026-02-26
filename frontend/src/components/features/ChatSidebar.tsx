@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Plus,
-  MessageSquare,
   MoreVertical,
   Pencil,
   Trash2,
@@ -48,6 +47,16 @@ interface ChatSidebarProps {
   isLoading?: boolean;
 }
 
+type ThreadGroupKey = "today" | "yesterday" | "7days" | "30days" | "more";
+
+const THREAD_GROUPS: Array<{ key: ThreadGroupKey; label: string }> = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7days", label: "7days" },
+  { key: "30days", label: "30days" },
+  { key: "more", label: "More" },
+];
+
 export function ChatSidebar({
   agentId,
   activeTab = "chat",
@@ -65,6 +74,8 @@ export function ChatSidebar({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [tooltipThreadId, setTooltipThreadId] = useState<string | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleStartEdit = (thread: ChatThread) => {
     setEditingId(thread.id);
@@ -99,22 +110,64 @@ export function ChatSidebar({
     }
   };
 
-  const formatTime = (dateStr: string) => {
+  const clearTooltipTimer = () => {
+    if (!tooltipTimerRef.current) return;
+    clearTimeout(tooltipTimerRef.current);
+    tooltipTimerRef.current = null;
+  };
+
+  const handleTitleMouseEnter = (threadId: string, titleElement: HTMLSpanElement) => {
+    clearTooltipTimer();
+    setTooltipThreadId(null);
+    if (titleElement.scrollWidth <= titleElement.clientWidth) return;
+    tooltipTimerRef.current = setTimeout(() => {
+      setTooltipThreadId(threadId);
+    }, 1000);
+  };
+
+  const handleTitleMouseLeave = () => {
+    clearTooltipTimer();
+    setTooltipThreadId(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearTooltipTimer();
+    };
+  }, []);
+
+  const getThreadGroup = (dateStr: string): ThreadGroupKey => {
     const date = new Date(dateStr);
     const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const diffDays = Math.floor((todayStart.getTime() - dateStart.getTime()) / 86400000);
 
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    } else if (diffDays === 1) {
-      return "Yesterday";
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: "short" });
-    } else {
-      return date.toLocaleDateString([], { month: "short", day: "numeric" });
-    }
+    if (diffDays <= 0) return "today";
+    if (diffDays === 1) return "yesterday";
+    if (diffDays <= 7) return "7days";
+    if (diffDays <= 30) return "30days";
+    return "more";
   };
+
+  const groupedThreads = useMemo(() => {
+    const groups: Record<ThreadGroupKey, ChatThread[]> = {
+      today: [],
+      yesterday: [],
+      "7days": [],
+      "30days": [],
+      more: [],
+    };
+    const sortedThreads = [...threads].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    );
+
+    for (const thread of sortedThreads) {
+      groups[getThreadGroup(thread.updated_at)].push(thread);
+    }
+
+    return groups;
+  }, [threads]);
 
   return (
     <div className="w-64 border-r bg-muted/30 flex flex-col h-full">
@@ -191,103 +244,127 @@ export function ChatSidebar({
             {isNewThread && (
               <div
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm",
+                  "px-3 py-2 rounded-md text-sm truncate",
                   "bg-primary/10 text-primary font-medium",
                 )}
               >
-                <MessageSquare className="h-4 w-4" />
-                <span className="flex-1 truncate">New Chat</span>
+                New Chat
               </div>
             )}
 
             {/* Thread list */}
-            {threads.map((thread) => (
-              <div
-                key={thread.id}
-                className={cn(
-                  "group flex items-center gap-2 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors",
-                  currentThreadId === thread.id && !isNewThread
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "hover:bg-muted",
-                )}
-              >
-                {editingId === thread.id ? (
-                  <div className="flex-1 flex items-center gap-1">
-                    <Input
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="h-7 text-xs"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        // Check if IME is composing before handling Enter key
-                        if (e.nativeEvent.isComposing) return;
-                        if (e.key === "Enter") handleSaveEdit();
-                        if (e.key === "Escape") handleCancelEdit();
-                      }}
-                      disabled={isSavingEdit}
-                    />
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6"
-                      onClick={handleSaveEdit}
-                      disabled={isSavingEdit}
-                    >
-                      <Check className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6"
-                      onClick={handleCancelEdit}
-                      disabled={isSavingEdit}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+            {THREAD_GROUPS.map((group) => {
+              const groupThreads = groupedThreads[group.key];
+              if (groupThreads.length === 0) return null;
+
+              return (
+                <div key={group.key} className="space-y-1">
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                    {group.label}
                   </div>
-                ) : (
-                  <>
+                  {groupThreads.map((thread) => (
                     <div
-                      className="flex-1 min-w-0 flex items-center gap-2"
-                      onClick={() => onSelectThread(thread.id)}
+                      key={thread.id}
+                      className={cn(
+                        "group relative flex items-center px-3 py-2 rounded-md text-sm cursor-pointer transition-colors",
+                        currentThreadId === thread.id && !isNewThread
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted",
+                      )}
                     >
-                      <MessageSquare className="h-4 w-4 shrink-0" />
-                      <span className="flex-1 truncate">
-                        {thread.summary || "Untitled"}
-                      </span>
+                      {editingId === thread.id ? (
+                        <div className="flex-1 flex items-center gap-1">
+                          <Input
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="h-7 text-xs"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              // Check if IME is composing before handling Enter key
+                              if (e.nativeEvent.isComposing) return;
+                              if (e.key === "Enter") handleSaveEdit();
+                              if (e.key === "Escape") handleCancelEdit();
+                            }}
+                            disabled={isSavingEdit}
+                          />
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            onClick={handleSaveEdit}
+                            disabled={isSavingEdit}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            onClick={handleCancelEdit}
+                            disabled={isSavingEdit}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div
+                            className="relative flex-1 min-w-0"
+                            onClick={() => {
+                              setTooltipThreadId(null);
+                              onSelectThread(thread.id);
+                            }}
+                          >
+                            <span
+                              className="block truncate"
+                              onMouseEnter={(e) =>
+                                handleTitleMouseEnter(thread.id, e.currentTarget)
+                              }
+                              onMouseLeave={handleTitleMouseLeave}
+                            >
+                              {thread.summary || "Untitled"}
+                            </span>
+                            {tooltipThreadId === thread.id && (
+                              <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 max-w-[260px] rounded-md border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md">
+                                {thread.summary || "Untitled"}
+                              </div>
+                            )}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 bg-background/80 backdrop-blur-sm opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto data-[state=open]:opacity-100 data-[state=open]:pointer-events-auto"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setTooltipThreadId(null);
+                                }}
+                              >
+                                <MoreVertical className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleStartEdit(thread)}>
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeleteId(thread.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      )}
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {formatTime(thread.updated_at)}
-                    </span>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="h-3 w-3" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleStartEdit(thread)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteId(thread.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                )}
-              </div>
-            ))}
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
