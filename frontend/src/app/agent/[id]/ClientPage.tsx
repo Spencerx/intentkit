@@ -294,7 +294,11 @@ export default function AgentChatPage() {
 
         // If this is a new thread, create it first
         if (isNewThread || !threadId) {
-          const newThread = await chatApi.createChat(agentId);
+          const newThread = await chatApi.createChat(
+            agentId,
+            undefined,
+            userMessage.content,
+          );
           threadId = newThread.id;
           setCurrentThreadId(threadId);
           setIsNewThread(false);

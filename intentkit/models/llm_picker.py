@@ -17,9 +17,9 @@ def pick_summarize_model() -> str:
     # 4. Grok: Good performance if available
     # 5. DeepSeek: Final fallback
     order: list[tuple[str, LLMProvider]] = [
+        ("z-ai/glm-4.7-flash", LLMProvider.OPENROUTER),
         ("google/gemini-3-flash-preview", LLMProvider.GOOGLE),
         ("gpt-5-mini", LLMProvider.OPENAI),
-        ("z-ai/glm-4.7-flash", LLMProvider.OPENROUTER),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
         ("deepseek-chat", LLMProvider.DEEPSEEK),
     ]
@@ -51,9 +51,9 @@ def pick_default_model() -> str:
     # 4. Grok: Good performance if available
     # 5. DeepSeek: Final fallback
     order: list[tuple[str, LLMProvider]] = [
+        ("minimax/minimax-m2.5", LLMProvider.OPENROUTER),
         ("google/gemini-3-flash-preview", LLMProvider.GOOGLE),
         ("gpt-5-mini", LLMProvider.OPENAI),
-        ("minimax/minimax-m2.5", LLMProvider.OPENROUTER),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
         ("deepseek-chat", LLMProvider.DEEPSEEK),
     ]
