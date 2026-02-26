@@ -78,3 +78,38 @@ def test_llm_model_filtering():
 
         assert len(openai_models) > 0
         assert len(google_models) > 0
+
+    # Case 4: Use OpenRouter fallback when vendor key is missing
+    with patch("intentkit.models.llm.config") as mock_config:
+        mock_config.openai_api_key = None
+        mock_config.google_api_key = None
+        mock_config.deepseek_api_key = None
+        mock_config.xai_api_key = None
+        mock_config.openrouter_api_key = "or-test-key"
+        mock_config.eternal_api_key = None
+        mock_config.reigent_api_key = None
+        mock_config.venice_api_key = None
+
+        models = _load_default_llm_models()
+        gpt5mini = models.get("gpt-5-mini")
+
+        assert gpt5mini is not None
+        assert gpt5mini.provider == LLMProvider.OPENROUTER
+        assert gpt5mini.provider_model_id == "openai/gpt-5-mini"
+
+    # Case 5: Prefer vendor-native model when both keys exist
+    with patch("intentkit.models.llm.config") as mock_config:
+        mock_config.openai_api_key = "sk-test-key"
+        mock_config.google_api_key = None
+        mock_config.deepseek_api_key = None
+        mock_config.xai_api_key = None
+        mock_config.openrouter_api_key = "or-test-key"
+        mock_config.eternal_api_key = None
+        mock_config.reigent_api_key = None
+        mock_config.venice_api_key = None
+
+        models = _load_default_llm_models()
+        gpt5mini = models.get("gpt-5-mini")
+
+        assert gpt5mini is not None
+        assert gpt5mini.provider == LLMProvider.OPENAI

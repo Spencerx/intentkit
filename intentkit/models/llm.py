@@ -46,6 +46,29 @@ def _parse_optional_int(value: str | None) -> int | None:
     return int(value) if value else None
 
 
+def _candidate_score(model: "LLMModelInfo") -> int:
+    """Score model candidates for the same logical model ID."""
+    if not model.provider.is_configured:
+        return 0
+    if model.provider == LLMProvider.OPENROUTER:
+        return 1
+    return 2
+
+
+def _select_preferred_model(
+    candidates: list["LLMModelInfo"],
+) -> "LLMModelInfo | None":
+    """Pick one configured candidate, preferring native providers over OpenRouter."""
+    best_model: LLMModelInfo | None = None
+    best_score = -1
+    for candidate in candidates:
+        score = _candidate_score(candidate)
+        if score > best_score:
+            best_model = candidate
+            best_score = score
+    return best_model if best_score > 0 else None
+
+
 def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
     """Load default LLM models from a CSV file."""
 
@@ -55,6 +78,7 @@ def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
         return {}
 
     defaults: dict[str, LLMModelInfo] = {}
+    model_candidates: dict[str, list[LLMModelInfo]] = {}
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
@@ -74,6 +98,8 @@ def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
                     "id": row_id,
                     "name": row.get("name") or row_id,
                     "provider": provider,
+                    "provider_model_id": row.get("provider_model_id", "").strip()
+                    or None,
                     "enabled": _parse_bool(row.get("enabled")),
                     "input_price": Decimal(row.get("input_price", "0")),
                     "output_price": Decimal(row.get("output_price", "0")),
@@ -110,15 +136,17 @@ def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
                 model = LLMModelInfo(**attrs)
                 if not model.enabled:
                     continue
-
-                if not model.provider.is_configured:
-                    continue
             except Exception as exc:
                 logger.error(
                     "Failed to load default LLM model %s: %s", row.get("id"), exc
                 )
                 continue
-            defaults[model.id] = model
+            model_candidates.setdefault(model.id, []).append(model)
+
+    for model_id, candidates in model_candidates.items():
+        selected = _select_preferred_model(candidates)
+        if selected:
+            defaults[model_id] = selected
 
     return defaults
 
@@ -242,6 +270,7 @@ class LLMModelInfo(BaseModel):
     id: str
     name: str
     provider: LLMProvider
+    provider_model_id: str | None = None
     enabled: bool = Field(default=True)
     input_price: Decimal  # Price per 1M input tokens in USD
     output_price: Decimal  # Price per 1M output tokens in USD
@@ -650,7 +679,7 @@ class OpenRouterLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": self.model_name,
+            "model": info.provider_model_id or self.model_name,
             "api_key": config.openrouter_api_key,
             "timeout": info.timeout * 1000,
             "max_retries": 3,
