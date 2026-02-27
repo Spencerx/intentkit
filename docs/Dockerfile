@@ -1,4 +1,4 @@
-FROM gohugoio/hugo:0.155.3-ext-alpine AS builder
+FROM floryn90/hugo:0.155.3-ext-alpine AS builder
 
 RUN apk add --no-cache git
 
