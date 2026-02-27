@@ -1,7 +1,6 @@
 baseURL: "https://docs.example.com/"
 title: "IntentKit"
 languageCode: "en-us"
-defaultContentLanguage: "en"
 defaultContentLanguageInSubdir: true
 
 module:
@@ -13,6 +12,9 @@ languages:
     languageName: "English"
     contentDir: "content/en"
     title: "IntentKit"
+    author:
+      name: "Crestal Network"
+      email: "hello@crestal.network"
 
 menu:
   main:
@@ -33,6 +35,10 @@ menu:
       weight: 4
       params:
         icon: github
+
+author:
+  name: "Crestal Network"
+  email: "hello@crestal.network"
 
 params:
   navbar:
