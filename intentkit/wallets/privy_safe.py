@@ -1921,9 +1921,9 @@ async def _set_spending_limit(
     return tx_hash
 
 
-async def _get_erc20_decimals(rpc_url: str, token_address: str) -> int:
+async def _get_erc20_decimals(network_id: str, token_address: str) -> int:
     """Read ERC20 decimals() from chain."""
-    web3 = get_async_web3_client(rpc_url)
+    web3 = get_async_web3_client(network_id)
     token_contract = web3.eth.contract(
         address=to_checksum_address(token_address),
         abi=[
@@ -1989,7 +1989,7 @@ async def set_safe_token_spending_limit(
     )
     token_checksum = to_checksum_address(token_address)
     if token_decimals is None:
-        token_decimals = await _get_erc20_decimals(rpc_url, token_checksum)
+        token_decimals = await _get_erc20_decimals(network_id, token_checksum)
     if token_decimals < 0:
         raise IntentKitAPIError(
             400,

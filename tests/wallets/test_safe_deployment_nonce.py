@@ -245,3 +245,51 @@ async def test_set_safe_token_spending_limit_supports_multiple_tokens(monkeypatc
     assert mock_set_limit.await_count == 2
     assert mock_set_limit.await_args_list[0].kwargs["token_address"].lower() == token_a
     assert mock_set_limit.await_args_list[1].kwargs["token_address"].lower() == token_b
+
+
+@pytest.mark.asyncio
+async def test_set_safe_token_spending_limit_reads_decimals_via_network_id(monkeypatch):
+    """Verify _get_erc20_decimals uses get_async_web3_client(network_id), not raw rpc_url."""
+    privy_client = MagicMock()
+    chain_config = ChainConfig(
+        chain_id=123,
+        name="Test Chain",
+        safe_tx_service_url="http://safe.tx",
+        usdc_address="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        safe_singleton_address="0xfb1bffC9d739B8D520DaF37dF666da4C687191EA",
+        allowance_module_address="0xCFbFaC74C26F8647cBDb8c5caf80BB5b32E43134",
+    )
+    monkeypatch.setitem(CHAIN_CONFIGS, "test-network-decimals", chain_config)
+    monkeypatch.setattr(
+        "intentkit.wallets.privy_safe._is_module_enabled",
+        AsyncMock(return_value=True),
+    )
+    mock_set_limit = AsyncMock(return_value="0xLimitTx")
+    monkeypatch.setattr(
+        "intentkit.wallets.privy_safe._set_spending_limit", mock_set_limit
+    )
+
+    mock_contract = MagicMock()
+    mock_contract.functions.decimals.return_value.call = AsyncMock(return_value=6)
+    mock_web3_instance = MagicMock()
+    mock_web3_instance.eth.contract.return_value = mock_contract
+    mock_get_web3 = MagicMock(return_value=mock_web3_instance)
+    monkeypatch.setattr(
+        "intentkit.wallets.privy_safe.get_async_web3_client", mock_get_web3
+    )
+
+    result = await set_safe_token_spending_limit(
+        privy_client=privy_client,
+        privy_wallet_id="wallet-id",
+        privy_wallet_address="0x0000000000000000000000000000000000000001",
+        safe_address="0x0000000000000000000000000000000000000002",
+        token_address="0x1111111111111111111111111111111111111111",
+        spending_limit=100.0,
+        network_id="test-network-decimals",
+        rpc_url="http://rpc.url",
+        nonce=3,
+    )
+
+    assert result["spending_limit_configured"] is True
+    assert mock_set_limit.await_args_list[0].kwargs["allowance_amount"] == 100_000_000
+    mock_get_web3.assert_called_once_with("test-network-decimals")
