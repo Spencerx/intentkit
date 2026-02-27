@@ -54,6 +54,9 @@ jobs:
       packages: write
       id-token: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96
