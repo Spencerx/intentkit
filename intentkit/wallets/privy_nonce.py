@@ -82,7 +82,7 @@ class MasterWalletNonceManager:
         if cached is None:
             # First time or expired - fetch from blockchain
             blockchain_nonce = await w3.eth.get_transaction_count(
-                to_checksum_address(self.address)
+                to_checksum_address(self.address), "pending"
             )
             # Set only if not exists (another worker might have set it)
             await redis.set(
@@ -103,7 +103,7 @@ class MasterWalletNonceManager:
         """
         redis = get_redis()
         blockchain_nonce = await w3.eth.get_transaction_count(
-            to_checksum_address(self.address)
+            to_checksum_address(self.address), "pending"
         )
         await redis.set(self._nonce_key, str(blockchain_nonce), ex=NONCE_KEY_TTL)
         logger.info(f"Reset master wallet nonce to {blockchain_nonce}")

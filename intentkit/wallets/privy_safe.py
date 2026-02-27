@@ -7,7 +7,7 @@ from eth_abi.abi import encode
 from eth_account import Account
 from eth_utils.address import to_checksum_address
 from eth_utils.crypto import keccak
-from web3.types import TxParams, TxReceipt, Wei
+from web3.types import TxParams, TxReceipt
 
 from intentkit.config.config import config
 from intentkit.utils.error import IntentKitAPIError
@@ -447,34 +447,16 @@ class SafeWalletProvider(WalletProvider):
                     operation=operation,
                 )
 
-                # e. Send transaction via Master Wallet
-                w3 = get_async_web3_client(self.network_id)
-                master_account = Account.from_key(self.master_wallet_private_key)
-
-                # Get nonce and gas price for master wallet
-                master_nonce = await w3.eth.get_transaction_count(
-                    master_account.address
+                # e. Send transaction via Master Wallet (using nonce manager)
+                tx_hash_hex = await _send_transaction_with_master_wallet(
+                    to=self.safe_address,
+                    data=exec_tx_data,
+                    chain_id=target_chain_id,
+                    network_id=self.network_id,
+                    gas_limit=500000,  # Safe txs can be heavy
                 )
-                gas_price_wei = await w3.eth.gas_price
 
-                # Estimate gas
-                tx_params: TxParams = {
-                    "from": master_account.address,
-                    "to": self.safe_address,
-                    "value": Wei(0),
-                    "data": exec_tx_data,
-                    "nonce": master_nonce,
-                    "gasPrice": gas_price_wei,
-                    "chainId": target_chain_id,
-                }
-                estimated_gas = await w3.eth.estimate_gas(tx_params)
-                tx_params["gas"] = int(estimated_gas * 1.2)  # Add 20% buffer
-
-                # Sign and send
-                signed_tx = master_account.sign_transaction(tx_params)
-                tx_hash = await w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-
-                return TransactionResult(success=True, tx_hash=tx_hash.hex())
+                return TransactionResult(success=True, tx_hash=tx_hash_hex)
 
             else:
                 # --- Standard Flow (Privy pays) ---
