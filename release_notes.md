@@ -1,23 +1,11 @@
-## v0.11.9
+# Release v0.11.10
 
-### New Features
-- Added support for setting per-token spending limits on Safe wallets — agents can now have independent spending limits for any ERC20 token, not just USDC
+## New Features
+- Introduced a new abstract logo design for the frontend
 
-### Improvements & Bug Fixes
-- Refactored Safe spending limit internals to share a unified implementation
+## Improvements & Bug Fixes
+- Improved blockchain transaction reliability by fixing nonce management issues
+- Fixed a bug in the asynchronous Web3 client to ensure smoother network interactions
+- Added missing configuration files for improved test suite organization
 
-[Full Changelog](https://github.com/crestalnetwork/intentkit/compare/v0.11.8...v0.11.9)
-
-## v0.11.8
-
-### New Features
-- Update LLM reasoning effort config and add Google Vertex AI support
-- Add support for Qwen 3.5
-- Improve side bar UI
-- Automatically generate chat titles
-
-### Improvements & Bug Fixes
-- Refactor model provider implementation
-- Fix chat avatar display issues
-
-[Full Changelog](https://github.com/crestalnetwork/intentkit/compare/v0.11.7...v0.11.8)
+Full Changelog: [v0.11.9...v0.11.10](https://github.com/crestalnetwork/intentkit/compare/v0.11.9...v0.11.10)
