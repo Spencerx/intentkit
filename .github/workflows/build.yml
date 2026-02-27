@@ -51,6 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
       id-token: write
     steps:
       - name: Docker meta
@@ -60,6 +61,7 @@ jobs:
           # list of Docker images to use as base name for tags
           images: |
             crestal/intentkit
+            ghcr.io/${{ github.repository }}
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=pr
@@ -78,6 +80,13 @@ jobs:
           username: crestal
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push
         uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355
         with:
@@ -86,8 +95,85 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=intentkit
+          cache-to: type=gha,mode=max,scope=intentkit
+
+      - name: Docker meta for Docs
+        id: meta-docs
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}-docs
+          tags: |
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.event_name == 'release' && github.event.action == 'prereleased' }}
+            type=raw,value=prod,enable=${{ github.event_name == 'release' && github.event.action == 'released' }}
+
+      - name: Build and push Docs
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355
+        with:
+          context: ./docs
+          file: ./docs/Dockerfile
+          push: true
+          tags: ${{ steps.meta-docs.outputs.tags }}
+          labels: ${{ steps.meta-docs.outputs.labels }}
+          cache-from: type=gha,scope=intentkit-docs
+          cache-to: type=gha,mode=max,scope=intentkit-docs
+
+      - name: Docker meta for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}-frontend
+          tags: |
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.event_name == 'release' && github.event.action == 'prereleased' }}
+            type=raw,value=prod,enable=${{ github.event_name == 'release' && github.event.action == 'released' }}
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha,scope=intentkit-frontend
+          cache-to: type=gha,mode=max,scope=intentkit-frontend
+
+      - name: Docker meta for Telegram Integration
+        id: meta-telegram
+        uses: docker/metadata-action@369eb591f429131d6889c46b94e711f089e6ca96
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}-telegram
+          tags: |
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.event_name == 'release' && github.event.action == 'prereleased' }}
+            type=raw,value=prod,enable=${{ github.event_name == 'release' && github.event.action == 'released' }}
+
+      - name: Build and push Telegram Integration
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355
+        with:
+          context: ./integrations/telegram
+          file: ./integrations/telegram/Dockerfile
+          build-args: |
+            RELEASE=${{ github.event.release.tag_name || 'latest'}}
+          push: true
+          tags: ${{ steps.meta-telegram.outputs.tags }}
+          labels: ${{ steps.meta-telegram.outputs.labels }}
+          cache-from: type=gha,scope=intentkit-telegram
+          cache-to: type=gha,mode=max,scope=intentkit-telegram
 
       - name: Build Success Notification
         if: ${{ success() }}
