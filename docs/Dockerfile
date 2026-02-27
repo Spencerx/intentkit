@@ -1,5 +1,6 @@
-FROM floryn90/hugo:0.155.3-ext-alpine AS builder
+FROM ghcr.io/gohugoio/hugo:latest AS builder
 
+USER root
 RUN apk add --no-cache git
 
 WORKDIR /src
