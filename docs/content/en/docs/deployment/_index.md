@@ -1,5 +1,5 @@
 ---
-title: "Installation"
+title: "Deployment"
 weight: 2
 ---
 
