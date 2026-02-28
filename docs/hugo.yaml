@@ -13,8 +13,8 @@ languages:
     contentDir: "content/en"
     title: "IntentKit"
     author:
-      name: "Crestal Network"
-      email: "hello@crestal.network"
+      name: "Hyacinthus"
+      email: "hyacinthus@gmail.com"
 
 menu:
   main:
