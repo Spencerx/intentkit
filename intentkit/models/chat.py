@@ -225,6 +225,7 @@ class ChatMessageTable(Base):
     )
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     time_cost: Mapped[float] = mapped_column(Float, default=0)
     credit_event_id: Mapped[str | None] = mapped_column(String, nullable=True)
     credit_cost: Mapped[Decimal | None] = mapped_column(
@@ -296,6 +297,9 @@ class ChatMessageCreate(BaseModel):
     ] = 0
     output_tokens: Annotated[
         int, Field(0, description="Number of tokens in the output message")
+    ] = 0
+    cached_input_tokens: Annotated[
+        int, Field(0, description="Number of cached input tokens (cache hits)")
     ] = 0
     time_cost: Annotated[
         float, Field(0.0, description="Time cost for the message in seconds")

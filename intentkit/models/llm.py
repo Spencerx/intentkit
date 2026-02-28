@@ -46,6 +46,13 @@ def _parse_optional_int(value: str | None) -> int | None:
     return int(value) if value else None
 
 
+def _parse_optional_decimal(value: str | None) -> Decimal | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return Decimal(value) if value else None
+
+
 def _candidate_score(model: "LLMModelInfo") -> int:
     """Score model candidates for the same logical model ID."""
     if not model.provider.is_configured:
@@ -102,6 +109,9 @@ def _load_default_llm_models() -> dict[str, "LLMModelInfo"]:
                     or None,
                     "enabled": _parse_bool(row.get("enabled")),
                     "input_price": Decimal(row.get("input_price", "0")),
+                    "cached_input_price": _parse_optional_decimal(
+                        row.get("cached_input_price")
+                    ),
                     "output_price": Decimal(row.get("output_price", "0")),
                     "price_level": _parse_optional_int(row.get("price_level")),
                     "context_length": int(row.get("context_length") or 0),
@@ -206,6 +216,9 @@ class LLMModelInfoTable(Base):
     input_price: Mapped[Decimal] = mapped_column(
         Numeric(22, 4), nullable=False
     )  # Price per 1M input tokens in USD
+    cached_input_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(22, 4), nullable=True
+    )  # Price per 1M cached input tokens in USD
     output_price: Mapped[Decimal] = mapped_column(
         Numeric(22, 4), nullable=False
     )  # Price per 1M output tokens in USD
@@ -273,6 +286,7 @@ class LLMModelInfo(BaseModel):
     provider_model_id: str | None = None
     enabled: bool = Field(default=True)
     input_price: Decimal  # Price per 1M input tokens in USD
+    cached_input_price: Decimal | None = None  # Price per 1M cached input tokens in USD
     output_price: Decimal  # Price per 1M output tokens in USD
     price_level: int | None = Field(
         default=None, ge=1, le=5
@@ -402,16 +416,35 @@ class LLMModelInfo(BaseModel):
 
         return list(models.values())
 
-    async def calculate_cost(self, input_tokens: int, output_tokens: int) -> Decimal:
+    async def calculate_cost(
+        self, input_tokens: int, output_tokens: int, cached_input_tokens: int = 0
+    ) -> Decimal:
         """Calculate the cost for a given number of tokens."""
         global _credit_per_usdc
         if not _credit_per_usdc:
             _credit_per_usdc = (await AppSetting.payment()).credit_per_usdc
 
+        # Determine effective price for cached input tokens
+        effective_cached_price = (
+            self.cached_input_price
+            if self.cached_input_price is not None
+            else self.input_price
+        )
+        # Clamp cached to total input (defensive against provider inconsistencies)
+        effective_cached = min(cached_input_tokens, input_tokens)
+        # Non-cached input tokens = total input - cached
+        non_cached_input = input_tokens - effective_cached
+
         input_cost = (
             _credit_per_usdc
-            * Decimal(input_tokens)
+            * Decimal(non_cached_input)
             * self.input_price
+            / Decimal(1000000)
+        ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
+        cached_input_cost = (
+            _credit_per_usdc
+            * Decimal(effective_cached)
+            * effective_cached_price
             / Decimal(1000000)
         ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
         output_cost = (
@@ -420,7 +453,9 @@ class LLMModelInfo(BaseModel):
             * self.output_price
             / Decimal(1000000)
         ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
-        return (input_cost + output_cost).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
+        return (input_cost + cached_input_cost + output_cost).quantize(
+            FOURPLACES, rounding=ROUND_HALF_UP
+        )
 
 
 # Default models loaded from CSV
@@ -458,10 +493,14 @@ class LLMModel(BaseModel):
         info = await self.model_info()
         return info.context_length
 
-    async def calculate_cost(self, input_tokens: int, output_tokens: int) -> Decimal:
+    async def calculate_cost(
+        self, input_tokens: int, output_tokens: int, cached_input_tokens: int = 0
+    ) -> Decimal:
         """Calculate the cost for a given number of tokens."""
         info = await self.model_info()
-        return await info.calculate_cost(input_tokens, output_tokens)
+        return await info.calculate_cost(
+            input_tokens, output_tokens, cached_input_tokens
+        )
 
 
 class OpenAILLM(LLMModel):

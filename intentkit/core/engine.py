@@ -109,6 +109,16 @@ def _extract_text_content(content: object) -> str:
     return ""
 
 
+def _extract_cached_input_tokens(msg: Any) -> int:
+    """Extract cache_read token count from a LangChain message's usage_metadata."""
+    if not hasattr(msg, "usage_metadata") or not msg.usage_metadata:
+        return 0
+    details = msg.usage_metadata.get("input_token_details")
+    if not details:
+        return 0
+    return details.get("cache_read", 0)
+
+
 async def build_agent(
     agent: Agent,
     agent_data: AgentData,
@@ -681,6 +691,7 @@ async def stream_agent_raw(
                             if hasattr(msg, "usage_metadata") and msg.usage_metadata
                             else 0
                         ),
+                        cached_input_tokens=_extract_cached_input_tokens(msg),
                         time_cost=this_time - last,
                     )
                     last = this_time
@@ -688,6 +699,7 @@ async def stream_agent_raw(
                         amount = await model.calculate_cost(
                             chat_message_create.input_tokens,
                             chat_message_create.output_tokens,
+                            chat_message_create.cached_input_tokens,
                         )
 
                         if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
@@ -788,6 +800,11 @@ async def stream_agent_raw(
                         and have_first_call_in_cache
                         else 0
                     ),
+                    cached_input_tokens=(
+                        _extract_cached_input_tokens(cached_tool_step)
+                        if have_first_call_in_cache
+                        else 0
+                    ),
                     time_cost=this_time - last,
                 )
                 last = this_time
@@ -797,6 +814,7 @@ async def stream_agent_raw(
                         message_amount = await model.calculate_cost(
                             skill_message_create.input_tokens,
                             skill_message_create.output_tokens,
+                            skill_message_create.cached_input_tokens,
                         )
                         message_payment_event = await expense_message(
                             session,
