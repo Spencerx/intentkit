@@ -571,6 +571,102 @@ def _is_unrecoverable_checkpoint_error(exc: Exception) -> bool:
     return False
 
 
+def _summarize_history_messages(msgs: list[Any], max_messages: int = 10) -> list[dict]:
+    """Build a compact summary of the last N thread messages.
+
+    Focuses on tool_calls carried on AIMessage — useful when the LLM returns
+    MALFORMED_FUNCTION_CALL and the offending call isn't present in the current
+    turn's chunks, so we have to look back in checkpoint history.
+    """
+    summary: list[dict] = []
+    for msg in msgs[-max_messages:]:
+        entry: dict = {
+            "type": type(msg).__name__,
+            "id": getattr(msg, "id", None),
+        }
+        tool_calls = getattr(msg, "tool_calls", None)
+        if tool_calls:
+            entry["tool_calls"] = [
+                {"name": tc.get("name"), "args": tc.get("args")} for tc in tool_calls
+            ]
+        invalid_tc = getattr(msg, "invalid_tool_calls", None)
+        if invalid_tc:
+            entry["invalid_tool_calls"] = invalid_tc
+        content = getattr(msg, "content", None)
+        if content:
+            preview = extract_text_content(content) or str(content)
+            entry["content_preview"] = preview[:200]
+        thinking = extract_thinking_content(msg)
+        if thinking:
+            entry["thinking_preview"] = thinking[:200]
+        response_meta = getattr(msg, "response_metadata", None)
+        if response_meta and "finish_reason" in response_meta:
+            entry["finish_reason"] = response_meta["finish_reason"]
+        summary.append(entry)
+    return summary
+
+
+async def _cleanup_empty_model_output(
+    executor: Any,
+    stream_config: "RunnableConfig",
+    agent_id: str,
+    thread_id: str,
+) -> list[Any]:
+    """Handle checkpoint fallout from a zero-output model turn (e.g. Gemini
+    MALFORMED_FUNCTION_CALL).
+
+    Returns the full message list (for diagnostics) and, if the last message
+    is an empty AIMessage (no content, no tool_calls), removes it so the next
+    user turn doesn't inherit the junk state. Without this the thread keeps
+    the empty message and subsequent turns may misbehave.
+    """
+    try:
+        snap = await executor.aget_state(stream_config)
+        msgs = snap.values.get("messages") if snap.values else None
+    except Exception:
+        logger.warning(
+            f"Failed to fetch thread state for {agent_id}",
+            extra={"thread_id": thread_id},
+            exc_info=True,
+        )
+        return []
+
+    if not msgs:
+        return []
+
+    last = msgs[-1]
+    # Treat list-content (e.g. thinking-only blocks) as empty when
+    # extract_text_content yields nothing — a non-empty list is still truthy
+    # so a direct `not last.content` check would miss these.
+    if (
+        isinstance(last, AIMessage)
+        and not extract_text_content(last.content)
+        and not last.tool_calls
+    ):
+        if not last.id:
+            logger.warning(
+                f"Empty AIMessage has no id; skipping removal for {agent_id}",
+                extra={"thread_id": thread_id},
+            )
+        else:
+            try:
+                await executor.aupdate_state(
+                    stream_config,
+                    {"messages": [RemoveMessage(id=last.id)]},
+                )
+                logger.info(
+                    f"Removed empty AIMessage for {agent_id}",
+                    extra={"thread_id": thread_id},
+                )
+            except Exception:
+                logger.warning(
+                    f"Failed to remove empty AIMessage for {agent_id}",
+                    extra={"thread_id": thread_id},
+                    exc_info=True,
+                )
+    return msgs
+
+
 async def _cancel_cleanup(
     executor: Any,
     stream_config: "RunnableConfig",
@@ -950,11 +1046,23 @@ async def stream_agent_raw(
 
     # If the stream completed normally but yielded zero messages,
     # the LLM likely returned an empty response (no content, no tool calls).
+    # Typical cause: Gemini MALFORMED_FUNCTION_CALL — the malformed call isn't
+    # in this turn's chunks, so dump recent history tool_calls for diagnosis
+    # and prune the empty AIMessage so the thread isn't stuck on next turn.
     if not yielded_any:
+        history_msgs = await _cleanup_empty_model_output(
+            executor,
+            stream_config,
+            user_message.agent_id,
+            thread_id,
+        )
+        history_summary = _summarize_history_messages(history_msgs)
         logger.error(
             f"Agent {user_message.agent_id} produced no output messages. "
             f"Total chunks received: {len(raw_chunks)}. "
-            f"Raw chunks: {raw_chunks}",
+            f"Raw chunks: {raw_chunks}. "
+            f"Recent history ({len(history_summary)} of {len(history_msgs)} msgs): "
+            f"{history_summary}",
             extra={"thread_id": thread_id},
         )
         yield await _create_system_error_response(

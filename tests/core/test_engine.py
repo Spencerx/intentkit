@@ -339,3 +339,172 @@ async def test_stream_agent_rejects_unsupported_image_input(mock_agent):
 
     assert len(results) == 1
     assert results[0] is system_response
+
+
+def test_summarize_history_messages_captures_tool_calls():
+    from langchain_core.messages import HumanMessage
+
+    from intentkit.core.engine import _summarize_history_messages
+
+    messages = [
+        HumanMessage(content="hi", id="h1"),
+        AIMessage(
+            content="",
+            id="a1",
+            tool_calls=[{"name": "search", "args": {"q": "foo"}, "id": "tc1"}],
+        ),
+        AIMessage(
+            content="",
+            id="a2",
+            tool_calls=[],
+            response_metadata={"finish_reason": "MALFORMED_FUNCTION_CALL"},
+        ),
+    ]
+
+    summary = _summarize_history_messages(messages, max_messages=10)
+
+    assert len(summary) == 3
+    assert summary[0]["type"] == "HumanMessage"
+    assert summary[0]["content_preview"] == "hi"
+    assert summary[1]["tool_calls"] == [{"name": "search", "args": {"q": "foo"}}]
+    assert summary[2]["finish_reason"] == "MALFORMED_FUNCTION_CALL"
+    assert "tool_calls" not in summary[2]
+
+
+def test_summarize_history_messages_respects_max():
+    from langchain_core.messages import HumanMessage
+
+    from intentkit.core.engine import _summarize_history_messages
+
+    messages = [HumanMessage(content=f"m{i}", id=f"h{i}") for i in range(20)]
+    summary = _summarize_history_messages(messages, max_messages=5)
+
+    assert len(summary) == 5
+    assert [e["content_preview"] for e in summary] == [f"m{i}" for i in range(15, 20)]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_empty_model_output_removes_trailing_empty_ai():
+    from langchain_core.messages import HumanMessage, RemoveMessage
+
+    from intentkit.core.engine import _cleanup_empty_model_output
+
+    empty_ai = AIMessage(content="", id="ai-empty", tool_calls=[])
+    msgs = [HumanMessage(content="hi", id="h1"), empty_ai]
+
+    snap = MagicMock()
+    snap.values = {"messages": msgs}
+
+    executor = MagicMock()
+    executor.aget_state = AsyncMock(return_value=snap)
+    executor.aupdate_state = AsyncMock()
+
+    result = await _cleanup_empty_model_output(
+        executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
+    )
+
+    assert result == msgs
+    executor.aupdate_state.assert_awaited_once()
+    update_payload = executor.aupdate_state.await_args.args[1]
+    assert "messages" in update_payload
+    removed = update_payload["messages"][0]
+    assert isinstance(removed, RemoveMessage)
+    assert removed.id == "ai-empty"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_empty_model_output_removes_thinking_only_ai():
+    """Gemini MALFORMED_FUNCTION_CALL often leaves a non-empty list content
+    with thinking blocks but no text/tool_calls. `not content` would miss it."""
+    from langchain_core.messages import HumanMessage, RemoveMessage
+
+    from intentkit.core.engine import _cleanup_empty_model_output
+
+    thinking_only = AIMessage(
+        content=[{"type": "thinking", "thinking": "let me..."}],
+        id="ai-thinking",
+        tool_calls=[],
+    )
+    msgs = [HumanMessage(content="hi", id="h1"), thinking_only]
+
+    snap = MagicMock()
+    snap.values = {"messages": msgs}
+
+    executor = MagicMock()
+    executor.aget_state = AsyncMock(return_value=snap)
+    executor.aupdate_state = AsyncMock()
+
+    result = await _cleanup_empty_model_output(
+        executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
+    )
+
+    assert result == msgs
+    executor.aupdate_state.assert_awaited_once()
+    removed = executor.aupdate_state.await_args.args[1]["messages"][0]
+    assert isinstance(removed, RemoveMessage)
+    assert removed.id == "ai-thinking"
+
+
+@pytest.mark.asyncio
+async def test_cleanup_empty_model_output_returns_msgs_when_update_fails():
+    """If aget_state succeeds but aupdate_state fails, diagnostics should
+    still get the messages for logging."""
+    from langchain_core.messages import HumanMessage
+
+    from intentkit.core.engine import _cleanup_empty_model_output
+
+    empty_ai = AIMessage(content="", id="ai-empty", tool_calls=[])
+    msgs = [HumanMessage(content="hi", id="h1"), empty_ai]
+
+    snap = MagicMock()
+    snap.values = {"messages": msgs}
+
+    executor = MagicMock()
+    executor.aget_state = AsyncMock(return_value=snap)
+    executor.aupdate_state = AsyncMock(side_effect=RuntimeError("boom"))
+
+    result = await _cleanup_empty_model_output(
+        executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
+    )
+
+    assert result == msgs
+
+
+@pytest.mark.asyncio
+async def test_cleanup_empty_model_output_keeps_non_empty_ai():
+    from langchain_core.messages import HumanMessage
+
+    from intentkit.core.engine import _cleanup_empty_model_output
+
+    normal_ai = AIMessage(content="ok", id="ai-normal")
+    msgs = [HumanMessage(content="hi", id="h1"), normal_ai]
+
+    snap = MagicMock()
+    snap.values = {"messages": msgs}
+
+    executor = MagicMock()
+    executor.aget_state = AsyncMock(return_value=snap)
+    executor.aupdate_state = AsyncMock()
+
+    result = await _cleanup_empty_model_output(
+        executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
+    )
+
+    assert result == msgs
+    executor.aupdate_state.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_empty_model_output_swallows_state_error():
+    from intentkit.core.engine import _cleanup_empty_model_output
+
+    executor = MagicMock()
+    executor.aget_state = AsyncMock(side_effect=RuntimeError("boom"))
+    executor.aupdate_state = AsyncMock()
+
+    result = await _cleanup_empty_model_output(
+        executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
+    )
+
+    assert result == []
+    executor.aupdate_state.assert_not_awaited()
