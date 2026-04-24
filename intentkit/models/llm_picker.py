@@ -12,10 +12,10 @@ def pick_summarize_model() -> str:
     """
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.1-flash-lite-preview", LLMProvider.GOOGLE),
-        ("z-ai/glm-4.7-flash", LLMProvider.OPENROUTER),
+        ("deepseek/deepseek-v4-flash", LLMProvider.OPENROUTER),
         ("gpt-5.4-mini", LLMProvider.OPENAI),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
-        ("deepseek-chat", LLMProvider.DEEPSEEK),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M2.7", LLMProvider.MINIMAX),
     ]
     if (
@@ -52,7 +52,7 @@ def pick_default_model() -> str:
         ("minimax/minimax-m2.7", LLMProvider.OPENROUTER),
         ("gpt-5.4-mini", LLMProvider.OPENAI),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
-        ("deepseek-chat", LLMProvider.DEEPSEEK),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
         order.insert(1, (config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
@@ -106,9 +106,9 @@ def pick_long_context_model() -> str:
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.1-flash-lite-preview", LLMProvider.GOOGLE),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
-        ("qwen/qwen3.5-flash-02-23", LLMProvider.OPENROUTER),
+        ("deepseek/deepseek-v4-flash", LLMProvider.OPENROUTER),
         ("gpt-5.4-nano", LLMProvider.OPENAI),
-        ("deepseek-chat", LLMProvider.DEEPSEEK),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M2.7", LLMProvider.MINIMAX),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:

@@ -60,7 +60,7 @@ def load_default_llm_models() -> dict[str, "LLMModelInfo"]:
     """Load default LLM models from a CSV file.
 
     Models are keyed by ``{provider}:{id}`` so that the same model ID from
-    different providers (e.g. ``deepseek-chat`` via DeepSeek *and* OpenRouter)
+    different providers (e.g. ``deepseek-v4-flash`` via DeepSeek *and* OpenRouter)
     is preserved as separate entries.
     """
 

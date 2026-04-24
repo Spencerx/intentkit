@@ -194,8 +194,8 @@ def test_csv_loads_cached_input_price_for_claude():
     assert claude.input_price == Decimal("3")
 
 
-def test_csv_cached_input_price_none_for_deepseek():
-    """DeepSeek V3.2 has no cached_input_price in CSV — should be None."""
+def test_csv_cached_input_price_for_deepseek():
+    """DeepSeek V4 Flash ships with cache-hit pricing of 0.028/1M tokens."""
     with patch("intentkit.models.llm.config") as mock_config:
         mock_config.openai_api_key = None
         mock_config.google_api_key = None
@@ -212,9 +212,10 @@ def test_csv_cached_input_price_none_for_deepseek():
 
         models = load_default_llm_models()
 
-    deepseek = models.get("deepseek:deepseek-chat")
+    deepseek = models.get("deepseek:deepseek-v4-flash")
     assert deepseek is not None
-    assert deepseek.cached_input_price is None
+    assert deepseek.cached_input_price == Decimal("0.028")
+    assert deepseek.input_price == Decimal("0.14")
 
 
 def test_csv_cached_input_price_for_grok4():
