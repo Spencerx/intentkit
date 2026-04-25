@@ -1,4 +1,4 @@
-# Release v0.18.0
+# Release v1.0.0
 
 ## New Features
 
@@ -12,5 +12,3 @@
 ## Other
 
 - Refreshed internal dependencies across the Python backend and Go integrations.
-
-**Full Changelog**: https://github.com/crestalnetwork/intentkit/compare/v0.17.60...v0.18.0
