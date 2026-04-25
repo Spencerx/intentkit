@@ -42,3 +42,33 @@ async def test_get_by_evm_wallet(user_engine):
 
     missing = await User.get_by_evm_wallet("0xnotfound")
     assert missing is None
+
+
+@pytest.mark.asyncio
+async def test_timezone_language_roundtrip(user_engine):
+    session_factory = async_sessionmaker(user_engine, expire_on_commit=False)
+
+    async with session_factory() as session:
+        session.add(
+            UserTable(
+                id="user_with_locale",
+                timezone="Asia/Shanghai",
+                language="zh-CN",
+            )
+        )
+        session.add(
+            UserTable(
+                id="user_without_locale",
+            )
+        )
+        await session.commit()
+
+    with_locale = await User.get("user_with_locale")
+    assert with_locale is not None
+    assert with_locale.timezone == "Asia/Shanghai"
+    assert with_locale.language == "zh-CN"
+
+    without_locale = await User.get("user_without_locale")
+    assert without_locale is not None
+    assert without_locale.timezone is None
+    assert without_locale.language is None

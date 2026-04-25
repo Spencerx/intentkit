@@ -224,6 +224,13 @@ async def _build_user_info_section(context: AgentContext) -> str:
             prompt_array.append(f"User X Username: {user.x_username}\n")
         if user.telegram_username:
             prompt_array.append(f"User Telegram Username: {user.telegram_username}\n")
+        if user.timezone:
+            prompt_array.append(f"User Timezone: {user.timezone}\n")
+        if user.language:
+            prompt_array.append(
+                f"User Preferred Language: {user.language} "
+                "(reply in this language unless the user clearly switches)\n"
+            )
 
     if prompt_array:
         prompt_array.append("\n")

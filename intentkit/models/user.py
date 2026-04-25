@@ -109,6 +109,14 @@ class UserTable(Base):
         String,
         nullable=True,
     )
+    timezone: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+    language: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
     extra: Mapped[dict[str, object] | None] = mapped_column(
         JSONB(),
         nullable=True,
@@ -179,6 +187,22 @@ class UserUpdate(BaseModel):
     ]
     wechat_id: Annotated[
         str | None, Field(None, description="User's WeChat ID (e.g. xxxxx@im.wechat)")
+    ]
+    timezone: Annotated[
+        str | None,
+        Field(
+            None,
+            description=(
+                "IANA timezone identifier (e.g. 'Asia/Shanghai', 'America/New_York')"
+            ),
+        ),
+    ]
+    language: Annotated[
+        str | None,
+        Field(
+            None,
+            description="Preferred language as BCP 47 tag (e.g. 'zh-CN', 'en')",
+        ),
     ]
     extra: Annotated[
         dict[str, object] | None, Field(None, description="Additional user information")

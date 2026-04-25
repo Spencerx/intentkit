@@ -6,6 +6,7 @@ import pytest
 
 from intentkit.abstracts.graph import AgentContext
 from intentkit.core.prompt import (
+    _build_user_info_section,  # pyright: ignore[reportPrivateUsage]
     build_sub_agents_section,
     build_system_prompt,
     build_system_skills_section,
@@ -406,3 +407,51 @@ class TestSubAgentsPromptSection:
 
         assert "## Sub-Agents" in result
         assert "helper-bot: Help with tasks" in result
+
+
+class TestBuildUserInfoSection:
+    @pytest.mark.asyncio
+    async def test_includes_timezone_and_language(self):
+        context = MagicMock(spec=AgentContext)
+        context.user_id = "user-1"
+
+        user = MagicMock()
+        user.evm_wallet_address = None
+        user.email = None
+        user.x_username = None
+        user.telegram_username = None
+        user.timezone = "Asia/Shanghai"
+        user.language = "zh-CN"
+
+        with patch(
+            "intentkit.core.prompt.User.get",
+            new=AsyncMock(return_value=user),
+        ):
+            result = await _build_user_info_section(context)
+
+        assert "## User Info" in result
+        assert "User Timezone: Asia/Shanghai" in result
+        assert "User Preferred Language: zh-CN" in result
+
+    @pytest.mark.asyncio
+    async def test_omits_locale_lines_when_unset(self):
+        context = MagicMock(spec=AgentContext)
+        context.user_id = "user-1"
+
+        user = MagicMock()
+        user.evm_wallet_address = None
+        user.email = "u@example.com"
+        user.x_username = None
+        user.telegram_username = None
+        user.timezone = None
+        user.language = None
+
+        with patch(
+            "intentkit.core.prompt.User.get",
+            new=AsyncMock(return_value=user),
+        ):
+            result = await _build_user_info_section(context)
+
+        assert "User Timezone" not in result
+        assert "User Preferred Language" not in result
+        assert "User Email: u@example.com" in result

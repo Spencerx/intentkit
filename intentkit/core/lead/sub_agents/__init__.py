@@ -23,6 +23,7 @@ SLUG_AGENT_MANAGER = "agent-manager"
 SLUG_TASK_MANAGER = "task-manager"
 SLUG_SELF_UPDATER = "self-updater"
 SLUG_CONTENT_MANAGER = "content-manager"
+SLUG_USER_MANAGER = "user-manager"
 
 
 @dataclass
@@ -112,6 +113,10 @@ from intentkit.core.lead.sub_agents.task_manager import (  # noqa: E402
     build_task_manager,
     get_task_manager_skills,
 )
+from intentkit.core.lead.sub_agents.user_manager import (  # noqa: E402
+    build_user_manager,
+    get_user_manager_skills,
+)
 
 SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
     SLUG_AGENT_MANAGER: SubAgentDefinition(
@@ -146,5 +151,11 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
         ),
         build_fn=build_content_manager,
         skills_fn=get_content_manager_skills,
+    ),
+    SLUG_USER_MANAGER: SubAgentDefinition(
+        slug=SLUG_USER_MANAGER,
+        description=("Manages the current user's profile: name, timezone, language."),
+        build_fn=build_user_manager,
+        skills_fn=get_user_manager_skills,
     ),
 }

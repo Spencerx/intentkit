@@ -1,4 +1,4 @@
-"""Tests for lead sub-agents: self-updater and content-manager."""
+"""Tests for lead sub-agents: self-updater, content-manager, and user-manager."""
 
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -439,10 +439,157 @@ def test_content_manager_skills():
 
 
 def test_registry_contains_new_sub_agents():
-    """Registry includes self-updater and content-manager."""
+    """Registry includes self-updater, content-manager, and user-manager."""
     from intentkit.core.lead.sub_agents import SUB_AGENT_REGISTRY
 
     assert "self-updater" in SUB_AGENT_REGISTRY
     assert "content-manager" in SUB_AGENT_REGISTRY
+    assert "user-manager" in SUB_AGENT_REGISTRY
     assert SUB_AGENT_REGISTRY["self-updater"].slug == "self-updater"
     assert SUB_AGENT_REGISTRY["content-manager"].slug == "content-manager"
+    assert SUB_AGENT_REGISTRY["user-manager"].slug == "user-manager"
+
+
+# ──────────────────────────────────────────────
+# User Manager sub-agent
+# ──────────────────────────────────────────────
+
+
+def test_build_user_manager():
+    """User-manager sub-agent builds correctly."""
+    from intentkit.core.lead.sub_agents.user_manager import build_user_manager
+
+    agent = build_user_manager("test-team")
+    assert agent.id == "team-test-team-user-manager"
+    assert agent.team_id == "test-team"
+    assert agent.name == "User Manager"
+
+
+def test_user_manager_skills():
+    """User-manager returns expected skills."""
+    from intentkit.core.lead.sub_agents.user_manager import get_user_manager_skills
+
+    skills = get_user_manager_skills()
+    names = {s.name for s in skills}
+    assert names == {"lead_update_user_profile"}
+
+
+# ──────────────────────────────────────────────
+# LeadUpdateUserProfile
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_update_user_profile_no_user_id():
+    """Raises when context has no user_id."""
+    from langchain_core.tools.base import ToolException
+
+    from intentkit.core.lead.skills.update_user_profile import LeadUpdateUserProfile
+
+    mock_context = MagicMock(spec=AgentContext)
+    mock_context.user_id = None
+
+    skill = LeadUpdateUserProfile()
+    with patch("intentkit.skills.base.get_runtime") as mock_get_runtime:
+        mock_get_runtime.return_value.context = mock_context
+        with pytest.raises(ToolException, match="No user_id in context"):
+            await skill._arun(name="Alice")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_tz", ["Asia/Foobar", "/UTC", "../UTC"])
+async def test_update_user_profile_invalid_timezone(mock_lead_runtime, bad_tz):
+    """Rejects timezone strings that are not valid IANA names."""
+    from langchain_core.tools.base import ToolException
+
+    from intentkit.core.lead.skills.update_user_profile import LeadUpdateUserProfile
+
+    skill = LeadUpdateUserProfile()
+    with pytest.raises(ToolException, match="Invalid IANA timezone"):
+        await skill._arun(timezone=bad_tz)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_update_user_profile_no_fields(mock_lead_runtime):
+    """Returns empty updated_fields when no usable input is given."""
+    from intentkit.core.lead.skills.update_user_profile import LeadUpdateUserProfile
+
+    skill = LeadUpdateUserProfile()
+    result = await skill._arun()  # pyright: ignore[reportPrivateUsage]
+    assert result.updated_fields == []
+    assert "No fields" in result.message
+
+
+@pytest.mark.asyncio
+async def test_update_user_profile_happy_path(mock_lead_runtime):
+    """Patches the user with the provided fields and invalidates cache."""
+    from intentkit.core.lead.skills.update_user_profile import LeadUpdateUserProfile
+
+    skill = LeadUpdateUserProfile()
+
+    captured: dict[str, object] = {}
+
+    async def fake_patch(self, user_id):
+        captured["user_id"] = user_id
+        captured["dump"] = self.model_dump(exclude_unset=True)
+        return MagicMock()
+
+    mock_redis = MagicMock()
+    mock_redis.delete = AsyncMock()
+
+    with (
+        patch(
+            "intentkit.core.lead.skills.update_user_profile.UserUpdate.patch",
+            new=fake_patch,
+        ),
+        patch(
+            "intentkit.core.lead.skills.update_user_profile.get_redis",
+            return_value=mock_redis,
+        ),
+    ):
+        result = await skill._arun(  # pyright: ignore[reportPrivateUsage]
+            name="  Alice  ",
+            timezone="Asia/Shanghai",
+            language="zh-CN",
+        )
+
+    assert captured["user_id"] == "user_1"
+    assert captured["dump"] == {
+        "name": "Alice",
+        "timezone": "Asia/Shanghai",
+        "language": "zh-CN",
+    }
+    assert set(result.updated_fields) == {"name", "timezone", "language"}
+    mock_redis.delete.assert_awaited_once_with("intentkit:user:user_1")
+
+
+@pytest.mark.asyncio
+async def test_update_user_profile_clear_with_empty_string(mock_lead_runtime):
+    """Empty strings clear timezone and language; name is unaffected."""
+    from intentkit.core.lead.skills.update_user_profile import LeadUpdateUserProfile
+
+    skill = LeadUpdateUserProfile()
+
+    captured: dict[str, object] = {}
+
+    async def fake_patch(self, user_id):
+        captured["dump"] = self.model_dump(exclude_unset=True)
+        return MagicMock()
+
+    mock_redis = MagicMock()
+    mock_redis.delete = AsyncMock()
+
+    with (
+        patch(
+            "intentkit.core.lead.skills.update_user_profile.UserUpdate.patch",
+            new=fake_patch,
+        ),
+        patch(
+            "intentkit.core.lead.skills.update_user_profile.get_redis",
+            return_value=mock_redis,
+        ),
+    ):
+        result = await skill._arun(timezone="", language="   ")  # pyright: ignore[reportPrivateUsage]
+
+    assert captured["dump"] == {"timezone": None, "language": None}
+    assert set(result.updated_fields) == {"timezone", "language"}

@@ -72,6 +72,10 @@ from intentkit.core.lead.skills.update_team_agent import (
     UpdateTeamAgent,
     update_team_agent_skill,
 )
+from intentkit.core.lead.skills.update_user_profile import (
+    LeadUpdateUserProfile,
+    lead_update_user_profile_skill,
+)
 
 __all__ = [
     "CreateTeamAgent",
@@ -108,6 +112,8 @@ __all__ = [
     "lead_update_self_memory_skill",
     "ListTeamAgents",
     "list_team_agents_skill",
+    "LeadUpdateUserProfile",
+    "lead_update_user_profile_skill",
     "UpdateTeamAgent",
     "update_team_agent_skill",
 ]
