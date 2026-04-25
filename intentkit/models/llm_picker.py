@@ -22,15 +22,14 @@ def pick_summarize_model() -> str:
         LLMProvider.OPENAI_COMPATIBLE.is_configured
         and config.openai_compatible_model_lite
     ):
-        order.insert(
-            0, (config.openai_compatible_model_lite, LLMProvider.OPENAI_COMPATIBLE)
+        order.append(
+            (config.openai_compatible_model_lite, LLMProvider.OPENAI_COMPATIBLE)
         )
     if (
         LLMProvider.ANTHROPIC_COMPATIBLE.is_configured
         and config.anthropic_compatible_model_lite
     ):
-        order.insert(
-            0,
+        order.append(
             (config.anthropic_compatible_model_lite, LLMProvider.ANTHROPIC_COMPATIBLE),
         )
 
@@ -55,13 +54,13 @@ def pick_default_model() -> str:
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
-        order.insert(1, (config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
+        order.append((config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
     if (
         LLMProvider.ANTHROPIC_COMPATIBLE.is_configured
         and config.anthropic_compatible_model
     ):
-        order.insert(
-            1, (config.anthropic_compatible_model, LLMProvider.ANTHROPIC_COMPATIBLE)
+        order.append(
+            (config.anthropic_compatible_model, LLMProvider.ANTHROPIC_COMPATIBLE)
         )
 
     for model_id, provider in order:
