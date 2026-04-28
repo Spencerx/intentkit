@@ -15,6 +15,7 @@ def test_llm_model_filtering():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -32,6 +33,7 @@ def test_llm_model_filtering():
             LLMProvider.XAI,
             LLMProvider.OPENROUTER,
             LLMProvider.MINIMAX,
+            LLMProvider.MIMO_PLAN,
         }
 
         for model in models.values():
@@ -48,6 +50,7 @@ def test_llm_model_filtering():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -74,6 +77,7 @@ def test_llm_model_filtering():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -97,6 +101,7 @@ def test_llm_model_filtering():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -124,6 +129,7 @@ def test_llm_model_filtering():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -141,6 +147,33 @@ def test_llm_model_filtering():
         assert gpt5mini_or is not None
         assert gpt5mini_or.provider == LLMProvider.OPENROUTER
 
+    # Case 6: MiMo Token Plan models load when only MIMO_PLAN key is set
+    with patch("intentkit.models.llm.config") as mock_config:
+        mock_config.openai_api_key = None
+        mock_config.google_api_key = None
+        mock_config.deepseek_api_key = None
+        mock_config.xai_api_key = None
+        mock_config.openrouter_api_key = None
+        mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = "mimo-test-key"
+        mock_config.openai_compatible_api_key = None
+        mock_config.openai_compatible_base_url = None
+        mock_config.openai_compatible_model = None
+        mock_config.anthropic_compatible_api_key = None
+        mock_config.anthropic_compatible_base_url = None
+        mock_config.anthropic_compatible_model = None
+
+        models = load_default_llm_models()
+
+        mimo_pro = models.get("mimo_plan:mimo-v2.5-pro")
+        assert mimo_pro is not None
+        assert mimo_pro.provider == LLMProvider.MIMO_PLAN
+        assert mimo_pro.id == "mimo-v2.5-pro"
+
+        mimo_v25 = models.get("mimo_plan:mimo-v2.5")
+        assert mimo_v25 is not None
+        assert mimo_v25.provider == LLMProvider.MIMO_PLAN
+
 
 def test_model_id_index_suffix_matching():
     """Test that _MODEL_ID_INDEX includes base name entries for backward compat."""
@@ -154,6 +187,7 @@ def test_model_id_index_suffix_matching():
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
         mock_config.minimax_api_key = None
+        mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None

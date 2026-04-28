@@ -17,6 +17,7 @@ def pick_summarize_model() -> str:
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M2.7", LLMProvider.MINIMAX),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     if (
         LLMProvider.OPENAI_COMPATIBLE.is_configured
@@ -52,6 +53,7 @@ def pick_default_model() -> str:
         ("gpt-5.4-mini", LLMProvider.OPENAI),
         ("grok-4-1-fast-non-reasoning", LLMProvider.XAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
         order.append((config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
@@ -109,6 +111,7 @@ def pick_long_context_model() -> str:
         ("gpt-5.4-nano", LLMProvider.OPENAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M2.7", LLMProvider.MINIMAX),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
         order.append((config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))

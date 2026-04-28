@@ -242,6 +242,7 @@ class LLMProvider(str, Enum):
     XAI = "xai"
     OPENROUTER = "openrouter"
     MINIMAX = "minimax"
+    MIMO_PLAN = "mimo_plan"
     OLLAMA = "ollama"
     OPENAI_COMPATIBLE = "openai_compatible"
     ANTHROPIC_COMPATIBLE = "anthropic_compatible"
@@ -256,6 +257,7 @@ class LLMProvider(str, Enum):
             self.XAI: bool(config.xai_api_key),
             self.OPENROUTER: bool(config.openrouter_api_key),
             self.MINIMAX: bool(config.minimax_api_key),
+            self.MIMO_PLAN: bool(config.mimo_plan_api_key),
             self.OLLAMA: True,  # Ollama usually doesn't need a key
             self.OPENAI_COMPATIBLE: bool(
                 config.openai_compatible_api_key
@@ -279,6 +281,7 @@ class LLMProvider(str, Enum):
             self.XAI: "xAI",
             self.OPENROUTER: "OpenRouter",
             self.MINIMAX: "MiniMax",
+            self.MIMO_PLAN: "MiMo",
             self.OLLAMA: "Ollama",
             self.OPENAI_COMPATIBLE: config.openai_compatible_provider,
             self.ANTHROPIC_COMPATIBLE: config.anthropic_compatible_provider,
@@ -1059,6 +1062,38 @@ class MiniMaxLLM(LLMModel):
         return ChatAnthropic(**kwargs)
 
 
+class MimoPlanLLM(LLMModel):
+    """Xiaomi MiMo Token Plan LLM configuration (OpenAI-compatible API)."""
+
+    @override
+    async def create_instance(self, params: dict[str, Any] = {}) -> BaseChatModel:
+        """Create and return a ChatOpenAI instance configured for MiMo."""
+        from langchain_openai import ChatOpenAI
+
+        info = await self.model_info()
+
+        kwargs: dict[str, Any] = {
+            "model_name": info.id,
+            "openai_api_key": config.mimo_plan_api_key,
+            "openai_api_base": "https://api.xiaomimimo.com/v1",
+            "timeout": info.timeout,
+            "max_retries": 3,
+        }
+
+        if info.supports_temperature:
+            kwargs["temperature"] = self.temperature
+
+        if info.supports_frequency_penalty:
+            kwargs["frequency_penalty"] = self.frequency_penalty
+
+        if info.supports_presence_penalty:
+            kwargs["presence_penalty"] = self.presence_penalty
+
+        kwargs.update(params)
+
+        return ChatOpenAI(**kwargs)
+
+
 class AnthropicCompatibleLLM(LLMModel):
     """Anthropic Compatible LLM configuration."""
 
@@ -1152,6 +1187,7 @@ async def create_llm_model(
         LLMProvider.OLLAMA: OllamaLLM,
         LLMProvider.OPENAI: OpenAILLM,
         LLMProvider.MINIMAX: MiniMaxLLM,
+        LLMProvider.MIMO_PLAN: MimoPlanLLM,
         LLMProvider.OPENAI_COMPATIBLE: OpenAICompatibleLLM,
         LLMProvider.ANTHROPIC_COMPATIBLE: AnthropicCompatibleLLM,
     }
