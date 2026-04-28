@@ -1,5 +1,9 @@
-# Release v1.1.0
+# Release v1.2.0
 
 ## New Features
 
-- WeChat agents now proactively reach out before their reply window closes. WeChat only lets a bot push messages within a day of the user's last inbound message; once that window expires, scheduled posts and other proactive notifications stop arriving. About 30 minutes before the window closes, the agent now sends a friendly heads-up that prompts the user to reply with any message (or assign a new task) to keep the channel open, and folds in a quick status summary of the team's agents and any pending autonomous tasks.
+- Added Xiaomi's MiMo Token Plan as a built-in LLM provider. Operators with a MiMo subscription can now plug in `MIMO_PLAN_API_KEY` to make the new `mimo-v2.5-pro` and `mimo-v2.5` models available to agents directly, without going through OpenRouter.
+
+## Breaking Changes
+
+- The MiniMax provider environment variable was renamed from `MINIMAX_API_KEY` to `MINIMAX_PLAN_API_KEY` to reflect that the integration uses the MiniMax subscription plan. Deployments that referenced the old name need to update their configuration; there is no automatic fallback.
