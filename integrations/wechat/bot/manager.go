@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,37 +11,84 @@ import (
 	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/xid"
+	"gorm.io/gorm"
+
 	"github.com/crestalnetwork/intentkit/integrations/shared"
 	"github.com/crestalnetwork/intentkit/integrations/types"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/api"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/config"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/ilink"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/store"
-	"github.com/rs/xid"
-	"gorm.io/gorm"
 )
 
 type botEntry struct {
-	client           *ilink.Client
+	client *ilink.Client
+	// mu guards the mutable string fields below — they are read by the
+	// poll-loop goroutine, by sync-tick refreshes, and by timer-fire
+	// callbacks concurrently. The Manager-level lock is too coarse: it
+	// already arbitrates the bots map, and holding it across DB writes
+	// would serialize all per-team work.
+	mu               sync.RWMutex
 	typingTicket     string
-	lastContextToken string // cached to avoid DB write on every message
+	lastContextToken string // cached to skip DB writes when unchanged
+	defaultChatID    string // teams.default_channel_chat_id when channel is wechat; "" otherwise
+}
+
+func (e *botEntry) getDefaultChatID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.defaultChatID
+}
+
+func (e *botEntry) setDefaultChatID(v string) {
+	e.mu.Lock()
+	e.defaultChatID = v
+	e.mu.Unlock()
+}
+
+// updateContextTokenIfChanged returns true and updates the cache when the
+// new token differs from what we last saw. False means caller can skip the
+// follow-up DB write.
+func (e *botEntry) updateContextTokenIfChanged(token string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.lastContextToken == token {
+		return false
+	}
+	e.lastContextToken = token
+	return true
+}
+
+func (e *botEntry) getTypingTicket() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.typingTicket
+}
+
+func (e *botEntry) setTypingTicket(v string) {
+	e.mu.Lock()
+	e.typingTicket = v
+	e.mu.Unlock()
 }
 
 // Manager manages WeChat bot lifecycles for team channels.
 type Manager struct {
-	db          *gorm.DB
-	cfg         *config.Config
-	apiClient   *api.Client
-	storage     *shared.S3Storage
-	bots        map[string]*botEntry
-	cancelFuncs map[string]context.CancelFunc
-	tokenHashes map[string]string
-	mu          sync.RWMutex
-	stopCh      chan struct{}
+	db           *gorm.DB
+	cfg          *config.Config
+	apiClient    *api.Client
+	storage      *shared.S3Storage
+	sessionTimer *SessionTimerManager
+	bots         map[string]*botEntry
+	cancelFuncs  map[string]context.CancelFunc
+	tokenHashes  map[string]string
+	mu           sync.RWMutex
+	stopCh       chan struct{}
 }
 
-func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client, storage *shared.S3Storage) *Manager {
-	return &Manager{
+func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client, storage *shared.S3Storage, redisClient *redis.Client) *Manager {
+	m := &Manager{
 		db:          db,
 		cfg:         cfg,
 		apiClient:   apiClient,
@@ -50,14 +98,21 @@ func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client, storage 
 		tokenHashes: make(map[string]string),
 		stopCh:      make(chan struct{}),
 	}
+	m.sessionTimer = NewSessionTimerManager(
+		db, redisClient,
+		cfg.WxSessionWindow, cfg.WxSessionWarnBefore,
+		m.sendExpiringNotice,
+	)
+	return m
 }
 
 func (m *Manager) Start() {
 	ticker := time.NewTicker(time.Duration(m.cfg.WxNewChannelPollInterval) * time.Second)
 	defer ticker.Stop()
 
-	// Initial sync
+	// Restore must happen after syncBots so the botEntry map is populated.
 	m.syncBots()
+	m.restoreSessionTimers()
 
 	for {
 		select {
@@ -67,6 +122,35 @@ func (m *Manager) Start() {
 			return
 		}
 	}
+}
+
+// botKey is the map key under which an entry for a team's bot lives in
+// m.bots / m.cancelFuncs / m.tokenHashes.
+func botKey(teamID string) string { return "team:" + teamID }
+
+// getEntry fetches the live botEntry for a team. ok is false when the bot
+// is not currently running (e.g. channel disabled, or syncBots tore it
+// down). Holds the read lock for the duration of the call only.
+func (m *Manager) getEntry(teamID string) (*botEntry, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	entry, ok := m.bots[botKey(teamID)]
+	return entry, ok
+}
+
+// restoreSessionTimers schedules pre-expiry timers for every active wechat
+// team whose persisted state shows a still-open reply window.
+func (m *Manager) restoreSessionTimers() {
+	m.mu.RLock()
+	teamIDs := make([]string, 0, len(m.bots))
+	for key := range m.bots {
+		teamIDs = append(teamIDs, strings.TrimPrefix(key, "team:"))
+	}
+	m.mu.RUnlock()
+	if len(teamIDs) == 0 {
+		return
+	}
+	m.sessionTimer.Restore(context.Background(), teamIDs)
 }
 
 const heartbeatFile = "/tmp/healthy"
@@ -79,6 +163,7 @@ func writeHeartbeat() {
 
 func (m *Manager) Stop() {
 	close(m.stopCh)
+	m.sessionTimer.Stop()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -100,23 +185,50 @@ func (m *Manager) syncBots() {
 	activeIDs := make(map[string]bool)
 
 	for _, tc := range teamChannels {
-		key := "team:" + tc.TeamID
+		key := botKey(tc.TeamID)
 		activeIDs[key] = true
 		m.ensureTeamBotRunning(&tc)
 	}
+	// Pick up out-of-band changes to teams.default_channel_chat_id (e.g. via
+	// the Python push-channel API) on each sync tick. Ensure-time only sets
+	// it once; a wrong cached value would route notices to the wrong user.
+	m.refreshDefaultChatIDs()
 
 	// Stop bots for disabled/removed channels
 	m.mu.Lock()
+	stoppedTeams := make([]string, 0)
 	for id, cancel := range m.cancelFuncs {
 		if !activeIDs[id] {
 			cancel()
 			delete(m.bots, id)
 			delete(m.cancelFuncs, id)
 			delete(m.tokenHashes, id)
+			stoppedTeams = append(stoppedTeams, strings.TrimPrefix(id, "team:"))
 			slog.Info("Stopped and removed wechat bot", "id", id)
 		}
 	}
 	m.mu.Unlock()
+	for _, teamID := range stoppedTeams {
+		m.sessionTimer.Remove(teamID)
+	}
+}
+
+// refreshDefaultChatIDs re-reads teams.default_channel_chat_id for every
+// active wechat bot and updates the cached value on each entry. Cheap PK
+// lookups; runs once per sync tick.
+func (m *Manager) refreshDefaultChatIDs() {
+	m.mu.RLock()
+	teamIDs := make([]string, 0, len(m.bots))
+	for key := range m.bots {
+		teamIDs = append(teamIDs, strings.TrimPrefix(key, "team:"))
+	}
+	m.mu.RUnlock()
+	for _, teamID := range teamIDs {
+		chatID := m.fetchDefaultChatID(context.Background(), teamID)
+		if entry, ok := m.getEntry(teamID); ok {
+			entry.setDefaultChatID(chatID)
+		}
+	}
 
 	writeHeartbeat()
 }
@@ -166,8 +278,9 @@ func (m *Manager) ensureTeamBotRunning(tc *store.TeamChannel) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	entry := &botEntry{
-		client:       client,
-		typingTicket: typingTicket,
+		client:        client,
+		typingTicket:  typingTicket,
+		defaultChatID: m.fetchDefaultChatID(ctx, tc.TeamID),
 	}
 
 	go m.pollLoop(ctx, entry, tc.TeamID)
@@ -234,12 +347,9 @@ func (m *Manager) updateTeamChannelData(teamID, typingTicket string) {
 	if typingTicket == "" {
 		return
 	}
-	// Use JSONB merge to update only the typing_ticket key without overwriting other data (e.g. context_token)
-	err := m.db.Exec(
-		`UPDATE team_channel_data SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object('typing_ticket', to_jsonb(?::text)) WHERE team_id = ? AND channel_type = ?`,
-		typingTicket, teamID, "wechat",
-	).Error
-	if err != nil {
+	if err := store.MergeTeamChannelDataField(
+		context.Background(), m.db, teamID, "wechat", "typing_ticket", typingTicket,
+	); err != nil {
 		slog.Error("Failed to update typing_ticket", "team_id", teamID, "error", err)
 	}
 }
@@ -248,15 +358,96 @@ func (m *Manager) updateContextToken(teamID, contextToken string) {
 	if contextToken == "" {
 		return
 	}
-	// Update context_token in team_channel_data JSONB
-	// Use raw SQL to update only the context_token key without overwriting other data
-	err := m.db.Exec(
-		`UPDATE team_channel_data SET data = COALESCE(data, '{}'::jsonb) || jsonb_build_object('context_token', to_jsonb(?::text)) WHERE team_id = ? AND channel_type = ?`,
-		contextToken, teamID, "wechat",
-	).Error
-	if err != nil {
+	if err := store.MergeTeamChannelDataField(
+		context.Background(), m.db, teamID, "wechat", "context_token", contextToken,
+	); err != nil {
 		slog.Error("Failed to update context_token", "team_id", teamID, "error", err)
 	}
+}
+
+// fetchDefaultChatID returns teams.default_channel_chat_id when the team's
+// default_channel is "wechat", or "" otherwise. Errors are logged and treated
+// as "no default" — the timer simply won't arm until /default is run.
+func (m *Manager) fetchDefaultChatID(ctx context.Context, teamID string) string {
+	var chatID string
+	err := m.db.WithContext(ctx).Raw(
+		`SELECT default_channel_chat_id FROM teams
+		 WHERE id = ? AND default_channel = ? AND default_channel_chat_id IS NOT NULL`,
+		teamID, "wechat",
+	).Row().Scan(&chatID)
+	if err != nil {
+		// gorm returns sql.ErrNoRows when the team has no wechat default; that
+		// is the common case at startup, not worth logging.
+		if !errors.Is(err, gorm.ErrRecordNotFound) && err.Error() != "sql: no rows in result set" {
+			slog.Warn("wechat: failed to read default_channel_chat_id",
+				"team_id", teamID, "error", err)
+		}
+		return ""
+	}
+	return chatID
+}
+
+// sendExpiringNotice is the FireFunc passed to the SessionTimerManager. It
+// resolves the team's current push target and context_token at call time —
+// so a mid-window default-chat change is honored AND a freshly-restarted
+// process (whose in-memory cache hasn't been hydrated yet) can still send.
+// Then runs the lead agent with the wechat_session_expiring system trigger
+// and streams the response through the team's WechatSender, so the notice
+// reaches the user inside the still-open reply window.
+func (m *Manager) sendExpiringNotice(ctx context.Context, teamID string) error {
+	entry, ok := m.getEntry(teamID)
+	if !ok {
+		return fmt.Errorf("no active wechat bot for team %s", teamID)
+	}
+	chatID := entry.getDefaultChatID()
+	if chatID == "" {
+		return errors.New("no default_channel_chat_id — nothing to notify")
+	}
+	contextToken, err := m.fetchContextToken(ctx, teamID)
+	if err != nil {
+		return fmt.Errorf("read context_token: %w", err)
+	}
+	if contextToken == "" {
+		// No persisted context_token means no real inbound message has ever
+		// been seen — iLink would reject the send. The timer guards against
+		// this (state only exists after OnQualifyingUserMessage), but check
+		// anyway.
+		return errors.New("no persisted context_token — cannot push notice")
+	}
+
+	sender := NewWechatSender(entry.client, chatID, contextToken)
+	payload := map[string]interface{}{
+		"team_id":         teamID,
+		"channel_type":    "wechat",
+		"channel_user_id": chatID,
+		"chat_id":         chatID,
+		"message":         "",
+		"system_trigger":  SessionTriggerExpiring,
+	}
+	return m.apiClient.StreamTeamLead(ctx, payload, func(chatMsg types.ChatMessage) error {
+		shared.DispatchMessage(ctx, chatMsg, sender)
+		return nil
+	})
+}
+
+// fetchContextToken reads the current context_token from team_channel_data
+// for the team's wechat channel. Mirrors push.py's lookup so both proactive
+// paths use the same source of truth and survive a Go restart without any
+// in-memory hydration.
+func (m *Manager) fetchContextToken(ctx context.Context, teamID string) (string, error) {
+	var token string
+	err := m.db.WithContext(ctx).Raw(
+		`SELECT data->>'context_token' FROM team_channel_data
+		 WHERE team_id = ? AND channel_type = ?`,
+		teamID, "wechat",
+	).Row().Scan(&token)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || err.Error() == "sql: no rows in result set" {
+			return "", nil
+		}
+		return "", err
+	}
+	return token, nil
 }
 
 func getStringFromConfig(config map[string]interface{}, key string) string {
@@ -318,8 +509,7 @@ func (m *Manager) handleTeamMessage(entry *botEntry, msg ilink.WeixinMessage, te
 	slog.Info("Received wechat message", "team_id", teamID, "from", msg.FromUserID)
 
 	// Store latest context_token for proactive messaging (skip DB write if unchanged)
-	if msg.ContextToken != entry.lastContextToken {
-		entry.lastContextToken = msg.ContextToken
+	if entry.updateContextTokenIfChanged(msg.ContextToken) {
 		m.updateContextToken(teamID, msg.ContextToken)
 	}
 
@@ -330,25 +520,35 @@ func (m *Manager) handleTeamMessage(entry *botEntry, msg ilink.WeixinMessage, te
 			_ = entry.client.SendMessage(context.Background(), msg.FromUserID, msg.ContextToken, "Failed to set push channel.")
 		} else {
 			_ = entry.client.SendMessage(context.Background(), msg.FromUserID, msg.ContextToken, "This chat is now the default push channel.")
+			entry.setDefaultChatID(msg.FromUserID)
+			m.sessionTimer.OnQualifyingUserMessage(context.Background(), teamID)
 		}
 		return
 	}
 
+	// Other users chatting with the bot do not refresh the timer —
+	// proactive pushes only target the default chat.
+	if cur := entry.getDefaultChatID(); cur != "" && msg.FromUserID == cur {
+		m.sessionTimer.OnQualifyingUserMessage(context.Background(), teamID)
+	}
+
 	// Lazy-fetch typing_ticket on first message (requires user_id + context_token)
-	if entry.typingTicket == "" {
+	typingTicket := entry.getTypingTicket()
+	if typingTicket == "" {
 		cfgResp, err := entry.client.GetConfig(context.Background(), msg.FromUserID, msg.ContextToken)
 		if err != nil {
 			slog.Warn("Failed to get typing_ticket", "team_id", teamID, "error", err)
 		} else {
-			entry.typingTicket = cfgResp.TypingTicket
-			m.updateTeamChannelData(teamID, entry.typingTicket)
+			typingTicket = cfgResp.TypingTicket
+			entry.setTypingTicket(typingTicket)
+			m.updateTeamChannelData(teamID, typingTicket)
 		}
 	}
 
 	// Start periodic typing indicator while waiting for API response
 	typingCtx, typingCancel := context.WithCancel(context.Background())
-	if entry.typingTicket != "" {
-		_ = entry.client.SendTyping(typingCtx, msg.FromUserID, entry.typingTicket)
+	if typingTicket != "" {
+		_ = entry.client.SendTyping(typingCtx, msg.FromUserID, typingTicket)
 		go func() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
@@ -357,7 +557,7 @@ func (m *Manager) handleTeamMessage(entry *botEntry, msg ilink.WeixinMessage, te
 				case <-typingCtx.Done():
 					return
 				case <-ticker.C:
-					_ = entry.client.SendTyping(typingCtx, msg.FromUserID, entry.typingTicket)
+					_ = entry.client.SendTyping(typingCtx, msg.FromUserID, typingTicket)
 				}
 			}
 		}()

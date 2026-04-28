@@ -59,7 +59,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	manager := bot.NewManager(db, cfg, apiClient, storage)
+	manager := bot.NewManager(db, cfg, apiClient, storage, redisClient)
 
 	go manager.Start()
 	slog.Info("WeChat Integration Started")

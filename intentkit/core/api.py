@@ -22,6 +22,10 @@ from intentkit.core.engine import execute_agent, stream_agent
 from intentkit.core.lead.engine import stream_lead
 from intentkit.core.lead.service import verify_team_membership
 from intentkit.core.team.channel import set_push_channel, set_push_channel_if_empty
+from intentkit.core.team.wechat_session_notice import (
+    WECHAT_SESSION_EXPIRING,
+    build_expiring_prompt,
+)
 from intentkit.models.chat import (
     AuthorType,
     ChatMessage,
@@ -30,6 +34,11 @@ from intentkit.models.chat import (
 )
 from intentkit.models.user import User, UserUpdate
 from intentkit.utils.error import IntentKitAPIError
+
+# Set of recognized system_trigger values. Each value supplies its own
+# synthesized prompt and may override the author_type to TRIGGER so the
+# event is recorded in chat history without looking like a real user message.
+_SYSTEM_TRIGGERS: frozenset[str] = frozenset({WECHAT_SESSION_EXPIRING})
 
 # ⚠️ INTERNAL API ONLY - DO NOT EXPOSE TO PUBLIC INTERNET ⚠️
 core_router = APIRouter(
@@ -91,6 +100,11 @@ class LeadExecuteRequest(BaseModel):
     chat_id: str
     message: str
     attachments: list[ChatMessageAttachment] | None = None
+    # When set, the integration is asking the lead agent to handle a
+    # system-driven event (e.g. wechat reply window about to close) rather
+    # than a real user message. The `message` field is replaced with a
+    # synthesized prompt and the saved record is tagged AuthorType.TRIGGER.
+    system_trigger: str | None = None
 
 
 # Per-channel config: (user_lookup, bind_field, author_type, chat_id_prefix)
@@ -131,15 +145,31 @@ async def _resolve_lead(
     else:
         user_id = request.channel_user_id
 
+    # System-driven trigger: replace the (likely empty) caller message with
+    # a synthesized prompt and tag the saved record as TRIGGER so chat-UI
+    # consumers can hide it the same way they hide autonomous task triggers.
+    message_text = request.message
+    saved_author_type = author_type
+    if request.system_trigger:
+        if request.system_trigger not in _SYSTEM_TRIGGERS:
+            raise IntentKitAPIError(
+                400,
+                "Bad Request",
+                f"Unknown system_trigger: {request.system_trigger}",
+            )
+        if request.system_trigger == WECHAT_SESSION_EXPIRING:
+            message_text = await build_expiring_prompt(request.team_id)
+        saved_author_type = AuthorType.TRIGGER
+
     chat_msg = ChatMessageCreate(
         id=str(XID()),
         agent_id=f"team-{request.team_id}",
         chat_id=f"{chat_prefix}:{request.team_id}:{request.chat_id}",
         user_id=user_id,
         author_id=user_id,
-        author_type=author_type,
+        author_type=saved_author_type,
         thread_type=author_type,
-        message=request.message,
+        message=message_text,
         attachments=request.attachments,
     )
     return user_id, chat_msg

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hack-fan/config"
 
@@ -32,6 +33,15 @@ type Config struct {
 	// WeChat
 	WxNewChannelPollInterval int `env:"WX_NEW_CHANNEL_POLL_INTERVAL" default:"10"`
 
+	// WeChat session window — iLink only accepts proactive bot messages within
+	// the customer-service window of the user's last inbound message. The raw
+	// env strings are parsed into the resolved Duration fields below in Load().
+	WxSessionWindowRaw     string `env:"WX_SESSION_WINDOW" default:"24h"`
+	WxSessionWarnBeforeRaw string `env:"WX_SESSION_WARN_BEFORE" default:"30m"`
+
+	WxSessionWindow     time.Duration `yaml:"-"`
+	WxSessionWarnBefore time.Duration `yaml:"-"`
+
 	// Alert (forwards Error+ slog records to Telegram/Slack)
 	Alert alert.Config
 }
@@ -41,6 +51,24 @@ func Load() (*Config, error) {
 	if err := config.Load(&cfg); err != nil {
 		return nil, err
 	}
+
+	window, err := time.ParseDuration(cfg.WxSessionWindowRaw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid WX_SESSION_WINDOW %q: %w", cfg.WxSessionWindowRaw, err)
+	}
+	warnBefore, err := time.ParseDuration(cfg.WxSessionWarnBeforeRaw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid WX_SESSION_WARN_BEFORE %q: %w", cfg.WxSessionWarnBeforeRaw, err)
+	}
+	if warnBefore <= 0 || warnBefore >= window {
+		return nil, fmt.Errorf(
+			"WX_SESSION_WARN_BEFORE (%s) must be > 0 and < WX_SESSION_WINDOW (%s)",
+			warnBefore, window,
+		)
+	}
+	cfg.WxSessionWindow = window
+	cfg.WxSessionWarnBefore = warnBefore
+
 	return &cfg, nil
 }
 
