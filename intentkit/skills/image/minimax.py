@@ -21,12 +21,12 @@ class MiniMaxImageBase(ImageBaseTool):
 
     @override
     def has_native_key(self) -> bool:
-        return bool(config.minimax_api_key)
+        return bool(config.minimax_plan_api_key)
 
     @override
     async def _generate_native(self, prompt: str, images: list[bytes] | None) -> bytes:
         headers = {
-            "Authorization": f"Bearer {config.minimax_api_key}",
+            "Authorization": f"Bearer {config.minimax_plan_api_key}",
         }
 
         body: dict[str, object] = {

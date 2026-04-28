@@ -178,7 +178,7 @@ def test_csv_loads_cached_input_price_for_claude():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -202,7 +202,7 @@ def test_csv_cached_input_price_for_deepseek():
         mock_config.deepseek_api_key = "ds-test-key"
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None
@@ -226,7 +226,7 @@ def test_csv_cached_input_price_for_grok4():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = "xai-test-key"
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
         mock_config.openai_compatible_model = None

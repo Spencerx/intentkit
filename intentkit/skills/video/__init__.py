@@ -92,5 +92,5 @@ def available() -> bool:
         system_config.openai_api_key
         or system_config.google_api_key
         or system_config.xai_api_key
-        or system_config.minimax_api_key
+        or system_config.minimax_plan_api_key
     )

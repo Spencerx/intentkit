@@ -63,7 +63,7 @@ class _MockConfig:
         self.google_cloud_project = kwargs.get("google_cloud_project")
         self.xai_api_key = kwargs.get("xai_api_key")
         self.openrouter_api_key = kwargs.get("openrouter_api_key")
-        self.minimax_api_key = kwargs.get("minimax_api_key")
+        self.minimax_plan_api_key = kwargs.get("minimax_plan_api_key")
 
 
 def test_available_with_openai_key():

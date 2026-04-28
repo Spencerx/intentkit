@@ -14,7 +14,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -49,7 +49,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -76,7 +76,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -100,7 +100,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -128,7 +128,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -154,7 +154,7 @@ def test_llm_model_filtering():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = None
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = "mimo-test-key"
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None
@@ -186,7 +186,7 @@ def test_model_id_index_suffix_matching():
         mock_config.deepseek_api_key = None
         mock_config.xai_api_key = None
         mock_config.openrouter_api_key = "or-test-key"
-        mock_config.minimax_api_key = None
+        mock_config.minimax_plan_api_key = None
         mock_config.mimo_plan_api_key = None
         mock_config.openai_compatible_api_key = None
         mock_config.openai_compatible_base_url = None

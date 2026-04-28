@@ -256,7 +256,7 @@ class LLMProvider(str, Enum):
             self.DEEPSEEK: bool(config.deepseek_api_key),
             self.XAI: bool(config.xai_api_key),
             self.OPENROUTER: bool(config.openrouter_api_key),
-            self.MINIMAX: bool(config.minimax_api_key),
+            self.MINIMAX: bool(config.minimax_plan_api_key),
             self.MIMO_PLAN: bool(config.mimo_plan_api_key),
             self.OLLAMA: True,  # Ollama usually doesn't need a key
             self.OPENAI_COMPATIBLE: bool(
@@ -1046,7 +1046,7 @@ class MiniMaxLLM(LLMModel):
 
         kwargs: dict[str, Any] = {
             "model": info.id,
-            "api_key": config.minimax_api_key,
+            "api_key": config.minimax_plan_api_key,
             "base_url": "https://api.minimax.io/anthropic",
             "timeout": info.timeout,
             "max_retries": 3,
