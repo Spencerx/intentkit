@@ -1,14 +1,5 @@
-# Release v1.0.0
+# Release v1.1.0
 
 ## New Features
 
-- WeChat agents now accept voice, video, and file messages in addition to images. Users can send an audio note, a short video, or a document and the agent will receive the content directly instead of a "type not supported" fallback.
-
-## Improvements
-
-- Expanded the catalog of selectable LLM models — the latest DeepSeek, Claude Opus, Kimi, and MiMo releases are now available when configuring agents.
-- When an agent's underlying model returns an empty response (for example, Gemini rejecting a malformed tool call), the conversation thread now recovers automatically instead of becoming stuck. The offending turn is cleaned up, and internal logs capture the surrounding tool-call history so engineers can diagnose the cause.
-
-## Other
-
-- Refreshed internal dependencies across the Python backend and Go integrations.
+- WeChat agents now proactively reach out before their reply window closes. WeChat only lets a bot push messages within a day of the user's last inbound message; once that window expires, scheduled posts and other proactive notifications stop arriving. About 30 minutes before the window closes, the agent now sends a friendly heads-up that prompts the user to reply with any message (or assign a new task) to keep the channel open, and folds in a quick status summary of the team's agents and any pending autonomous tasks.
