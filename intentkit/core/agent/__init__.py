@@ -14,6 +14,7 @@ from .management import (
 )
 from .notifications import send_agent_notification
 from .public_info import override_public_info, update_public_info
+from .publish import publish_agent, unpublish_agent
 from .queries import get_agent, get_agent_by_id_or_slug, iterate_agent_id_batches
 from .wallet import process_agent_wallet, set_agent_safe_token_spending_limit
 
@@ -36,4 +37,6 @@ __all__ = [
     "update_agents_statistics",
     "update_public_info",
     "override_public_info",
+    "publish_agent",
+    "unpublish_agent",
 ]

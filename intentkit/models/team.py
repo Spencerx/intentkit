@@ -171,6 +171,13 @@ class TeamTable(Base):
         default=TeamPlan.NONE.value,
         server_default=TeamPlan.NONE.value,
     )
+    public_agent_limit: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+        comment="Maximum number of agents this team is allowed to publish",
+    )
     plan_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -363,6 +370,14 @@ class Team(TeamCreate):
         TeamPlan,
         Field(default=TeamPlan.NONE, description="Pricing plan tier"),
     ] = TeamPlan.NONE
+    public_agent_limit: Annotated[
+        int,
+        Field(
+            default=1,
+            ge=0,
+            description="Maximum number of agents this team is allowed to publish",
+        ),
+    ] = 1
 
     @field_validator("plan", mode="before")
     @classmethod

@@ -15,6 +15,8 @@ from intentkit.core.agent import (
     create_agent,
     get_agent_by_id_or_slug,
     patch_agent,
+    publish_agent,
+    unpublish_agent,
 )
 from intentkit.core.lead import invalidate_lead_cache
 from intentkit.core.team.membership import check_permission
@@ -22,6 +24,7 @@ from intentkit.core.template import render_agent
 from intentkit.models.agent import (
     Agent,
     AgentCreate,
+    AgentPublicInfo,
     AgentResponse,
     AgentTable,
     AgentUpdate,
@@ -328,6 +331,66 @@ async def reactivate_agent(
 
     invalidate_lead_cache(team_id)
     return Response(status_code=204)
+
+
+@team_agent_router.put(
+    "/teams/{team_id}/agents/{agent_id}/publish",
+    tags=["Agent"],
+    operation_id="team_publish_agent",
+    summary="Publish Agent (Team)",
+)
+async def publish_agent_endpoint(
+    agent_id: str = Path(..., description="Agent ID"),
+    public_info: AgentPublicInfo = Body(
+        ..., description="Public info to apply when publishing"
+    ),
+    auth: tuple[str, str] = Depends(verify_team_member),
+) -> Response:
+    """Publish a team agent.
+
+    Sets visibility to PUBLIC and updates the agent's public info using
+    update semantics (only fields explicitly supplied are written). The
+    owning team's ``public_agent_limit`` is enforced for newly published
+    agents; re-publishing an already public agent always succeeds.
+    """
+    _user_id, team_id = auth
+    agent = await get_team_agent(agent_id, team_id)
+    latest_agent = await publish_agent(agent_id=agent.id, public_info=public_info)
+    agent_data = await AgentData.get(latest_agent.id)
+    agent_response = await AgentResponse.from_agent(latest_agent, agent_data)
+    return Response(
+        content=agent_response.model_dump_json(),
+        media_type="application/json",
+        headers={"ETag": agent_response.etag()},
+    )
+
+
+@team_agent_router.put(
+    "/teams/{team_id}/agents/{agent_id}/unpublish",
+    tags=["Agent"],
+    operation_id="team_unpublish_agent",
+    summary="Unpublish Agent (Team)",
+)
+async def unpublish_agent_endpoint(
+    agent_id: str = Path(..., description="Agent ID"),
+    auth: tuple[str, str] = Depends(verify_team_member),
+) -> Response:
+    """Unpublish a team agent.
+
+    Flips visibility back to TEAM and removes every team subscription
+    pointing at this agent. Activity / post feed entries are preserved so
+    historical timelines stay intact.
+    """
+    _user_id, team_id = auth
+    agent = await get_team_agent(agent_id, team_id)
+    latest_agent = await unpublish_agent(agent_id=agent.id)
+    agent_data = await AgentData.get(latest_agent.id)
+    agent_response = await AgentResponse.from_agent(latest_agent, agent_data)
+    return Response(
+        content=agent_response.model_dump_json(),
+        media_type="application/json",
+        headers={"ETag": agent_response.etag()},
+    )
 
 
 @team_agent_router.put(

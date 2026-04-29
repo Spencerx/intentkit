@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_db
-from intentkit.models.agent import Agent
+from intentkit.models.agent import Agent, AgentPublicInfo
 from intentkit.utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
@@ -192,6 +192,23 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
 
     return JSONResponse(
         content=schema,
+        media_type="application/json",
+    )
+
+
+@schema_router.get(
+    "/schema/agent-public-info",
+    tags=["Metadata"],
+    operation_id="get_agent_public_info_schema",
+)
+async def get_agent_public_info_schema() -> JSONResponse:
+    """Get the JSON schema for the AgentPublicInfo model.
+
+    Used by team frontends when collecting public info as part of publishing
+    an agent.
+    """
+    return JSONResponse(
+        content=AgentPublicInfo.model_json_schema(),
         media_type="application/json",
     )
 
