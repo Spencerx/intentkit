@@ -1,10 +1,13 @@
-# Release v1.2.1
-
-## New Features
-
-- Teams can now publish their agents to the public catalog directly from the team UI. Publishing prompts the operator to fill in the agent's public-facing info (description, ticker, example prompts, and so on) and immediately makes the agent visible to other teams. Unpublishing flips it back to team-only and automatically removes every subscription that pointed at the agent so other teams stop seeing its activity going forward; previously delivered timeline posts and activity feed entries are preserved.
-- Each team now has a `public_agent_limit` (default 1) that caps how many of the team's agents can be published at the same time. Operators can raise or lower this quota for any team via the new `scripts/admin_set_public_agent_limit.py` tool.
+# Release v1.2.2
 
 ## Improvements
 
-- Refreshed dependencies via `uv sync --upgrade`.
+- Streamlined how the team lead delegates to its built-in sub-agents. The "task manager" was folded into the agent manager, since autonomous tasks always belong to an agent. Operators now have a single destination for everything about a team agent — creating it, configuring it, and scheduling its autonomous tasks — which removes a class of routing mistakes the lead used to make between the two near-identical helpers.
+
+## Bug Fixes
+
+- Fixed an issue where the agent manager could suggest skills that were not actually enabled in the current deployment. The skill catalog shown to the LLM is now filtered against the system configuration, so unavailable categories never end up in a generated agent draft.
+
+## Other
+
+- Refreshed Go integration dependencies.
