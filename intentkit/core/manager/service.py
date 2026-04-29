@@ -13,6 +13,12 @@ from fastapi import status
 
 from intentkit.core.agent import get_agent
 from intentkit.models.agent import AgentPublicInfo, AgentUserInput
+from intentkit.skills.availability import (
+    filter_unavailable_states,
+    import_skill_category,
+    is_individual_skill_available,
+    is_skill_category_available,
+)
 from intentkit.utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
@@ -50,8 +56,18 @@ def agent_draft_json_schema() -> dict[str, object]:
                 if not schema_path.is_file():
                     continue
 
+                category = entry.name
+
+                module = import_skill_category(category)
+                if module is None or not is_skill_category_available(module):
+                    logger.info(
+                        "Skipped skill category '%s' for manager schema: not available",
+                        category,
+                    )
+                    continue
+
                 try:
-                    skills_properties[entry.name] = _load_skill_schema(schema_path)
+                    skill_schema = _load_skill_schema(schema_path)
                 except (
                     OSError,
                     ValueError,
@@ -59,9 +75,19 @@ def agent_draft_json_schema() -> dict[str, object]:
                     jsonref.JsonRefError,
                 ) as exc:
                     logger.warning(
-                        "Failed to load schema for skill '%s': %s", entry.name, exc
+                        "Failed to load schema for skill '%s': %s", category, exc
                     )
                     continue
+
+                schema_props = skill_schema.get("properties")
+                if isinstance(schema_props, dict):
+                    states = schema_props.get("states")
+                    if isinstance(states, dict):
+                        schema_props["states"] = filter_unavailable_states(
+                            module, category, states
+                        )
+
+                skills_properties[category] = skill_schema
     except (AttributeError, ModuleNotFoundError, ImportError):
         logger.warning("intentkit skills package not found when building schema")
         return schema
@@ -88,28 +114,38 @@ def get_skills_hierarchical_text() -> str:
                 if not schema_path.is_file():
                     continue
 
+                category = entry.name
+
+                module = import_skill_category(category)
+                if module is None or not is_skill_category_available(module):
+                    logger.info(
+                        "Skipped skill category '%s' for hierarchical text: "
+                        "not available",
+                        category,
+                    )
+                    continue
+
                 try:
                     skill_schema = _load_skill_schema(schema_path)
-                    skill_name = entry.name
                     skill_title = skill_schema.get(
-                        "title", skill_name.replace("_", " ").title()
+                        "title", category.replace("_", " ").title()
                     )
                     skill_description = skill_schema.get(
                         "description", "No description available"
                     )
                     skill_tags = cast(list[str], skill_schema.get("x-tags", ["Other"]))
 
-                    # Use the first tag as the primary category
+                    # Use the first tag as the primary group
                     primary_category = skill_tags[0] if skill_tags else "Other"
 
-                    if primary_category not in categories:
-                        categories[primary_category] = []
-
-                    # Extract individual skills from states.properties
                     individual_skills: list[dict[str, str]] = []
                     states_props = _get_states_properties(skill_schema)
                     if states_props:
                         for ind_name, ind_def in states_props.items():
+                            if not is_individual_skill_available(
+                                module, category, ind_name
+                            ):
+                                continue
                             ind_desc = (
                                 ind_def.get("description", "No description available")
                                 if isinstance(ind_def, dict)
@@ -119,9 +155,17 @@ def get_skills_hierarchical_text() -> str:
                                 {"name": ind_name, "description": ind_desc}
                             )
 
+                    # Drop the category entirely if every skill was filtered;
+                    # surfacing an empty group would just be noise to the LLM.
+                    if states_props and not individual_skills:
+                        continue
+
+                    if primary_category not in categories:
+                        categories[primary_category] = []
+
                     categories[primary_category].append(
                         {
-                            "name": skill_name,
+                            "name": category,
                             "title": skill_title,
                             "description": skill_description,
                             "individual_skills": individual_skills,
@@ -135,7 +179,7 @@ def get_skills_hierarchical_text() -> str:
                     jsonref.JsonRefError,
                 ) as exc:
                     logger.warning(
-                        "Failed to load schema for skill '%s': %s", entry.name, exc
+                        "Failed to load schema for skill '%s': %s", category, exc
                     )
                     continue
     except (AttributeError, ModuleNotFoundError, ImportError):

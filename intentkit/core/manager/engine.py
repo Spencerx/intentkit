@@ -102,6 +102,12 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
         ```
         The `enabled` flag is at the category level, and `states` refers to specific skills.
         For content involving sensitive material, select `private`. For content suitable for all users, select `public`.
+
+        Internet search: to give an agent web search, set the agent field `search_internet` to `true`.
+        That switch enables the LLM provider's native web search and is the right tool for general-purpose
+        searching. Do NOT add categories like `tavily`, `firecrawl`, `web_scraper`, etc. just to give the
+        agent search ability — those categories are backups for specialised scraping/extraction needs and
+        only belong in the skills config when the agent really requires them.
         """
         "\n\n### Public Information\n\n"
         "Only agents that have already been deployed at least once can have their public"

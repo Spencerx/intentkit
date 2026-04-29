@@ -1,4 +1,3 @@
-import importlib
 import json
 import logging
 from pathlib import Path
@@ -11,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_db
 from intentkit.models.agent import Agent, AgentPublicInfo
+from intentkit.skills.availability import (
+    filter_unavailable_states,
+    import_skill_category,
+    is_skill_category_available,
+)
 from intentkit.utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
@@ -20,78 +24,6 @@ schema_router = APIRouter()
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-
-
-def _import_skill_category(category: str) -> Any | None:
-    """Import a skill category module, returning None on failure."""
-    try:
-        return importlib.import_module(f"intentkit.skills.{category}")
-    except Exception as e:
-        logger.warning("Could not import skill category '%s': %s", category, e)
-        return None
-
-
-def _is_skill_category_available(module: Any) -> bool:
-    """Check if a skill category is available based on its available() function."""
-    if hasattr(module, "available"):
-        return module.available()
-    return True
-
-
-def _find_skill_getter(module: Any, category: str) -> Any | None:
-    """Find the get_xxx_skill getter function in a skill module.
-
-    Tries the conventional name first, then falls back to scanning module attributes
-    for categories where the getter name doesn't match (e.g. moralis -> get_wallet_skill).
-    """
-    # Try conventional name first
-    getter = getattr(module, f"get_{category}_skill", None)
-    if getter is not None:
-        return getter
-    # Fallback: scan for get_*_skill pattern
-    for attr_name in dir(module):
-        if attr_name.startswith("get_") and attr_name.endswith("_skill"):
-            return getattr(module, attr_name)
-    return None
-
-
-def _filter_unavailable_skills_from_schema(
-    module: Any, category: str, states_schema: dict[str, Any]
-) -> dict[str, Any]:
-    """Filter out individually unavailable skills from a states schema."""
-    properties = states_schema.get("properties", {})
-    if not properties:
-        return states_schema
-
-    getter = _find_skill_getter(module, category)
-    if getter is None:
-        return states_schema
-
-    filtered_properties = {}
-    for skill_name, skill_schema in properties.items():
-        try:
-            skill = getter(skill_name)
-            if skill is not None and not skill.available():
-                logger.info(
-                    "Filtered out skill '%s/%s': not available",
-                    category,
-                    skill_name,
-                )
-                continue
-        except Exception as e:
-            logger.debug(
-                "Could not check availability of skill '%s/%s': %s",
-                category,
-                skill_name,
-                e,
-            )
-        filtered_properties[skill_name] = skill_schema
-
-    result = {**states_schema, "properties": filtered_properties}
-    # Remove filtered skills from required list if present
-    if "required" in result:
-        result["required"] = [r for r in result["required"] if r in filtered_properties]
-    return result
 
 
 def _simplify_skill_schema(skill_schema: dict[str, Any]) -> dict[str, Any]:
@@ -167,23 +99,20 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         filtered_skills: dict[str, Any] = {}
 
         for category, skill_schema in original_skills.items():
-            # Import and check category-level availability
-            module = _import_skill_category(category)
-            if module is None or not _is_skill_category_available(module):
+            module = import_skill_category(category)
+            if module is None or not is_skill_category_available(module):
                 logger.info(
                     "Filtered out skill '%s': not available in current config",
                     category,
                 )
                 continue
 
-            # Simplify the skill schema
             simplified = _simplify_skill_schema(skill_schema)
 
-            # Filter out individually unavailable skills from states
             states = simplified.get("properties", {}).get("states")
             if states:
-                simplified["properties"]["states"] = (
-                    _filter_unavailable_skills_from_schema(module, category, states)
+                simplified["properties"]["states"] = filter_unavailable_states(
+                    module, category, states
                 )
 
             filtered_skills[category] = simplified
