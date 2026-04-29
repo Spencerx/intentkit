@@ -70,8 +70,8 @@ async def _build_lead_agent(team_id: str) -> Agent:
     prompt = (
         "### Sub-Agents\n\n"
         "Use `lead_call_agent` to delegate:\n\n"
-        "- `agent-manager`: Agent CRUD.\n"
-        "- `task-manager`: Autonomous task scheduling and management.\n"
+        "- `agent-manager`: Manage team agents — create, configure, update, "
+        "and schedule autonomous (cron) tasks on them.\n"
         "- `self-updater`: Update your own name, avatar, personality, or memory.\n"
         "- `content-manager`: Read team activities and posts.\n"
         "- `user-manager`: Update the current user's profile (name, timezone, language).\n\n"

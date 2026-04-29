@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Sub-agent slug constants
 SLUG_AGENT_MANAGER = "agent-manager"
-SLUG_TASK_MANAGER = "task-manager"
 SLUG_SELF_UPDATER = "self-updater"
 SLUG_CONTENT_MANAGER = "content-manager"
 SLUG_USER_MANAGER = "user-manager"
@@ -109,10 +108,6 @@ from intentkit.core.lead.sub_agents.self_updater import (  # noqa: E402
     build_self_updater,
     get_self_updater_skills,
 )
-from intentkit.core.lead.sub_agents.task_manager import (  # noqa: E402
-    build_task_manager,
-    get_task_manager_skills,
-)
 from intentkit.core.lead.sub_agents.user_manager import (  # noqa: E402
     build_user_manager,
     get_user_manager_skills,
@@ -122,19 +117,12 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
     SLUG_AGENT_MANAGER: SubAgentDefinition(
         slug=SLUG_AGENT_MANAGER,
         description=(
-            "Manages team agents: create, update, configure, list agents. "
-            "Also provides LLM model info and available skills for agent configuration."
+            "Manages team agents end-to-end: create, update, configure, list "
+            "agents, and schedule autonomous tasks on them. Also exposes LLM "
+            "model info and available skills for agent configuration."
         ),
         build_fn=build_agent_manager,
         skills_fn=get_agent_manager_skills,
-    ),
-    SLUG_TASK_MANAGER: SubAgentDefinition(
-        slug=SLUG_TASK_MANAGER,
-        description=(
-            "Manages autonomous tasks: list, add, edit, delete scheduled tasks for agents."
-        ),
-        build_fn=build_task_manager,
-        skills_fn=get_task_manager_skills,
     ),
     SLUG_SELF_UPDATER: SubAgentDefinition(
         slug=SLUG_SELF_UPDATER,

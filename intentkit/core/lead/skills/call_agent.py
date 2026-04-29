@@ -43,7 +43,7 @@ class LeadCallAgent(LeadSkill):
     """Team-aware call_agent that supports both in-memory sub-agents and DB agents.
 
     Resolution order:
-    1. Check in-memory sub-agent registry (agent-manager, task-manager, etc.)
+    1. Check in-memory sub-agent registry (agent-manager, self-updater, etc.)
     2. Fall back to database agent lookup (scoped to team)
     """
 
