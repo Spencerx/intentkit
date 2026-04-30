@@ -85,6 +85,7 @@ def render_attachments_awareness(
         match att_type:
             case (
                 ChatMessageAttachmentType.IMAGE
+                | ChatMessageAttachmentType.AUDIO
                 | ChatMessageAttachmentType.VIDEO
                 | ChatMessageAttachmentType.FILE
                 | ChatMessageAttachmentType.LINK
@@ -129,10 +130,11 @@ async def get_start_message_attachments(
     return context.start_message_attachments
 
 
-ForwardableAttachmentType = Literal["image", "video", "file"]
+ForwardableAttachmentType = Literal["image", "audio", "video", "file"]
 
 _ATTACHMENT_TYPE_MAP: dict[str, ChatMessageAttachmentType] = {
     "image": ChatMessageAttachmentType.IMAGE,
+    "audio": ChatMessageAttachmentType.AUDIO,
     "video": ChatMessageAttachmentType.VIDEO,
     "file": ChatMessageAttachmentType.FILE,
 }
@@ -142,7 +144,7 @@ class AttachmentRef(BaseModel):
     """Reference to an attachment for forwarding to another agent."""
 
     type: ForwardableAttachmentType = Field(
-        ..., description="Attachment type: image, video, or file"
+        ..., description="Attachment type: image, audio, video, or file"
     )
     url: str = Field(..., description="URL of the attachment")
 
@@ -169,7 +171,7 @@ class CallAgentInput(BaseModel):
     message: str = Field(..., description="Message to send")
     attachments: list[AttachmentRef] | None = Field(
         None,
-        description="Optional attachments (images, videos, files) to forward to the target agent. Use when delegating tasks that need media from previous messages.",
+        description="Optional attachments (images, audio, videos, files) to forward to the target agent. Use when delegating tasks that need media from previous messages.",
     )
 
 

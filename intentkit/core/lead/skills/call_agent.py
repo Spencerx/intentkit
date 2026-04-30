@@ -35,7 +35,7 @@ class LeadCallAgentInput(BaseModel):
     message: str = Field(..., description="Message to send")
     attachments: list[AttachmentRef] | None = Field(
         None,
-        description="Optional attachments (images, videos, files) to forward to the sub-agent. Use when delegating tasks that need media from previous messages.",
+        description="Optional attachments (images, audio, videos, files) to forward to the sub-agent. Use when delegating tasks that need media from previous messages.",
     )
 
 

@@ -33,6 +33,7 @@ class ChatMessageAttachmentType(str, Enum):
 
     LINK = "link"
     IMAGE = "image"
+    AUDIO = "audio"
     VIDEO = "video"
     FILE = "file"
     XMTP = "xmtp"
@@ -65,14 +66,15 @@ class AuthorType(str, Enum):
 class ChatMessageAttachment(TypedDict):
     """Chat message attachment model.
 
-    An attachment can be a link, image, or file that is associated with a chat message.
+    An attachment can be a link, image, audio, video, or file (plus channel-
+    specific types like xmtp/card/choice) associated with a chat message.
     """
 
     type: Annotated[
         ChatMessageAttachmentType,
         Field(
             ...,
-            description="Type of the attachment (link, image, or file)",
+            description="Type of the attachment (link, image, audio, video, file, etc.)",
             examples=["link"],
         ),
     ]

@@ -65,10 +65,70 @@ logger = logging.getLogger(__name__)
 _FORWARDABLE_TYPES = frozenset(
     {
         ChatMessageAttachmentType.IMAGE,
+        ChatMessageAttachmentType.AUDIO,
         ChatMessageAttachmentType.VIDEO,
         ChatMessageAttachmentType.FILE,
     }
 )
+
+# Maps each forwardable attachment type to (model capability flag,
+# unsupported-error system message). Image keeps the legacy OpenAI-style
+# `image_url` block, accepted by every LangChain provider adapter we use.
+# The other three emit LangChain v0.3 standard multimodal blocks
+# `{"type": ..., "url": ...}` — currently only langchain-google-genai 3.2+
+# converts these to provider Parts. See _MEDIA_PROVIDER_SUPPORT.
+_MEDIA_INPUT_SPECS: list[tuple[ChatMessageAttachmentType, str, SystemMessageType]] = [
+    (
+        ChatMessageAttachmentType.IMAGE,
+        "supports_image_input",
+        SystemMessageType.IMAGE_INPUT_NOT_SUPPORTED,
+    ),
+    (
+        ChatMessageAttachmentType.AUDIO,
+        "supports_audio_input",
+        SystemMessageType.AUDIO_INPUT_NOT_SUPPORTED,
+    ),
+    (
+        ChatMessageAttachmentType.VIDEO,
+        "supports_video_input",
+        SystemMessageType.VIDEO_INPUT_NOT_SUPPORTED,
+    ),
+    (
+        ChatMessageAttachmentType.FILE,
+        "supports_file_input",
+        SystemMessageType.FILE_INPUT_NOT_SUPPORTED,
+    ),
+]
+
+# Providers whose LangChain adapter accepts our content-block shape for each
+# media type. Non-image types use the v0.3 standard block which currently
+# only langchain-google-genai handles; OpenAI/Anthropic require base64 data
+# blocks (`input_audio` / `document`) and are not yet implemented. A model
+# advertising capability=true on an unsupported provider is gated the same
+# way as one that doesn't advertise the capability — better than emitting
+# blocks that crash mid-stream with AGENT_INTERNAL_ERROR.
+_MEDIA_PROVIDER_SUPPORT: dict[ChatMessageAttachmentType, set[LLMProvider] | None] = {
+    ChatMessageAttachmentType.IMAGE: None,  # all providers
+    ChatMessageAttachmentType.AUDIO: {LLMProvider.GOOGLE},
+    ChatMessageAttachmentType.VIDEO: {LLMProvider.GOOGLE},
+    ChatMessageAttachmentType.FILE: {LLMProvider.GOOGLE},
+}
+
+
+def _model_can_deliver_media(
+    atype: ChatMessageAttachmentType, provider: LLMProvider
+) -> bool:
+    allowed = _MEDIA_PROVIDER_SUPPORT.get(atype)
+    return allowed is None or provider in allowed
+
+
+def _build_media_content_block(
+    atype: ChatMessageAttachmentType, url: str
+) -> dict[str, Any]:
+    if atype == ChatMessageAttachmentType.IMAGE:
+        return {"type": "image_url", "image_url": {"url": url}}
+    return {"type": atype.value, "url": url}
+
 
 # Cap raw_chunks to prevent unbounded memory growth in super_mode
 _MAX_RAW_CHUNKS = 200
@@ -810,24 +870,30 @@ async def stream_agent_raw(
 
     last = start
 
-    # Extract images from attachments
-    image_urls = []
+    # Group media URLs by attachment type and gate each on the model's
+    # corresponding supports_<type>_input capability.
+    media_urls_by_type: dict[ChatMessageAttachmentType, list[str]] = {
+        atype: [] for atype, _, _ in _MEDIA_INPUT_SPECS
+    }
     if user_message.attachments:
-        image_urls = [
-            str(att["url"])
-            for att in user_message.attachments
-            if "type" in att
-            and att["type"] == ChatMessageAttachmentType.IMAGE
-            and "url" in att
-            and att["url"] is not None
-        ]
-    if image_urls and not model.supports_image_input:
-        yield await _create_system_error_response(
-            SystemMessageType.IMAGE_INPUT_NOT_SUPPORTED,
-            user_message,
-            time.perf_counter() - start,
-        )
-        return
+        for att in user_message.attachments:
+            atype = att.get("type")
+            url = att.get("url")
+            if atype in media_urls_by_type and url is not None:
+                media_urls_by_type[atype].append(str(url))
+
+    for atype, capability, error_type in _MEDIA_INPUT_SPECS:
+        if not media_urls_by_type[atype]:
+            continue
+        if not getattr(model, capability) or not _model_can_deliver_media(
+            atype, model.provider
+        ):
+            yield await _create_system_error_response(
+                error_type,
+                user_message,
+                time.perf_counter() - start,
+            )
+            return
 
     input_message = user_message.message
 
@@ -861,20 +927,22 @@ async def stream_agent_raw(
     messages = [
         HumanMessage(content=input_message),
     ]
-    if image_urls:
+    for atype, _, _ in _MEDIA_INPUT_SPECS:
+        urls = media_urls_by_type[atype]
+        if not urls:
+            continue
         logger.info(
-            "Passing %d image url(s) to LLM for agent=%s chat=%s: %s",
-            len(image_urls),
+            "Passing %d %s url(s) to LLM for agent=%s chat=%s: %s",
+            len(urls),
+            atype.value,
             user_message.agent_id,
             user_message.chat_id,
-            image_urls,
+            urls,
         )
         messages.extend(
             [
-                HumanMessage(
-                    content=[{"type": "image_url", "image_url": {"url": image_url}}]
-                )
-                for image_url in image_urls
+                HumanMessage(content=[_build_media_content_block(atype, url)])
+                for url in urls
             ]
         )
 

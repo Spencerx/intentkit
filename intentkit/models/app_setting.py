@@ -26,6 +26,9 @@ class SystemMessageType(str, Enum):
     RECURSION_LIMIT_EXCEEDED = "recursion_limit_exceeded"
     TIMEOUT_ERROR = "timeout_error"
     IMAGE_INPUT_NOT_SUPPORTED = "image_input_not_supported"
+    AUDIO_INPUT_NOT_SUPPORTED = "audio_input_not_supported"
+    VIDEO_INPUT_NOT_SUPPORTED = "video_input_not_supported"
+    FILE_INPUT_NOT_SUPPORTED = "file_input_not_supported"
 
 
 # Default system messages
@@ -40,6 +43,9 @@ DEFAULT_SYSTEM_MESSAGES = {
     "recursion_limit_exceeded": "The agent reached the maximum recursion limit. Please type 'continue' to resume execution.",
     "timeout_error": "Network request timed out or the LLM is overloaded. Please try again.",
     "image_input_not_supported": "This agent's current model does not support image input. Please switch to an image-capable model or send text instead.",
+    "audio_input_not_supported": "This agent's current model does not support audio input. Please switch to an audio-capable model or send text instead.",
+    "video_input_not_supported": "This agent's current model does not support video input. Please switch to a video-capable model or send text instead.",
+    "file_input_not_supported": "This agent's current model does not support file input. Please switch to a file-capable model or send text instead.",
 }
 
 # In-memory cache for app settings

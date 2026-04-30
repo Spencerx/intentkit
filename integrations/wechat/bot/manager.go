@@ -659,8 +659,10 @@ func (m *Manager) handleInboundImage(teamID, fromUserID string, img ilink.ImageI
 
 // handleInboundVoice downloads, decrypts, and uploads an inbound voice
 // message. No AttachVoice type exists, so it's forwarded as a file
-// attachment; LLMs that support audio input can consume the URL, others
-// will surface an "unsupported" error at the engine layer.
+// attachment. WeChat sends SILK-v3 which no LLM accepts directly; we
+// transcode to MP3 (Gemini-compatible) before upload. If transcoding
+// fails, fall back to uploading the original SILK so the message at
+// least lands in storage for diagnostics.
 func (m *Manager) handleInboundVoice(teamID, fromUserID string, vi ilink.VoiceItem) (types.ChatMessageAttach, bool) {
 	slog.Info("wechat voice: received",
 		"team_id", teamID,
@@ -673,16 +675,37 @@ func (m *Manager) handleInboundVoice(teamID, fromUserID string, vi ilink.VoiceIt
 	if vi.Duration > 0 {
 		leadText = fmt.Sprintf("User sent a voice message (%d seconds).", vi.Duration)
 	}
-	// WeChat voice is typically SILK-v3, which Go can't sniff.
+
+	silkData, _, err := ilink.DownloadAndDecryptVoice(context.Background(), vi)
+	if err != nil {
+		slog.Error("Failed to download/decrypt wechat voice",
+			"team_id", teamID, "from", fromUserID, "error", err)
+		return types.ChatMessageAttach{}, false
+	}
+
+	// On transcode success, the upload becomes an audio/mpeg attachment that
+	// the engine routes through the model's audio-input capability check.
+	// On failure, fall back to uploading the raw SILK as a generic file so
+	// at least storage gets the bytes for diagnostics.
+	data, mime, ext := silkData, "audio/silk", "silk"
+	attachType := types.AttachFile
+	if mp3Data, transErr := transcodeSilkToMP3(context.Background(), silkData); transErr == nil {
+		data, mime, ext = mp3Data, "audio/mpeg", "mp3"
+		attachType = types.AttachAudio
+	} else {
+		slog.Warn("wechat voice: silk→mp3 transcode failed, falling back to silk file upload",
+			"team_id", teamID, "from", fromUserID, "error", transErr)
+	}
+
 	spec := mediaSpec{
 		kind:        mediaKindVoice,
-		attachType:  types.AttachFile,
-		defaultExt:  "silk",
-		defaultMime: "audio/silk",
+		attachType:  attachType,
+		defaultExt:  ext,
+		defaultMime: mime,
 		leadText:    leadText,
 	}
 	return m.finalizeInboundMedia(teamID, fromUserID, spec, func() ([]byte, string, error) {
-		return ilink.DownloadAndDecryptVoice(context.Background(), vi)
+		return data, mime, nil
 	})
 }
 
@@ -812,23 +835,32 @@ func extensionFromFilename(name string) string {
 }
 
 // summarizeAttachments builds a short placeholder message when the user
-// sent only media (no caption text). voiceCount is the number of AttachFile
-// entries that originated from WeChat voice items — they're counted as
-// "voice message" rather than generic "file" so LLMs can distinguish.
+// sent only media (no caption text). voiceCount is the total number of
+// inbound voice items (regardless of whether they transcoded to MP3 or
+// fell back to raw SILK) — successful transcodes ride on AttachAudio,
+// silk fallbacks on AttachFile, but both are reported as "voice message".
 func summarizeAttachments(attachments []types.ChatMessageAttach, voiceCount int) string {
-	var images, videos, files int
+	var images, audios, videos, files int
 	for _, att := range attachments {
 		switch att.Type {
 		case types.AttachImage:
 			images++
+		case types.AttachAudio:
+			audios++
 		case types.AttachVideo:
 			videos++
 		case types.AttachFile:
 			files++
 		}
 	}
-	// Voice items ride on AttachFile — subtract them from the file bucket.
-	files -= voiceCount
+	// Silk-fallback voice items ride on AttachFile and would otherwise be
+	// reported as generic "file"; subtract them so they're counted as
+	// voice. Successful transcodes are already in `audios`, not `files`.
+	silkFallbacks := voiceCount - audios
+	if silkFallbacks < 0 {
+		silkFallbacks = 0
+	}
+	files -= silkFallbacks
 	if files < 0 {
 		files = 0
 	}

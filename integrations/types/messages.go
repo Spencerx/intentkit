@@ -13,6 +13,7 @@ const (
 // AttachmentType constants mirror intentkit.models.chat.ChatMessageAttachmentType.
 const (
 	AttachImage  = "image"
+	AttachAudio  = "audio"
 	AttachVideo  = "video"
 	AttachFile   = "file"
 	AttachCard   = "card"

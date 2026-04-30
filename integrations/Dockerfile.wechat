@@ -1,3 +1,14 @@
+FROM alpine:latest AS silk-builder
+RUN apk add --no-cache git build-base
+# Pin to a reviewed commit. Refresh by running:
+#   git ls-remote https://github.com/kn007/silk-v3-decoder.git HEAD
+RUN git clone https://github.com/kn007/silk-v3-decoder.git /tmp/silk-src \
+    && cd /tmp/silk-src \
+    && git checkout 507be6bca8ce1fb977a061481f1d79e8c610e309
+# Default target builds libSKP_SILK_SDK.a first, then the decoder. The
+# `decoder` target alone fails to link because it skips the lib build.
+RUN cd /tmp/silk-src/silk && make
+
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache git
@@ -10,7 +21,8 @@ FROM alpine:latest
 ARG RELEASE=local
 ENV RELEASE=${RELEASE}
 WORKDIR /app
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata lame
+COPY --from=silk-builder /tmp/silk-src/silk/decoder /usr/local/bin/silk_v3_decoder
 COPY --from=builder /app/intent-wechat .
 ENV WX_NEW_CHANNEL_POLL_INTERVAL=10
 CMD ["./intent-wechat"]
