@@ -14,6 +14,7 @@ The module uses a global cache to store initialized agents for better performanc
 
 import asyncio
 import logging
+import mimetypes
 import re
 import textwrap
 import time
@@ -122,12 +123,40 @@ def _model_can_deliver_media(
     return allowed is None or provider in allowed
 
 
+# Per-type fallback when the URL extension is unknown. Gemini rejects
+# inlineData with an empty mimeType, so we need to always supply something.
+_MEDIA_DEFAULT_MIME: dict[ChatMessageAttachmentType, str] = {
+    ChatMessageAttachmentType.IMAGE: "image/jpeg",
+    ChatMessageAttachmentType.AUDIO: "audio/mpeg",
+    ChatMessageAttachmentType.VIDEO: "video/mp4",
+    ChatMessageAttachmentType.FILE: "application/octet-stream",
+}
+
+
+def _guess_media_mime_type(atype: ChatMessageAttachmentType, url: str) -> str:
+    # Strip query string before guessing — `?signed=...` etc. would otherwise
+    # eat the extension.
+    path_only = url.split("?", 1)[0].split("#", 1)[0]
+    guessed, _ = mimetypes.guess_type(path_only)
+    if guessed:
+        return guessed
+    return _MEDIA_DEFAULT_MIME[atype]
+
+
 def _build_media_content_block(
     atype: ChatMessageAttachmentType, url: str
 ) -> dict[str, Any]:
     if atype == ChatMessageAttachmentType.IMAGE:
         return {"type": "image_url", "image_url": {"url": url}}
-    return {"type": atype.value, "url": url}
+    # LangChain v0.3 standard multimodal block. `source_type` disambiguates
+    # url vs base64; `mime_type` is required because langchain-google-genai
+    # forwards inlineData to Gemini, which rejects an empty mimeType.
+    return {
+        "type": atype.value,
+        "source_type": "url",
+        "url": url,
+        "mime_type": _guess_media_mime_type(atype, url),
+    }
 
 
 # Cap raw_chunks to prevent unbounded memory growth in super_mode
