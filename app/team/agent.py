@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Path, Response
 from sqlalchemy import select
@@ -35,6 +36,7 @@ from intentkit.models.team import TeamRole
 from intentkit.utils.error import IntentKitAPIError
 
 from app.team.auth import get_current_user_optional, verify_team_member
+from app.team.schemas import TeamAgentPublishInput
 
 team_agent_router = APIRouter()
 
@@ -341,20 +343,31 @@ async def reactivate_agent(
 )
 async def publish_agent_endpoint(
     agent_id: str = Path(..., description="Agent ID"),
-    public_info: AgentPublicInfo = Body(
+    body: TeamAgentPublishInput = Body(
         ..., description="Public info to apply when publishing"
     ),
     auth: tuple[str, str] = Depends(verify_team_member),
 ) -> Response:
     """Publish a team agent.
 
-    Sets visibility to PUBLIC and updates the agent's public info using
-    update semantics (only fields explicitly supplied are written). The
-    owning team's ``public_agent_limit`` is enforced for newly published
-    agents; re-publishing an already public agent always succeeds.
+    The team UI only collects four public-info fields (description,
+    example_intro, examples, tags); ``fee_percentage`` is fixed at ``1`` for
+    every team publish and other public-info fields are not touched here.
+
+    Sets visibility to PUBLIC and updates the listed public-info fields using
+    update semantics. The owning team's ``public_agent_limit`` is enforced
+    for newly published agents; re-publishing an already public agent always
+    succeeds.
     """
     _user_id, team_id = auth
     agent = await get_team_agent(agent_id, team_id)
+    public_info = AgentPublicInfo(
+        description=body.description,
+        example_intro=body.example_intro,
+        examples=body.examples,
+        tags=[t.value for t in body.tags] if body.tags is not None else None,
+        fee_percentage=Decimal("1"),
+    )
     latest_agent = await publish_agent(agent_id=agent.id, public_info=public_info)
     agent_data = await AgentData.get(latest_agent.id)
     agent_response = await AgentResponse.from_agent(latest_agent, agent_data)

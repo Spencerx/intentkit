@@ -17,6 +17,14 @@ from intentkit.skills.availability import (
 )
 from intentkit.utils.error import IntentKitAPIError
 
+from app.team.schemas import TEAM_AGENT_TAG_CATEGORIES
+
+_AGENT_PUBLIC_TAGS_PAYLOAD = [
+    {"value": tag.value, "category": category}
+    for category, tags in TEAM_AGENT_TAG_CATEGORIES
+    for tag in tags
+]
+
 logger = logging.getLogger(__name__)
 
 # Create readonly router
@@ -139,6 +147,24 @@ async def get_agent_public_info_schema() -> JSONResponse:
     return JSONResponse(
         content=AgentPublicInfo.model_json_schema(),
         media_type="application/json",
+    )
+
+
+@schema_router.get(
+    "/schema/agent-public-tags",
+    tags=["Metadata"],
+    operation_id="get_agent_public_tags",
+)
+async def get_agent_public_tags() -> JSONResponse:
+    """List the predefined tag values usable when publishing an agent.
+
+    Returned as a flat list of ``{value, category}`` entries in display order;
+    the team frontend renders the labels client-side (capitalisation/i18n).
+    """
+    return JSONResponse(
+        content=_AGENT_PUBLIC_TAGS_PAYLOAD,
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 
