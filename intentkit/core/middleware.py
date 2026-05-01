@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, override
 
 from langchain.agents.middleware import AgentMiddleware, LLMToolSelectorMiddleware
 from langchain.agents.middleware.summarization import SummarizationMiddleware
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import BaseTool
 from langgraph.runtime import Runtime
 
@@ -141,6 +142,123 @@ class EmptyContentSafetyMiddleware(AgentMiddleware[AgentState, AgentContext]):
         return await handler(request)
 
 
+_MEDIA_BLOCK_TYPES = frozenset({"image", "audio", "video", "file"})
+_MEDIA_DEFAULT_MIME: dict[str, str] = {
+    "image": "image/jpeg",
+    "audio": "audio/mpeg",
+    "video": "video/mp4",
+    "file": "application/octet-stream",
+}
+
+
+def _as_media_block(block: Any) -> dict[str, Any] | None:
+    if not isinstance(block, dict):
+        return None
+    if block.get("type") not in _MEDIA_BLOCK_TYPES:
+        return None
+    if not (block.get("url") or block.get("base64") or block.get("data")):
+        return None
+    return block
+
+
+def _resolve_mime_type(block: dict[str, Any]) -> str | None:
+    btype = block.get("type")
+    url = block.get("url")
+    guessed: str | None = None
+    if isinstance(url, str) and url:
+        path_only = url.split("?", 1)[0].split("#", 1)[0]
+        guessed, _ = mimetypes.guess_type(path_only)
+    if btype == "file":
+        # Downstream model APIs (e.g. Gemini) reject application/octet-stream
+        # outright, so a `.bin` extension or a per-type default doesn't help.
+        # Only return a guess we'd actually consider sendable.
+        if guessed and guessed != "application/octet-stream":
+            return guessed
+        return None
+    if guessed:
+        return guessed
+    return _MEDIA_DEFAULT_MIME.get(btype) if isinstance(btype, str) else None
+
+
+class MediaBlockSanitizerMiddleware(AgentMiddleware[AgentState, AgentContext]):
+    """Repair or strip historical media content blocks lacking `mime_type`.
+
+    Background: an early version of the engine stored `HumanMessage`s with
+    blocks like ``{"type": "audio", "url": "..."}`` — no ``mime_type``. The
+    LangGraph checkpointer faithfully replays these on every turn, and
+    Gemini's adapter falls back to ``mimetypes.guess_type`` against the raw
+    URL (query string included), which silently fails on signed URLs or
+    extensions it doesn't know. The result is an ``inlineData`` payload
+    with empty ``mimeType`` and the request is rejected with INVALID_ARGUMENT.
+
+    For each historical block we either:
+      - attach a guessed (or per-type default) ``mime_type``, so the model
+        sees a complete payload, or
+      - drop the block entirely when no reasonable mime can be inferred,
+        which is safer than sending something the API will refuse.
+
+    The textual ``[Attachments]`` URL list embedded in the original message
+    body is preserved, so the model still has the URL reference for
+    delegation/recall even when a binary block is dropped.
+    """
+
+    @override
+    async def awrap_model_call(  # type: ignore[override]
+        self,
+        request: ModelRequest[AgentContext],
+        handler: Callable[[ModelRequest[AgentContext]], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        messages = request.messages
+        patched = False
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, HumanMessage):
+                continue
+            if not isinstance(msg.content, list):
+                continue
+            cleaned: list[Any] = []
+            modified = False
+            for block in msg.content:
+                media_block = _as_media_block(block)
+                if media_block is None:
+                    cleaned.append(block)
+                    continue
+                if media_block.get("mime_type"):
+                    cleaned.append(block)
+                    continue
+                resolved = _resolve_mime_type(media_block)
+                btype = media_block.get("type")
+                if resolved is None:
+                    modified = True
+                    logger.warning(
+                        "Dropping historical %s block at msg[%d] — no resolvable mime_type",
+                        btype,
+                        i,
+                    )
+                    continue
+                modified = True
+                cleaned.append({**media_block, "mime_type": resolved})
+                logger.info(
+                    "Repaired historical %s block at msg[%d] with mime_type=%s",
+                    btype,
+                    i,
+                    resolved,
+                )
+            if not modified:
+                continue
+            patched = True
+            new_content: Any
+            if cleaned:
+                new_content = cleaned
+            else:
+                # All blocks stripped — replace with empty text so the
+                # message stays valid for providers that reject empty content.
+                new_content = ""
+            messages[i] = msg.model_copy(update={"content": new_content})
+        if patched:
+            request = request.override(messages=messages)
+        return await handler(request)
+
+
 class SafeLLMToolSelectorMiddleware(LLMToolSelectorMiddleware):
     """`LLMToolSelectorMiddleware` that silently drops `always_include` names
     missing from the current request's tool list.
@@ -175,6 +293,7 @@ class SafeLLMToolSelectorMiddleware(LLMToolSelectorMiddleware):
 __all__ = [
     "DynamicPromptMiddleware",
     "EmptyContentSafetyMiddleware",
+    "MediaBlockSanitizerMiddleware",
     "SafeLLMToolSelectorMiddleware",
     "StepTrackingMiddleware",
     "SummarizationMiddleware",
