@@ -1,63 +1,104 @@
+import httpx
+import pytest
+
 from intentkit.core.engine import (
-    _build_media_content_block,
-    _guess_media_mime_type,
+    _build_image_url_block,
+    _build_inline_media_block,
+    _fetch_media_bytes,
+    _FetchedMedia,
 )
 from intentkit.models.chat import ChatMessageAttachmentType
 
 
 def test_image_block_uses_legacy_image_url_shape():
-    block = _build_media_content_block(
-        ChatMessageAttachmentType.IMAGE,
-        "https://cdn.example.com/foo/bar.jpg",
-    )
-    assert block == {
+    assert _build_image_url_block("https://cdn.example.com/foo/bar.jpg") == {
         "type": "image_url",
         "image_url": {"url": "https://cdn.example.com/foo/bar.jpg"},
     }
 
 
-def test_audio_block_includes_source_type_and_mime():
-    block = _build_media_content_block(
-        ChatMessageAttachmentType.AUDIO,
-        "https://cdn.example.com/voice/123.mp3",
-    )
-    assert block == {
-        "type": "audio",
-        "source_type": "url",
-        "url": "https://cdn.example.com/voice/123.mp3",
+def test_inline_media_block_carries_raw_bytes_and_mime():
+    fetched = _FetchedMedia(data=b"\x00\x01\x02", mime_type="audio/mpeg")
+    assert _build_inline_media_block(fetched) == {
+        "type": "media",
+        "data": b"\x00\x01\x02",
         "mime_type": "audio/mpeg",
     }
 
 
-def test_video_block_includes_source_type_and_mime():
-    block = _build_media_content_block(
-        ChatMessageAttachmentType.VIDEO,
-        "https://cdn.example.com/clip/abc.mp4",
+@pytest.mark.asyncio
+async def test_fetch_media_uses_response_content_type(monkeypatch):
+    async def fake_get(self, url):
+        request = httpx.Request("GET", url)
+        return httpx.Response(
+            200,
+            content=b"ID3 fake mp3",
+            headers={"content-type": "audio/mpeg; charset=binary"},
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    fetched = await _fetch_media_bytes(
+        "https://cdn.example.com/voice/abc.mp3",
+        ChatMessageAttachmentType.AUDIO,
     )
-    assert block["type"] == "video"
-    assert block["source_type"] == "url"
-    assert block["mime_type"] == "video/mp4"
+    assert fetched.data == b"ID3 fake mp3"
+    assert fetched.mime_type == "audio/mpeg"
 
 
-def test_file_block_falls_back_to_octet_stream():
-    block = _build_media_content_block(
-        ChatMessageAttachmentType.FILE,
+@pytest.mark.asyncio
+async def test_fetch_media_falls_back_to_url_extension(monkeypatch):
+    async def fake_get(self, url):
+        request = httpx.Request("GET", url)
+        return httpx.Response(
+            200,
+            content=b"ID3 fake mp3",
+            headers={"content-type": "application/octet-stream"},
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    fetched = await _fetch_media_bytes(
+        "https://cdn.example.com/voice/abc.mp3?signed=xyz",
+        ChatMessageAttachmentType.AUDIO,
+    )
+    assert fetched.mime_type == "audio/mpeg"
+
+
+@pytest.mark.asyncio
+async def test_fetch_media_falls_back_to_per_type_default(monkeypatch):
+    async def fake_get(self, url):
+        request = httpx.Request("GET", url)
+        return httpx.Response(
+            200,
+            content=b"raw",
+            headers={},
+            request=request,
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    fetched = await _fetch_media_bytes(
+        "https://cdn.example.com/voice/no-ext",
+        ChatMessageAttachmentType.AUDIO,
+    )
+    assert fetched.mime_type == "audio/mpeg"
+
+    fetched = await _fetch_media_bytes(
         "https://cdn.example.com/file/no-ext",
+        ChatMessageAttachmentType.FILE,
     )
-    assert block["mime_type"] == "application/octet-stream"
+    assert fetched.mime_type == "application/octet-stream"
 
 
-def test_guess_mime_strips_query_string():
-    mime = _guess_media_mime_type(
-        ChatMessageAttachmentType.AUDIO,
-        "https://cdn.example.com/voice/123.mp3?signed=abc&exp=999",
-    )
-    assert mime == "audio/mpeg"
+@pytest.mark.asyncio
+async def test_fetch_media_propagates_http_error(monkeypatch):
+    async def fake_get(self, url):
+        request = httpx.Request("GET", url)
+        return httpx.Response(404, content=b"", request=request)
 
-
-def test_guess_mime_unknown_extension_uses_default():
-    mime = _guess_media_mime_type(
-        ChatMessageAttachmentType.AUDIO,
-        "https://cdn.example.com/voice/123",
-    )
-    assert mime == "audio/mpeg"
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    with pytest.raises(httpx.HTTPStatusError):
+        await _fetch_media_bytes(
+            "https://cdn.example.com/missing.mp3",
+            ChatMessageAttachmentType.AUDIO,
+        )

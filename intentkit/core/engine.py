@@ -19,7 +19,7 @@ import re
 import textwrap
 import time
 import traceback
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpcore
 import httpx
@@ -123,8 +123,9 @@ def _model_can_deliver_media(
     return allowed is None or provider in allowed
 
 
-# Per-type fallback when the URL extension is unknown. Gemini rejects
-# inlineData with an empty mimeType, so we need to always supply something.
+# Per-type fallback when both the HTTP Content-Type and the URL extension
+# fail to yield a usable mime — Gemini rejects inlineData with an empty
+# mimeType, so we always need to supply something.
 _MEDIA_DEFAULT_MIME: dict[ChatMessageAttachmentType, str] = {
     ChatMessageAttachmentType.IMAGE: "image/jpeg",
     ChatMessageAttachmentType.AUDIO: "audio/mpeg",
@@ -132,30 +133,60 @@ _MEDIA_DEFAULT_MIME: dict[ChatMessageAttachmentType, str] = {
     ChatMessageAttachmentType.FILE: "application/octet-stream",
 }
 
-
-def _guess_media_mime_type(atype: ChatMessageAttachmentType, url: str) -> str:
-    # Strip query string before guessing — `?signed=...` etc. would otherwise
-    # eat the extension.
-    path_only = url.split("?", 1)[0].split("#", 1)[0]
-    guessed, _ = mimetypes.guess_type(path_only)
-    if guessed:
-        return guessed
-    return _MEDIA_DEFAULT_MIME[atype]
+# Cap a single fetch — the upload to S3 already bounds attachment size
+# upstream. 30 s is well above any expected voice/image/file fetch.
+_MEDIA_FETCH_TIMEOUT = 30.0
 
 
-def _build_media_content_block(
-    atype: ChatMessageAttachmentType, url: str
-) -> dict[str, Any]:
-    if atype == ChatMessageAttachmentType.IMAGE:
-        return {"type": "image_url", "image_url": {"url": url}}
-    # LangChain v0.3 standard multimodal block. `source_type` disambiguates
-    # url vs base64; `mime_type` is required because langchain-google-genai
-    # forwards inlineData to Gemini, which rejects an empty mimeType.
+class _FetchedMedia(NamedTuple):
+    data: bytes
+    mime_type: str
+
+
+async def _fetch_media_bytes(
+    url: str, atype: ChatMessageAttachmentType
+) -> _FetchedMedia:
+    """Fetch a media URL and resolve its mime type.
+
+    Order of preference for mime: HTTP Content-Type response header
+    (explicit, set by S3 at upload time) → URL path extension via
+    `mimetypes` → per-type default. Gemini's `inlineData` rejects an empty
+    mimeType, so we always end up with a non-empty value.
+    """
+    async with httpx.AsyncClient(
+        timeout=_MEDIA_FETCH_TIMEOUT, follow_redirects=True
+    ) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+
+    raw_ct = resp.headers.get("content-type", "")
+    mime = raw_ct.split(";", 1)[0].strip().lower()
+    if not mime or mime == "application/octet-stream":
+        path_only = url.split("?", 1)[0].split("#", 1)[0]
+        guessed, _ = mimetypes.guess_type(path_only)
+        if guessed:
+            mime = guessed
+    if not mime:
+        mime = _MEDIA_DEFAULT_MIME[atype]
+    return _FetchedMedia(data=resp.content, mime_type=mime)
+
+
+def _build_image_url_block(url: str) -> dict[str, Any]:
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
+def _build_inline_media_block(fetched: _FetchedMedia) -> dict[str, Any]:
+    """Build langchain-google-genai's `media` content block.
+
+    Carries raw bytes + an explicit mime_type, which the adapter forwards
+    to Gemini as `inlineData(data, mimeType)`. Doing the fetch ourselves
+    sidesteps LangChain's URL-fetch + mime-guess path, which has produced
+    empty-mimeType errors against Gemini in the field.
+    """
     return {
-        "type": atype.value,
-        "source_type": "url",
-        "url": url,
-        "mime_type": _guess_media_mime_type(atype, url),
+        "type": "media",
+        "data": fetched.data,
+        "mime_type": fetched.mime_type,
     }
 
 
@@ -956,6 +987,13 @@ async def stream_agent_raw(
     messages = [
         HumanMessage(content=input_message),
     ]
+    # Image URLs ride straight through as `image_url` blocks; the LangChain
+    # adapter handles the fetch. Audio/video/file get fetched here so we
+    # can hand Gemini a `media` block with raw bytes + an explicit
+    # mime_type, avoiding the empty-mimeType failure mode that the URL-only
+    # data block path has produced in production.
+    fetch_tasks: list = []
+    fetch_meta: list[ChatMessageAttachmentType] = []
     for atype, _, _ in _MEDIA_INPUT_SPECS:
         urls = media_urls_by_type[atype]
         if not urls:
@@ -968,11 +1006,33 @@ async def stream_agent_raw(
             user_message.chat_id,
             urls,
         )
+        if atype == ChatMessageAttachmentType.IMAGE:
+            messages.extend(
+                HumanMessage(content=[_build_image_url_block(url)]) for url in urls
+            )
+            continue
+        for url in urls:
+            fetch_tasks.append(_fetch_media_bytes(url, atype))
+            fetch_meta.append(atype)
+
+    if fetch_tasks:
+        try:
+            fetched_media = await asyncio.gather(*fetch_tasks)
+        except Exception:
+            logger.exception(
+                "Failed to fetch media attachments for agent=%s chat=%s",
+                user_message.agent_id,
+                user_message.chat_id,
+            )
+            yield await _create_system_error_response(
+                SystemMessageType.AGENT_INTERNAL_ERROR,
+                user_message,
+                time.perf_counter() - start,
+            )
+            return
         messages.extend(
-            [
-                HumanMessage(content=[_build_media_content_block(atype, url)])
-                for url in urls
-            ]
+            HumanMessage(content=[_build_inline_media_block(fetched)])
+            for fetched in fetched_media
         )
 
     # stream config
