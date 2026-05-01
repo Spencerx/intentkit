@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_db
-from intentkit.models.agent import Agent, AgentPublicInfo
+from intentkit.models.agent import AGENT_TAG_CATEGORIES, Agent, AgentPublicInfo
 from intentkit.skills.availability import (
     filter_unavailable_states,
     import_skill_category,
@@ -17,11 +17,9 @@ from intentkit.skills.availability import (
 )
 from intentkit.utils.error import IntentKitAPIError
 
-from app.team.schemas import TEAM_AGENT_TAG_CATEGORIES
-
 _AGENT_PUBLIC_TAGS_PAYLOAD = [
     {"value": tag.value, "category": category}
-    for category, tags in TEAM_AGENT_TAG_CATEGORIES
+    for category, tags in AGENT_TAG_CATEGORIES.items()
     for tag in tags
 ]
 

@@ -3,16 +3,20 @@ from .agent import Agent
 from .autonomous import AgentAutonomous, AgentAutonomousStatus
 from .core import AgentCore, AgentVisibility
 from .db import AgentTable, AgentUserInputColumns
-from .public_info import AgentExample, AgentPublicInfo
+from .public_info import AgentExample, AgentPublicInfo, AgentPublishInput
 from .response import AgentResponse
+from .tags import AGENT_TAG_CATEGORIES, AgentTag
 from .user_input import AgentCreate, AgentUpdate, AgentUserInput
 
 __all__ = [
+    "AGENT_TAG_CATEGORIES",
     "AgentAutonomous",
     "AgentAutonomousStatus",
     "Agent",
     "AgentCore",
     "AgentPublicInfo",
+    "AgentPublishInput",
+    "AgentTag",
     "AgentVisibility",
     "AgentTable",
     "AgentUserInputColumns",

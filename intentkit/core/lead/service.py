@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from intentkit.config.db import get_session
 from intentkit.models.agent import Agent
+from intentkit.models.agent.core import AgentVisibility
 from intentkit.models.agent.db import AgentTable
 from intentkit.models.team import TeamMemberTable
 from intentkit.utils.error import IntentKitAPIError
@@ -43,15 +45,32 @@ async def get_team_agents(team_id: str) -> list[Agent]:
         return [Agent.model_validate(row) for row in result]
 
 
+async def _count_team_public_agents(team_id: str) -> int:
+    async with get_session() as db:
+        return (
+            await db.scalar(
+                select(func.count(AgentTable.id)).where(
+                    AgentTable.team_id == team_id,
+                    AgentTable.visibility >= AgentVisibility.PUBLIC,
+                    AgentTable.archived_at.is_(None),
+                )
+            )
+            or 0
+        )
+
+
 async def get_team_with_members(team_id: str) -> dict[str, Any]:
-    """Return team info + members list (user_id, role, joined_at)."""
+    """Return team info + members list + public-agent quota usage."""
     from intentkit.core.team.membership import get_members, get_team
 
     team = await get_team(team_id)
     if not team:
         raise IntentKitAPIError(404, "TeamNotFound", f"Team '{team_id}' not found")
 
-    members = await get_members(team_id)
+    members, current_public_agent_count = await asyncio.gather(
+        get_members(team_id),
+        _count_team_public_agents(team_id),
+    )
 
     return {
         "id": team.id,
@@ -59,6 +78,8 @@ async def get_team_with_members(team_id: str) -> dict[str, Any]:
         "avatar": team.avatar,
         "created_at": team.created_at.isoformat() if team.created_at else None,
         "members": [m.model_dump(mode="json") for m in members],
+        "public_agent_limit": team.public_agent_limit,
+        "current_public_agent_count": current_public_agent_count,
     }
 
 

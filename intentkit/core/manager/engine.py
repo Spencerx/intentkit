@@ -21,6 +21,7 @@ from intentkit.core.manager.skills import (
     get_agent_latest_public_info_skill,
     get_available_llms_skill,
     list_autonomous_tasks_skill,
+    publish_agent_skill,
     update_agent_draft_skill,
     update_public_info_skill,
 )
@@ -197,6 +198,7 @@ async def _get_manager_executor(
                 get_agent_latest_public_info_skill,
                 update_agent_draft_skill,
                 update_public_info_skill,
+                publish_agent_skill,
                 add_autonomous_task_skill,
                 delete_autonomous_task_skill,
                 edit_autonomous_task_skill,

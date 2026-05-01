@@ -23,7 +23,8 @@ class GetTeamInfo(LeadSkill):
 
     name: str = "lead_get_team_info"
     description: str = (
-        "Get team information including name, avatar, and all members with their roles."
+        "Get team information including name, avatar, all members with their roles, "
+        "and public-agent quota usage (max allowed and current count)."
     )
     args_schema: ArgsSchema | None = NoArgsSchema
 

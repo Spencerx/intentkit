@@ -32,6 +32,10 @@ from intentkit.core.manager.skills.public_info import (
     get_agent_latest_public_info_skill,
     update_public_info_skill,
 )
+from intentkit.core.manager.skills.publish import (
+    PublishAgentSkill,
+    publish_agent_skill,
+)
 from intentkit.skills.base import NoArgsSchema
 
 __all__ = [
@@ -44,6 +48,8 @@ __all__ = [
     "UpdatePublicInfoSkill",
     "get_agent_latest_public_info_skill",
     "update_public_info_skill",
+    "PublishAgentSkill",
+    "publish_agent_skill",
     "AddAutonomousTask",
     "add_autonomous_task_skill",
     "DeleteAutonomousTask",

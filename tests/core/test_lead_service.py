@@ -158,11 +158,15 @@ async def test_get_team_with_members_success():
     mock_team.name = "My Team"
     mock_team.avatar = "https://example.com/avatar.png"
     mock_team.created_at = now
+    mock_team.public_agent_limit = 5
 
     mock_member = MagicMock()
     mock_member.model_dump = MagicMock(
         return_value={"user_id": "u1", "role": "admin", "joined_at": now.isoformat()}
     )
+
+    cm, db = _mock_session()
+    db.scalar = AsyncMock(return_value=2)
 
     with (
         patch(
@@ -175,6 +179,7 @@ async def test_get_team_with_members_success():
             new_callable=AsyncMock,
             return_value=[mock_member],
         ),
+        patch(f"{MODULE}.get_session", return_value=cm),
     ):
         from intentkit.core.lead.service import get_team_with_members
 
@@ -185,7 +190,46 @@ async def test_get_team_with_members_success():
     assert result["avatar"] == "https://example.com/avatar.png"
     assert result["created_at"] == now.isoformat()
     assert len(result["members"]) == 1
+    assert result["public_agent_limit"] == 5
+    assert result["current_public_agent_count"] == 2
     mock_member.model_dump.assert_called_once_with(mode="json")
+
+
+@pytest.mark.asyncio
+async def test_get_team_with_members_zero_public_count():
+    now = datetime.now()
+
+    mock_team = MagicMock()
+    mock_team.id = "team-1"
+    mock_team.name = "My Team"
+    mock_team.avatar = None
+    mock_team.created_at = now
+    mock_team.public_agent_limit = 1
+
+    cm, db = _mock_session()
+    # SQLAlchemy returns None when count() finds no rows; service must coerce
+    # to 0 so the consumer sees a numeric quota usage.
+    db.scalar = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            f"{MEMBERSHIP_MODULE}.get_team",
+            new_callable=AsyncMock,
+            return_value=mock_team,
+        ),
+        patch(
+            f"{MEMBERSHIP_MODULE}.get_members",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(f"{MODULE}.get_session", return_value=cm),
+    ):
+        from intentkit.core.lead.service import get_team_with_members
+
+        result = await get_team_with_members("team-1")
+
+    assert result["public_agent_limit"] == 1
+    assert result["current_public_agent_count"] == 0
 
 
 # ---------------------------------------------------------------------------

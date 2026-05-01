@@ -3,7 +3,6 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Path, Response
 from sqlalchemy import select
@@ -25,7 +24,7 @@ from intentkit.core.template import render_agent
 from intentkit.models.agent import (
     Agent,
     AgentCreate,
-    AgentPublicInfo,
+    AgentPublishInput,
     AgentResponse,
     AgentTable,
     AgentUpdate,
@@ -36,7 +35,6 @@ from intentkit.models.team import TeamRole
 from intentkit.utils.error import IntentKitAPIError
 
 from app.team.auth import get_current_user_optional, verify_team_member
-from app.team.schemas import TeamAgentPublishInput
 
 team_agent_router = APIRouter()
 
@@ -343,7 +341,7 @@ async def reactivate_agent(
 )
 async def publish_agent_endpoint(
     agent_id: str = Path(..., description="Agent ID"),
-    body: TeamAgentPublishInput = Body(
+    body: AgentPublishInput = Body(
         ..., description="Public info to apply when publishing"
     ),
     auth: tuple[str, str] = Depends(verify_team_member),
@@ -361,14 +359,9 @@ async def publish_agent_endpoint(
     """
     _user_id, team_id = auth
     agent = await get_team_agent(agent_id, team_id)
-    public_info = AgentPublicInfo(
-        description=body.description,
-        example_intro=body.example_intro,
-        examples=body.examples,
-        tags=[t.value for t in body.tags] if body.tags is not None else None,
-        fee_percentage=Decimal("1"),
+    latest_agent = await publish_agent(
+        agent_id=agent.id, public_info=body.to_public_info()
     )
-    latest_agent = await publish_agent(agent_id=agent.id, public_info=public_info)
     agent_data = await AgentData.get(latest_agent.id)
     agent_response = await AgentResponse.from_agent(latest_agent, agent_data)
     return Response(
