@@ -13,6 +13,7 @@ The module uses a global cache to store initialized agents for better performanc
 # pyright: reportImportCycles=false
 
 import asyncio
+import base64
 import logging
 import mimetypes
 import re
@@ -73,11 +74,10 @@ _FORWARDABLE_TYPES = frozenset(
 )
 
 # Maps each forwardable attachment type to (model capability flag,
-# unsupported-error system message). Image keeps the legacy OpenAI-style
-# `image_url` block, accepted by every LangChain provider adapter we use.
-# The other three emit LangChain v0.3 standard multimodal blocks
-# `{"type": ..., "url": ...}` — currently only langchain-google-genai 3.2+
-# converts these to provider Parts. See _MEDIA_PROVIDER_SUPPORT.
+# unsupported-error system message). The CSV's `supports_<type>_input`
+# flags are the source of truth; if a model advertises a capability that
+# its provider's LangChain adapter cannot actually deliver, the call
+# surfaces an internal error and the operator should correct the CSV.
 _MEDIA_INPUT_SPECS: list[tuple[ChatMessageAttachmentType, str, SystemMessageType]] = [
     (
         ChatMessageAttachmentType.IMAGE,
@@ -101,31 +101,9 @@ _MEDIA_INPUT_SPECS: list[tuple[ChatMessageAttachmentType, str, SystemMessageType
     ),
 ]
 
-# Providers whose LangChain adapter accepts our content-block shape for each
-# media type. Non-image types use the v0.3 standard block which currently
-# only langchain-google-genai handles; OpenAI/Anthropic require base64 data
-# blocks (`input_audio` / `document`) and are not yet implemented. A model
-# advertising capability=true on an unsupported provider is gated the same
-# way as one that doesn't advertise the capability — better than emitting
-# blocks that crash mid-stream with AGENT_INTERNAL_ERROR.
-_MEDIA_PROVIDER_SUPPORT: dict[ChatMessageAttachmentType, set[LLMProvider] | None] = {
-    ChatMessageAttachmentType.IMAGE: None,  # all providers
-    ChatMessageAttachmentType.AUDIO: {LLMProvider.GOOGLE},
-    ChatMessageAttachmentType.VIDEO: {LLMProvider.GOOGLE},
-    ChatMessageAttachmentType.FILE: {LLMProvider.GOOGLE},
-}
-
-
-def _model_can_deliver_media(
-    atype: ChatMessageAttachmentType, provider: LLMProvider
-) -> bool:
-    allowed = _MEDIA_PROVIDER_SUPPORT.get(atype)
-    return allowed is None or provider in allowed
-
-
 # Per-type fallback when both the HTTP Content-Type and the URL extension
-# fail to yield a usable mime — Gemini rejects inlineData with an empty
-# mimeType, so we always need to supply something.
+# fail to yield a usable mime. Gemini's inlineData and OpenAI's input_audio
+# both reject empty mime/format values, so we always need a concrete value.
 _MEDIA_DEFAULT_MIME: dict[ChatMessageAttachmentType, str] = {
     ChatMessageAttachmentType.IMAGE: "image/jpeg",
     ChatMessageAttachmentType.AUDIO: "audio/mpeg",
@@ -150,8 +128,7 @@ async def _fetch_media_bytes(
 
     Order of preference for mime: HTTP Content-Type response header
     (explicit, set by S3 at upload time) → URL path extension via
-    `mimetypes` → per-type default. Gemini's `inlineData` rejects an empty
-    mimeType, so we always end up with a non-empty value.
+    `mimetypes` → per-type default.
     """
     async with httpx.AsyncClient(
         timeout=_MEDIA_FETCH_TIMEOUT, follow_redirects=True
@@ -172,20 +149,31 @@ async def _fetch_media_bytes(
 
 
 def _build_image_url_block(url: str) -> dict[str, Any]:
+    """OpenAI Chat Completions image block — accepted by every adapter."""
     return {"type": "image_url", "image_url": {"url": url}}
 
 
-def _build_inline_media_block(fetched: _FetchedMedia) -> dict[str, Any]:
-    """Build langchain-google-genai's `media` content block.
+def _build_v1_data_block(
+    atype: ChatMessageAttachmentType, fetched: _FetchedMedia
+) -> dict[str, Any]:
+    """LangChain v1 standard multimodal data block with embedded base64.
 
-    Carries raw bytes + an explicit mime_type, which the adapter forwards
-    to Gemini as `inlineData(data, mimeType)`. Doing the fetch ourselves
-    sidesteps LangChain's URL-fetch + mime-guess path, which has produced
-    empty-mimeType errors against Gemini in the field.
+    This shape is recognized by every provider adapter we use:
+      - langchain-google-genai decodes base64 and forwards as Gemini
+        ``inlineData(data, mimeType)``
+      - langchain-openai converts to ``input_audio`` / ``file`` Chat
+        Completions blocks (audio + PDFs only)
+      - langchain-anthropic converts ``file`` to ``document`` blocks
+        (PDFs only — Anthropic has no audio/video input)
+      - langchain-openrouter / langchain-xai inherit OpenAI conversion
+
+    Fetching ourselves and embedding the bytes avoids LangChain's URL fetch
+    + mime guessing path, which has produced empty-mimeType errors against
+    Gemini in the field.
     """
     return {
-        "type": "media",
-        "data": fetched.data,
+        "type": atype.value,
+        "base64": base64.b64encode(fetched.data).decode("ascii"),
         "mime_type": fetched.mime_type,
     }
 
@@ -945,9 +933,7 @@ async def stream_agent_raw(
     for atype, capability, error_type in _MEDIA_INPUT_SPECS:
         if not media_urls_by_type[atype]:
             continue
-        if not getattr(model, capability) or not _model_can_deliver_media(
-            atype, model.provider
-        ):
+        if not getattr(model, capability):
             yield await _create_system_error_response(
                 error_type,
                 user_message,
@@ -1031,8 +1017,8 @@ async def stream_agent_raw(
             )
             return
         messages.extend(
-            HumanMessage(content=[_build_inline_media_block(fetched)])
-            for fetched in fetched_media
+            HumanMessage(content=[_build_v1_data_block(atype, fetched)])
+            for atype, fetched in zip(fetch_meta, fetched_media, strict=True)
         )
 
     # stream config

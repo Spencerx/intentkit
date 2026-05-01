@@ -1,9 +1,11 @@
+import base64
+
 import httpx
 import pytest
 
 from intentkit.core.engine import (
     _build_image_url_block,
-    _build_inline_media_block,
+    _build_v1_data_block,
     _fetch_media_bytes,
     _FetchedMedia,
 )
@@ -17,13 +19,29 @@ def test_image_block_uses_legacy_image_url_shape():
     }
 
 
-def test_inline_media_block_carries_raw_bytes_and_mime():
+def test_v1_data_block_audio_carries_base64_and_mime():
     fetched = _FetchedMedia(data=b"\x00\x01\x02", mime_type="audio/mpeg")
-    assert _build_inline_media_block(fetched) == {
-        "type": "media",
-        "data": b"\x00\x01\x02",
+    block = _build_v1_data_block(ChatMessageAttachmentType.AUDIO, fetched)
+    assert block == {
+        "type": "audio",
+        "base64": base64.b64encode(b"\x00\x01\x02").decode("ascii"),
         "mime_type": "audio/mpeg",
     }
+
+
+def test_v1_data_block_video_uses_video_type():
+    fetched = _FetchedMedia(data=b"raw mp4", mime_type="video/mp4")
+    block = _build_v1_data_block(ChatMessageAttachmentType.VIDEO, fetched)
+    assert block["type"] == "video"
+    assert block["mime_type"] == "video/mp4"
+    assert base64.b64decode(block["base64"]) == b"raw mp4"
+
+
+def test_v1_data_block_file_uses_file_type():
+    fetched = _FetchedMedia(data=b"%PDF-1.4 ...", mime_type="application/pdf")
+    block = _build_v1_data_block(ChatMessageAttachmentType.FILE, fetched)
+    assert block["type"] == "file"
+    assert block["mime_type"] == "application/pdf"
 
 
 @pytest.mark.asyncio

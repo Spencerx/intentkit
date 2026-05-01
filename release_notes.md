@@ -1,5 +1,5 @@
-# Release v1.2.5
+# Release v1.2.6
 
-## Bug Fixes
+## Improvements
 
-- Fixed audio, video, and document attachments still failing with an "empty mimeType" error against Gemini, despite v1.2.4. The previous attempt added a content-type hint to the request and relied on the LangChain adapter to fetch the file and pass it through correctly; in production that path still produced empty values. The platform now downloads the file itself before calling the model and hands the bytes plus an explicit content type directly to Gemini, which removes the empty-mimeType failure mode entirely. The content type is derived from the file's HTTP headers, falling back to its extension and a per-type default so it is never empty.
+- Audio, video, and document attachments now reach every model that claims to support them, not just Gemini. The previous release used a Google-specific delivery format and silently blocked the same attachment from reaching, for example, an OpenAI- or OpenRouter-routed model that supports audio. The platform now uses a provider-agnostic delivery shape that LangChain translates into each provider's native format (OpenAI's `input_audio`, Anthropic's `document`, Gemini's `inlineData`, etc.), so the model capability flags configured per model are the single source of truth.
