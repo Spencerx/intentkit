@@ -64,13 +64,13 @@ class GPTImageBase(ImageBaseTool):
 
 
 class GPTImageFlagship(GPTImageBase):
-    """Generate images using GPT Image 1.5."""
+    """Generate images using GPT Image 2."""
 
     name: str = "image_gpt"
-    description: str = "Generate images from text prompts using GPT Image 1.5."
-    price: Decimal = Decimal("50")
-    native_model: str = "gpt-image-1.5"
-    openrouter_model: str = "openai/gpt-image-1.5"
+    description: str = "Generate images from text prompts using GPT Image 2."
+    price: Decimal = Decimal("80")
+    native_model: str = "gpt-image-2"
+    openrouter_model: str = "openai/gpt-image-2"
 
 
 class GPTImageMini(GPTImageBase):

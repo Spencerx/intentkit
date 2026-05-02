@@ -1,6 +1,5 @@
-# Release v1.2.9
+# Release v1.2.10
 
 ## Improvements
 
-- The lead-agent's `lead_get_team_info` skill now also reports the team's public-agent quota usage (`public_agent_limit` and `current_public_agent_count`), so the lead can advise users before they try to publish another agent that would push them over the quota. The two underlying queries (team members + public-agent count) now run in parallel via `asyncio.gather`.
-- Added a `publish_agent` skill to the agent-manager so the manager can publish (or republish) the active agent to public on behalf of the user — without asking them to switch to the publish form. The skill collects the four user-visible fields (Description, Example Intro, Examples 1–6, Tags 0–3 from a predefined ~50-category enum) and forces `fee_percentage = 1` server-side; it returns user-friendly messages when the team has reached its public-agent quota, when the agent has no team, or when the agent isn't owned by the current user, so the manager can steer the conversation accordingly. Internally, the tag enum and the four-field input model were promoted out of the team API layer into the canonical model layer (`intentkit/models/agent/tags.py`, `intentkit/models/agent/public_info.py:AgentPublishInput`) so the team-publish endpoint and the new manager skill share a single `AgentPublishInput.to_public_info()` helper, keeping the field set and the fixed `fee_percentage = 1` policy in one place.
+- The flagship OpenAI image-generation skill now uses the newly released GPT Image 2 model in place of GPT Image 1.5. GPT Image 2 produces higher-quality images and follows prompts more accurately. The per-call price is increased to reflect the new model's higher cost — about 1.5x the previous price at default quality.

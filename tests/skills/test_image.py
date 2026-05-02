@@ -18,7 +18,7 @@ from intentkit.skills.image.openrouter import FluxPro, Riverflow
 def test_skill_metadata():
     """Test skill names, prices, and categories."""
     cases = [
-        (GPTImageFlagship, "image_gpt", Decimal("50")),
+        (GPTImageFlagship, "image_gpt", Decimal("80")),
         (GPTImageMini, "image_gpt_mini", Decimal("20")),
         (GeminiImagePro, "image_gemini_pro", Decimal("130")),
         (GeminiImageFlash, "image_gemini_flash", Decimal("70")),

@@ -17,14 +17,14 @@
       "properties": {
         "image_gpt": {
           "type": "string",
-          "title": "GPT Image 1.5",
+          "title": "GPT Image 2",
           "enum": ["disabled", "public", "private"],
           "x-enum-title": [
             "Disabled",
             "Agent Owner + All Users",
             "Agent Owner Only"
           ],
-          "description": "Generate images using OpenAI GPT Image 1.5.",
+          "description": "Generate images using OpenAI GPT Image 2.",
           "default": "disabled"
         },
         "image_gpt_mini": {
