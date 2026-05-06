@@ -28,6 +28,7 @@ from intentkit.core.manager.skills import (
 from intentkit.models.agent import Agent
 from intentkit.models.agent_data import AgentData
 from intentkit.models.chat import ChatMessage, ChatMessageCreate
+from intentkit.models.llm_picker import pick_default_model
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
             "5. When updating a draft, try to select the right skills. Don't pick too many, just enough to meet user needs.\n"
             "6. Update skill is override update, you must put the whole fields to input data, not only changed fields."
         ),
-        "model": "grok-code-fast-1",
+        "model": pick_default_model(),
         "prompt": prompt,
         "prompt_append": None,
         "temperature": 0.2,

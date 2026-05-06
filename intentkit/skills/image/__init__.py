@@ -9,7 +9,7 @@ from intentkit.skills.base import SkillConfig, SkillState
 from intentkit.skills.image.base import ImageBaseTool
 from intentkit.skills.image.gemini import GeminiImageFlash, GeminiImagePro
 from intentkit.skills.image.gpt import GPTImageFlagship, GPTImageMini
-from intentkit.skills.image.grok import GrokImage, GrokImagePro
+from intentkit.skills.image.grok import GrokImage
 from intentkit.skills.image.minimax import MiniMaxImage
 from intentkit.skills.image.openrouter import FluxPro, Riverflow
 
@@ -23,7 +23,6 @@ _SKILL_NAME_TO_CLASS: dict[str, Callable[[], ImageBaseTool]] = {
     "image_gpt_mini": GPTImageMini,
     "image_gemini_pro": GeminiImagePro,
     "image_gemini_flash": GeminiImageFlash,
-    "image_grok_pro": GrokImagePro,
     "image_grok": GrokImage,
     "image_flux_pro": FluxPro,
     "image_riverflow": Riverflow,
@@ -36,7 +35,6 @@ class SkillStates(TypedDict):
     image_gpt_mini: SkillState
     image_gemini_pro: SkillState
     image_gemini_flash: SkillState
-    image_grok_pro: SkillState
     image_grok: SkillState
     image_flux_pro: SkillState
     image_riverflow: SkillState

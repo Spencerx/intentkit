@@ -53,23 +53,11 @@ class GrokImageBase(ImageBaseTool):
             raise ToolException(f"xAI API error: {e}")
 
 
-class GrokImagePro(GrokImageBase):
-    """Generate images using Grok Imagine Image Pro."""
-
-    name: str = "image_grok_pro"
-    description: str = "Generate images from text prompts using Grok Imagine Image Pro."
-    price: Decimal = Decimal("70")
-    native_model: str = "grok-imagine-image-pro"
-    openrouter_model: str = "x-ai/grok-imagine-image-pro"
-
-
 class GrokImage(GrokImageBase):
     """Generate images using Grok Imagine Image."""
 
     name: str = "image_grok"
-    description: str = (
-        "Generate images from text prompts using Grok Imagine Image (faster, cheaper)."
-    )
+    description: str = "Generate images from text prompts using Grok Imagine Image."
     price: Decimal = Decimal("20")
     native_model: str = "grok-imagine-image"
     openrouter_model: str = "x-ai/grok-imagine-image"

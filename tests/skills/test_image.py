@@ -11,7 +11,7 @@ from intentkit.skills.image import Config, SkillStates, available, get_skills
 from intentkit.skills.image.base import ImageGenerationInput
 from intentkit.skills.image.gemini import GeminiImageFlash, GeminiImagePro
 from intentkit.skills.image.gpt import GPTImageFlagship, GPTImageMini
-from intentkit.skills.image.grok import GrokImage, GrokImagePro
+from intentkit.skills.image.grok import GrokImage
 from intentkit.skills.image.openrouter import FluxPro, Riverflow
 
 
@@ -22,7 +22,6 @@ def test_skill_metadata():
         (GPTImageMini, "image_gpt_mini", Decimal("20")),
         (GeminiImagePro, "image_gemini_pro", Decimal("130")),
         (GeminiImageFlash, "image_gemini_flash", Decimal("70")),
-        (GrokImagePro, "image_grok_pro", Decimal("70")),
         (GrokImage, "image_grok", Decimal("20")),
         (FluxPro, "image_flux_pro", Decimal("30")),
         (Riverflow, "image_riverflow", Decimal("20")),
@@ -103,7 +102,6 @@ async def test_get_skills_filters_by_state():
             image_gpt_mini="disabled",
             image_gemini_pro="private",
             image_gemini_flash="disabled",
-            image_grok_pro="disabled",
             image_grok="disabled",
             image_flux_pro="public",
             image_riverflow="disabled",
@@ -152,10 +150,10 @@ def test_native_key_checks():
         "intentkit.skills.image.grok.config",
         _MockConfig(xai_api_key="test"),
     ):
-        assert GrokImagePro().has_native_key() is True
+        assert GrokImage().has_native_key() is True
 
     with patch("intentkit.skills.image.grok.config", _MockConfig()):
-        assert GrokImagePro().has_native_key() is False
+        assert GrokImage().has_native_key() is False
 
     # OpenRouter-only skills always return False
     assert FluxPro().has_native_key() is False

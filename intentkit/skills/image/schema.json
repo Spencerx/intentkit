@@ -63,18 +63,6 @@
           "description": "Generate images using Google Gemini 3.1 Flash (faster, cheaper).",
           "default": "disabled"
         },
-        "image_grok_pro": {
-          "type": "string",
-          "title": "Grok Imagine Pro",
-          "enum": ["disabled", "public", "private"],
-          "x-enum-title": [
-            "Disabled",
-            "Agent Owner + All Users",
-            "Agent Owner Only"
-          ],
-          "description": "Generate images using xAI Grok Imagine Image Pro.",
-          "default": "disabled"
-        },
         "image_grok": {
           "type": "string",
           "title": "Grok Imagine",
@@ -84,7 +72,7 @@
             "Agent Owner + All Users",
             "Agent Owner Only"
           ],
-          "description": "Generate images using xAI Grok Imagine Image (faster, cheaper).",
+          "description": "Generate images using xAI Grok Imagine Image.",
           "default": "disabled"
         },
         "image_flux_pro": {
