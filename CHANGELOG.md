@@ -1,3 +1,13 @@
+# Release v1.2.11
+
+## Improvements
+
+- Added a new `cn_stock` skill package that surfaces Chinese A-share market data (Shanghai / Shenzhen / Beijing exchanges) to agents through nine tools backed by the `akshare` library: real-time spot quote, K-line history, major-index snapshot with optional 30-day history, industry/concept board snapshots ranked by intraday change, capital flow for an individual stock or the whole market, stock-specific or macro financial news, the day's listed-company announcements, fundamental financial metrics by reporting period, and a trading-day calendar gate for scheduled tasks. All akshare calls are dispatched off the event loop via `asyncio.to_thread`, share a category-level 60/min global rate limit, and use short-TTL Redis caching (10s for live quotes, up to 24h for the trading calendar) to absorb retry storms against akshare's free public endpoints. Stock codes accept any of the common formats (`600519`, `sh600519`, `SH600519`, `600519.SH`) and are normalized internally; the BSE `920xxx` prefix introduced in 2025 is correctly classified as Beijing without sweeping in `900xxx` SSE B-shares. Defaults for "today" use Asia/Shanghai rather than the server's local clock, so an agent running on a UTC host gets the right trading day during the Beijing morning window. Four ready-to-use public agents ship with the package — a market-overview leaf, a quote leaf, a news leaf, and a fundamentals leaf — designed to be composed by a team-built orchestrator via `lead_call_agent`.
+
+## Bug Fixes
+
+- Agent autonomous cron triggers are now pinned to UTC. They were previously created via APScheduler's `CronTrigger.from_crontab` without an explicit timezone, so the cron expression was interpreted in whatever local time the worker process happened to be running in; the same agent's `0 9 * * *` trigger would fire at a different wall-clock instant depending on which environment landed it, and could silently shift across DST transitions on hosts that observe them. The new triggers explicitly use UTC, matching the heartbeat trigger already in the same file, so schedules are stable and reproducible across environments.
+
 # Release v1.2.10
 
 ## Improvements
