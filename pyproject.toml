@@ -70,6 +70,8 @@ dependencies = [
     "tenacity>=9.1.2",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
+    # Chinese A-share market data (cn_stock skill)
+    "akshare>=1.16.0",
 ]
 keywords = ["ai", "agent", "intent", "blockchain", "crypto"]
 classifiers = [
