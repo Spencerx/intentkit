@@ -246,7 +246,7 @@ async def schedule_agent_autonomous_tasks():
                         )
                         _ = scheduler.add_job(
                             run_autonomous_task,
-                            CronTrigger.from_crontab(autonomous.cron),
+                            CronTrigger.from_crontab(autonomous.cron, timezone="UTC"),
                             id=task_id,
                             args=[
                                 agent.id,
