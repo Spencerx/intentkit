@@ -88,6 +88,7 @@ async def build_executor(
         TodoListMiddleware,
         ToolRetryMiddleware,
     )
+    from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 
     from intentkit.core.middleware import (
         DynamicPromptMiddleware,
@@ -256,6 +257,11 @@ async def build_executor(
         ToolRetryMiddleware(retry_on=_should_retry_tool_failure),
         ModelRetryMiddleware(),
     ]
+
+    # Anthropic prompt caching: 5m ephemeral cache slashes input-token cost on
+    # long system prompts + repeated history. No-op for non-Anthropic providers.
+    if model_provider == LLMProvider.ANTHROPIC_COMPATIBLE:
+        middleware.append(AnthropicPromptCachingMiddleware())
 
     if agent.enable_todo:
         middleware.append(TodoListMiddleware())
