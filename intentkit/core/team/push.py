@@ -11,6 +11,7 @@ import random
 import httpx
 from epyxid import XID
 
+from intentkit.config.config import config
 from intentkit.core.team.channel import get_push_channel
 from intentkit.models.chat import AuthorType
 from intentkit.models.team_channel import (
@@ -27,6 +28,18 @@ logger = logging.getLogger(__name__)
 _ILINK_MESSAGE_TYPE_BOT = 2
 _ILINK_MESSAGE_STATE_FINISH = 2
 _ILINK_ITEM_TYPE_TEXT = 1
+
+
+def _rewrite_for_wechat(text: str) -> str:
+    """Swap APP_BASE_URL for WECHAT_BASE_URL in WeChat-bound text."""
+    if config.wechat_base_url:
+        # Normalize trailing slashes on both sides so a misconfigured env var
+        # like "https://cdn.example.com/" doesn't produce "...com//share/..."
+        return text.replace(
+            config.app_base_url.rstrip("/"),
+            config.wechat_base_url.rstrip("/"),
+        )
+    return text
 
 
 async def _send_telegram(token: str, chat_id: str, text: str) -> None:
@@ -148,7 +161,7 @@ async def push_to_team(team_id: str, text: str) -> bool:
                 wx_config.ilink_bot_id,
                 raw_chat_id,
                 wx_data.context_token,
-                text,
+                _rewrite_for_wechat(text),
             )
         else:
             logger.warning("Unknown channel type %s for team %s", channel_type, team_id)

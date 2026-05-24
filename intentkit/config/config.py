@@ -112,6 +112,8 @@ class Config:
         self.hourly_budget: Decimal | None = self.load_decimal("HOURLY_BUDGET")
         # App (frontend) base URL
         self.app_base_url: str = self.load("APP_BASE_URL", "http://localhost:3000")
+        # Optional CDN domain substituted for app_base_url in WeChat-bound links.
+        self.wechat_base_url: str | None = self.load("WECHAT_BASE_URL")
         # CDP SDK Configuration
         self.cdp_api_key_id: str | None = self.load("CDP_API_KEY_ID")
         self.cdp_api_key_secret: str | None = self.load("CDP_API_KEY_SECRET")

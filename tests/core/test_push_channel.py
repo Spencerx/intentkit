@@ -272,3 +272,49 @@ class TestFormatActivityPush:
         result = await _format_activity_push(activity)
         assert result == f"[TestBot] Hello\n{config.app_base_url}/share/sl-abc"
         _ = ShareLinkTargetType  # keep import used
+
+
+# ---------------------------------------------------------------------------
+# _rewrite_for_wechat
+# ---------------------------------------------------------------------------
+
+
+class TestRewriteForWechat:
+    def test_no_override_returns_unchanged(self, monkeypatch):
+        from intentkit.config.config import config
+        from intentkit.core.team.push import _rewrite_for_wechat
+
+        monkeypatch.setattr(config, "wechat_base_url", None)
+        text = f"[Bot] hi\n{config.app_base_url}/share/abc"
+        assert _rewrite_for_wechat(text) == text
+
+    def test_override_replaces_app_base_url(self, monkeypatch):
+        from intentkit.config.config import config
+        from intentkit.core.team.push import _rewrite_for_wechat
+
+        monkeypatch.setattr(config, "app_base_url", "https://intentcat.com")
+        monkeypatch.setattr(config, "wechat_base_url", "https://cat.zhanart.com")
+        text = "[Bot] hi\nhttps://intentcat.com/share/abc"
+        assert (
+            _rewrite_for_wechat(text) == "[Bot] hi\nhttps://cat.zhanart.com/share/abc"
+        )
+
+    def test_override_leaves_unrelated_urls(self, monkeypatch):
+        from intentkit.config.config import config
+        from intentkit.core.team.push import _rewrite_for_wechat
+
+        monkeypatch.setattr(config, "app_base_url", "https://intentcat.com")
+        monkeypatch.setattr(config, "wechat_base_url", "https://cat.zhanart.com")
+        text = "see https://other.example.com/x"
+        assert _rewrite_for_wechat(text) == text
+
+    def test_trailing_slash_does_not_double_up(self, monkeypatch):
+        from intentkit.config.config import config
+        from intentkit.core.team.push import _rewrite_for_wechat
+
+        monkeypatch.setattr(config, "app_base_url", "https://intentcat.com")
+        monkeypatch.setattr(config, "wechat_base_url", "https://cat.zhanart.com/")
+        text = "[Bot] hi\nhttps://intentcat.com/share/abc"
+        assert (
+            _rewrite_for_wechat(text) == "[Bot] hi\nhttps://cat.zhanart.com/share/abc"
+        )
