@@ -1,6 +1,5 @@
-# Release v1.2.14
+# Release v1.2.15
 
-## Improvements
+## New Features
 
-- Activity links pushed into WeChat can now be served through a separate CDN domain for faster in-app loading. When `WECHAT_BASE_URL` is configured, share links inside WeChat messages are rewritten from the canonical app domain to the CDN domain at send time. Other channels (Telegram), persisted chat history, and frontend responses continue to use the canonical app domain unchanged.
-- Bumped locked dependencies to current upstream releases.
+- Agents with Internet Search enabled can now save external images to our CDN so the links stay valid in long-form output. When an agent is writing an article or post and wants to embed an image it found online, it can persist the image to our storage and reference it via a permanent CDN URL — protecting against broken images later when the source site rotates or removes the original asset. The capability is available across every supported LLM provider.
