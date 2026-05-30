@@ -2,10 +2,12 @@
 S3 utility module for storing and retrieving images from AWS S3.
 """
 
+import ipaddress
 import logging
 from enum import Enum
 from io import BytesIO
 from typing import cast
+from urllib.parse import urlparse
 
 import boto3
 import filetype
@@ -84,6 +86,164 @@ def get_cdn_url(relative_path: str) -> str:
     if not cdn_base:
         return relative_path
     return f"{cdn_base}/{relative_path}"
+
+
+_MIME_EXTENSION_OVERRIDES = {
+    "image/jpeg": "jpg",
+}
+
+
+def _extension_for_mime(mime: str) -> str:
+    """Return a sensible file extension for an image MIME type."""
+    import mimetypes
+
+    if mime in _MIME_EXTENSION_OVERRIDES:
+        return _MIME_EXTENSION_OVERRIDES[mime]
+    ext = mimetypes.guess_extension(mime)
+    return ext.lstrip(".") if ext else "bin"
+
+
+def _check_url_safety(url: str) -> None:
+    """Reject URLs that target internal/private network addresses.
+
+    Defends against direct SSRF (LLM-supplied URL pointing at internal
+    services like cloud metadata endpoints or docker service names). Does
+    NOT defend against DNS rebinding — a public hostname that resolves to a
+    private IP at request time. Closing that hole would require a custom
+    httpx Transport that re-validates the resolved IP before connecting.
+
+    Raises:
+        ValueError: If the URL targets a blocked address.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"Only http(s) URLs are supported, got scheme: {parsed.scheme!r}"
+        )
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"Invalid URL (no hostname): {url}")
+    # Strip trailing dot (FQDN notation) so "localhost." cannot bypass the check.
+    hostname = hostname.rstrip(".")
+    if "." not in hostname:
+        raise ValueError(
+            f"Blocked single-segment hostname {hostname!r} "
+            "(likely an internal service name)"
+        )
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        # Not an IP literal — a domain name, which is fine
+        return
+    if addr.is_private or addr.is_reserved or addr.is_loopback or addr.is_link_local:
+        raise ValueError(f"Blocked internal/reserved IP: {hostname}")
+
+
+_REDIRECT_STATUSES = (301, 302, 303, 307, 308)
+_MAX_REDIRECTS = 3
+_ERROR_BODY_PREVIEW_CAP = 1024  # cap bytes read from a non-200 body
+
+
+async def download_image_bytes(
+    url: str, max_bytes: int = 20 * 1024 * 1024
+) -> tuple[bytes, str, str]:
+    """Stream-download an image URL into memory with SSRF protection.
+
+    Validates each URL in the redirect chain against private/reserved
+    address ranges, manually follows up to ``_MAX_REDIRECTS`` hops, and
+    enforces ``max_bytes`` on both the success body and the bounded preview
+    of any error body. Image identity is checked strictly via magic-byte
+    sniffing — the server's Content-Type header is not trusted (an
+    attacker-served ``image/svg+xml`` with ``<script>`` would otherwise
+    become stored XSS on our CDN, which serves uploads with
+    ``ContentDisposition: inline``).
+
+    Args:
+        url: Source URL to download.
+        max_bytes: Hard cap on the downloaded size; default 20 MiB.
+
+    Returns:
+        Tuple of (raw bytes, detected ``image/*`` content type, extension).
+
+    Raises:
+        httpx.HTTPError: Network failure, or a 4xx/5xx response (message
+            includes a bounded preview of the response body).
+        ValueError: If the URL targets an internal address, redirects too
+            many times, exceeds ``max_bytes``, or is not an image.
+    """
+    content = b""
+    async with httpx.AsyncClient(timeout=30) as http_client:
+        current_url = url
+        redirects = 0
+        while True:
+            # Validate every URL in the chain — a public host can otherwise
+            # redirect to 169.254.169.254 (cloud metadata) etc.
+            _check_url_safety(current_url)
+
+            async with http_client.stream(
+                "GET", current_url, follow_redirects=False
+            ) as response:
+                if response.status_code in _REDIRECT_STATUSES:
+                    if redirects >= _MAX_REDIRECTS:
+                        raise ValueError(f"Too many redirects (>{_MAX_REDIRECTS})")
+                    location = response.headers.get("location")
+                    if not location:
+                        raise httpx.HTTPStatusError(
+                            f"Redirect {response.status_code} missing Location header",
+                            request=response.request,
+                            response=response,
+                        )
+                    current_url = str(httpx.URL(current_url).join(location))
+                    redirects += 1
+                    continue
+
+                if response.status_code >= 400:
+                    # Cap the error-body read so a malicious server can't OOM
+                    # us by attaching a huge body to a 4xx/5xx response.
+                    body_buf = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        body_buf.extend(chunk)
+                        if len(body_buf) >= _ERROR_BODY_PREVIEW_CAP:
+                            break
+                    body_preview = (
+                        bytes(body_buf)[:200].decode("utf-8", errors="replace").strip()
+                    )
+                    raise httpx.HTTPStatusError(
+                        f"HTTP {response.status_code} for {current_url}: {body_preview}",
+                        request=response.request,
+                        response=response,
+                    )
+
+                content_length = response.headers.get("content-length")
+                if content_length:
+                    try:
+                        declared = int(content_length)
+                    except ValueError:
+                        declared = None
+                    if declared is not None and declared > max_bytes:
+                        raise ValueError(
+                            f"Response too large: {declared} bytes (limit: {max_bytes})"
+                        )
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ValueError(f"Response too large: >{max_bytes} bytes")
+                    chunks.append(chunk)
+                content = b"".join(chunks)
+                break
+
+    # Strict magic-byte sniffing only. We deliberately do not fall back to
+    # the server-declared Content-Type (see docstring for the XSS-via-SVG
+    # rationale). filetype only inspects the head — slice to keep it cheap.
+    kind = filetype.guess(content[:512])
+    if not kind or not kind.mime.startswith("image/"):
+        detected = kind.mime if kind else "unknown"
+        raise ValueError(f"URL does not point to an image (detected: {detected})")
+
+    ext = kind.extension or _extension_for_mime(kind.mime)
+    return content, kind.mime, ext
 
 
 async def store_image(url: str, key: str) -> str:

@@ -3,10 +3,12 @@
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from langchain_core.tools.base import ToolException
 
 from intentkit.abstracts.graph import AgentContext
+from intentkit.clients.s3 import download_image_bytes
 from intentkit.core.system_skills.call_agent import (
     MAX_CALL_DEPTH,
     CallAgentSkill,
@@ -25,6 +27,7 @@ from intentkit.core.system_skills.read_webpage import (
 from intentkit.core.system_skills.recent_activities import RecentActivitiesSkill
 from intentkit.core.system_skills.recent_posts import RecentPostsSkill
 from intentkit.core.system_skills.search_web import SearchWebZaiSkill
+from intentkit.core.system_skills.store_image import StoreImageSkill
 from intentkit.models.chat import (
     AuthorType,
     ChatMessageAttachment,
@@ -647,3 +650,305 @@ async def test_search_web_zai_success():
         result = await skill._arun("test query")  # pyright: ignore[reportPrivateUsage]
 
     assert result == "MCP search results"
+
+
+# ──────────────────────────────────────────────
+# StoreImageSkill + download_image_bytes
+# ──────────────────────────────────────────────
+
+# 8-byte PNG signature is enough for filetype.guess to identify as image/png
+_PNG_PAYLOAD = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_HTML_PAYLOAD = b"<!DOCTYPE html><html>not an image</html>"
+
+
+class _FakeStreamResponse:
+    """Minimal stand-in for an httpx streaming response."""
+
+    def __init__(
+        self,
+        content: bytes,
+        headers: dict[str, str] | None = None,
+        status_code: int = 200,
+        chunk_size: int | None = None,
+    ):
+        self._content = content
+        self._chunk_size = chunk_size
+        self.headers = headers or {}
+        self.status_code = status_code
+        self.request = httpx.Request("GET", "https://example.com/x")
+
+    async def aread(self) -> bytes:
+        return self._content
+
+    async def aiter_bytes(self):
+        if self._chunk_size is None:
+            yield self._content
+            return
+        for start in range(0, len(self._content), self._chunk_size):
+            yield self._content[start : start + self._chunk_size]
+
+
+class _FakeStreamCM:
+    def __init__(self, response: _FakeStreamResponse):
+        self._response = response
+
+    async def __aenter__(self) -> _FakeStreamResponse:
+        return self._response
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+
+def _patch_httpx_stream(
+    monkeypatch,
+    content: bytes,
+    headers: dict[str, str] | None = None,
+    status_code: int = 200,
+    chunk_size: int | None = None,
+):
+    """Patch httpx.AsyncClient.stream to return one fixed response for any URL."""
+    response = _FakeStreamResponse(content, headers, status_code, chunk_size)
+
+    def fake_stream(self, method, url, **kwargs):  # noqa: ARG001
+        return _FakeStreamCM(response)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+
+def _patch_httpx_stream_routes(monkeypatch, routes: dict[str, _FakeStreamResponse]):
+    """Patch httpx.AsyncClient.stream to route by URL (for redirect chains)."""
+
+    def fake_stream(self, method, url, **kwargs):  # noqa: ARG001
+        url_str = str(url)
+        response = routes.get(url_str)
+        if response is None:
+            raise AssertionError(f"unexpected stream URL in test: {url_str!r}")
+        return _FakeStreamCM(response)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_returns_content_mime_ext(monkeypatch):
+    """Valid image payload returns bytes + detected MIME + extension."""
+    _patch_httpx_stream(monkeypatch, _PNG_PAYLOAD)
+    content, mime, ext = await download_image_bytes("https://example.com/foo.png")
+    assert content == _PNG_PAYLOAD
+    assert mime == "image/png"
+    assert ext == "png"
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_rejects_svg_via_content_type(monkeypatch):
+    """SVG must NOT be accepted via server Content-Type — XSS risk on CDN."""
+    svg_payload = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>'
+    _patch_httpx_stream(
+        monkeypatch, svg_payload, headers={"content-type": "image/svg+xml"}
+    )
+    with pytest.raises(ValueError, match="does not point to an image"):
+        await download_image_bytes("https://example.com/foo.svg")
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_rejects_non_image(monkeypatch):
+    """Non-image payload with no image Content-Type raises ValueError."""
+    _patch_httpx_stream(
+        monkeypatch, _HTML_PAYLOAD, headers={"content-type": "text/html"}
+    )
+    with pytest.raises(ValueError, match="does not point to an image"):
+        await download_image_bytes("https://example.com/foo.html")
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_rejects_oversized_content_length(monkeypatch):
+    """Content-Length header above the cap is rejected before streaming."""
+    _patch_httpx_stream(
+        monkeypatch, _PNG_PAYLOAD, headers={"content-length": str(50 * 1024 * 1024)}
+    )
+    with pytest.raises(ValueError, match="Response too large"):
+        await download_image_bytes("https://example.com/big.png")
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_ignores_malformed_content_length(monkeypatch):
+    """A non-numeric Content-Length header is ignored; streaming check still wins."""
+    _patch_httpx_stream(
+        monkeypatch, _PNG_PAYLOAD, headers={"content-length": "chunked"}
+    )
+    content, mime, _ext = await download_image_bytes("https://example.com/foo.png")
+    assert content == _PNG_PAYLOAD
+    assert mime == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_per_chunk_cap(monkeypatch):
+    """Per-chunk accumulator rejects payloads that exceed the cap mid-stream."""
+    # Server lies (no Content-Length) and trickles >cap bytes in small chunks.
+    big_payload = _PNG_PAYLOAD + b"\x00" * 4096
+    _patch_httpx_stream(monkeypatch, big_payload, chunk_size=128)
+    with pytest.raises(ValueError, match="Response too large"):
+        await download_image_bytes("https://example.com/big.png", max_bytes=512)
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_http_error_body_bounded(monkeypatch):
+    """4xx response body is included in the error message but bounded against OOM."""
+    # 5 MiB error body — must not be read in full into memory.
+    huge_error = b'{"error": "signed URL expired"}' + b"X" * (5 * 1024 * 1024)
+    _patch_httpx_stream(
+        monkeypatch,
+        huge_error,
+        headers={"content-type": "application/json"},
+        status_code=403,
+        chunk_size=4096,
+    )
+    with pytest.raises(httpx.HTTPStatusError, match="signed URL expired"):
+        await download_image_bytes("https://example.com/forbidden.png")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "blocked_url",
+    [
+        "http://127.0.0.1/foo.png",
+        "http://localhost/foo.png",  # single-segment hostname
+        "http://169.254.169.254/latest/meta-data/",  # AWS IMDS
+        "http://10.0.0.1/foo.png",
+        "http://192.168.1.1/foo.png",
+        "http://[::1]/foo.png",  # IPv6 loopback
+        "http://redis/foo.png",  # docker service name
+        "http://localhost./foo.png",  # FQDN-form bypass attempt
+        "ftp://example.com/foo.png",  # disallowed scheme
+    ],
+)
+async def test_download_image_bytes_rejects_internal_targets(blocked_url):
+    """SSRF guard rejects internal/reserved targets before any HTTP call."""
+    with pytest.raises(ValueError, match="Blocked|Only http"):
+        await download_image_bytes(blocked_url)
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_rejects_redirect_to_internal(monkeypatch):
+    """A public URL that redirects to an internal address is rejected at the hop."""
+    routes = {
+        "https://evil.example.com/r": _FakeStreamResponse(
+            b"", headers={"location": "http://169.254.169.254/"}, status_code=302
+        ),
+    }
+    _patch_httpx_stream_routes(monkeypatch, routes)
+    with pytest.raises(ValueError, match="Blocked internal"):
+        await download_image_bytes("https://evil.example.com/r")
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_follows_safe_redirect(monkeypatch):
+    """A redirect to another public URL is followed and validated."""
+    routes = {
+        "https://short.example.com/abc": _FakeStreamResponse(
+            b"",
+            headers={"location": "https://cdn.example.com/foo.png"},
+            status_code=302,
+        ),
+        "https://cdn.example.com/foo.png": _FakeStreamResponse(_PNG_PAYLOAD),
+    }
+    _patch_httpx_stream_routes(monkeypatch, routes)
+    content, mime, _ext = await download_image_bytes("https://short.example.com/abc")
+    assert content == _PNG_PAYLOAD
+    assert mime == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_redirect_loop_rejected(monkeypatch):
+    """Too many redirects raises ValueError rather than spinning indefinitely."""
+    routes = {
+        "https://a.example.com/": _FakeStreamResponse(
+            b"", headers={"location": "https://b.example.com/"}, status_code=302
+        ),
+        "https://b.example.com/": _FakeStreamResponse(
+            b"", headers={"location": "https://c.example.com/"}, status_code=302
+        ),
+        "https://c.example.com/": _FakeStreamResponse(
+            b"", headers={"location": "https://d.example.com/"}, status_code=302
+        ),
+        "https://d.example.com/": _FakeStreamResponse(
+            b"", headers={"location": "https://e.example.com/"}, status_code=302
+        ),
+    }
+    _patch_httpx_stream_routes(monkeypatch, routes)
+    with pytest.raises(ValueError, match="Too many redirects"):
+        await download_image_bytes("https://a.example.com/")
+
+
+@pytest.mark.asyncio
+async def test_download_image_bytes_redirect_missing_location(monkeypatch):
+    """A redirect status with no Location header raises HTTPStatusError."""
+    _patch_httpx_stream(monkeypatch, b"", status_code=302)
+    with pytest.raises(httpx.HTTPStatusError, match="missing Location"):
+        await download_image_bytes("https://example.com/r")
+
+
+@pytest.mark.asyncio
+async def test_store_image_success(mock_runtime):
+    """Successful download + upload returns the CDN URL."""
+    skill = StoreImageSkill()
+    with (
+        patch(
+            "intentkit.core.system_skills.store_image.download_image_bytes",
+            new=AsyncMock(return_value=(_PNG_PAYLOAD, "image/png", "png")),
+        ),
+        patch(
+            "intentkit.core.system_skills.store_image.store_image_bytes",
+            new=AsyncMock(return_value="prod/test_agent_123/image/store_image/abc.png"),
+        ),
+        patch(
+            "intentkit.core.system_skills.store_image.get_cdn_url",
+            return_value="https://cdn.example.com/prod/test_agent_123/image/store_image/abc.png",
+        ),
+    ):
+        result = await skill._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]
+
+    assert result == (
+        "https://cdn.example.com/prod/test_agent_123/image/store_image/abc.png"
+    )
+
+
+@pytest.mark.asyncio
+async def test_store_image_rejects_non_image(mock_runtime):
+    """ValueError from helper is surfaced as ToolException."""
+    skill = StoreImageSkill()
+    with patch(
+        "intentkit.core.system_skills.store_image.download_image_bytes",
+        new=AsyncMock(side_effect=ValueError("URL does not point to an image")),
+    ):
+        with pytest.raises(ToolException, match="does not point to an image"):
+            await skill._arun("https://example.com/foo.html")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_store_image_download_failure(mock_runtime):
+    """httpx errors from helper surface as ToolException with a friendly prefix."""
+    skill = StoreImageSkill()
+    with patch(
+        "intentkit.core.system_skills.store_image.download_image_bytes",
+        new=AsyncMock(side_effect=httpx.ConnectError("dns failure")),
+    ):
+        with pytest.raises(ToolException, match="Failed to download image"):
+            await skill._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_store_image_s3_not_configured(mock_runtime):
+    """When store_image_bytes returns empty (S3 unconfigured), raise ToolException."""
+    skill = StoreImageSkill()
+    with (
+        patch(
+            "intentkit.core.system_skills.store_image.download_image_bytes",
+            new=AsyncMock(return_value=(_PNG_PAYLOAD, "image/png", "png")),
+        ),
+        patch(
+            "intentkit.core.system_skills.store_image.store_image_bytes",
+            new=AsyncMock(return_value=""),
+        ),
+    ):
+        with pytest.raises(ToolException, match="S3 storage is not configured"):
+            await skill._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]

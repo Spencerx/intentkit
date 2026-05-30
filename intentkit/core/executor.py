@@ -162,6 +162,7 @@ async def build_executor(
         recent_activities,
         recent_posts,
         search_web_zai,
+        store_image,
         update_memory,
     )
 
@@ -223,6 +224,16 @@ async def build_executor(
             if config.zai_plan_api_key:
                 tools.extend([search_web_zai, read_webpage_zai])
                 private_tools.extend([search_web_zai, read_webpage_zai])
+
+        # store_image: paired with the search/reader skills above so the
+        # agent can persist URLs it discovered online. Registered for every
+        # provider — no native LLM search backs images into our S3, so the
+        # capability is provider-independent inside the search-enabled
+        # branch. Gated additionally on S3 config so we don't expose a tool
+        # that will always fail.
+        if config.aws_s3_bucket and config.aws_s3_cdn_url:
+            tools.append(store_image)
+            private_tools.append(store_image)
 
     # filter out unavailable skills
     tools = [t for t in tools if not isinstance(t, IntentKitSkill) or t.available()]

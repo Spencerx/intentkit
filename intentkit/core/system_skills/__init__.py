@@ -18,6 +18,7 @@ from intentkit.core.system_skills.read_webpage import (
 from intentkit.core.system_skills.recent_activities import RecentActivitiesSkill
 from intentkit.core.system_skills.recent_posts import RecentPostsSkill
 from intentkit.core.system_skills.search_web import SearchWebZaiSkill
+from intentkit.core.system_skills.store_image import StoreImageSkill
 from intentkit.core.system_skills.update_memory import UpdateMemorySkill
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "recent_activities",
     "recent_posts",
     "search_web_zai",
+    "store_image",
     "update_memory",
 ]
 
@@ -46,4 +48,5 @@ read_webpage_zai = ReadWebpageZaiSkill()
 recent_activities = RecentActivitiesSkill()
 recent_posts = RecentPostsSkill()
 search_web_zai = SearchWebZaiSkill()
+store_image = StoreImageSkill()
 update_memory = UpdateMemorySkill()
