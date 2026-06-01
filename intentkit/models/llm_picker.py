@@ -16,7 +16,7 @@ def pick_summarize_model() -> str:
         ("gpt-5.4-mini", LLMProvider.OPENAI),
         ("grok-4.20-non-reasoning", LLMProvider.XAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
-        ("MiniMax-M2.7", LLMProvider.MINIMAX),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     if (
@@ -48,8 +48,8 @@ def pick_default_model() -> str:
     """
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3-flash-preview", LLMProvider.GOOGLE),
-        ("MiniMax-M2.7", LLMProvider.MINIMAX),
-        ("minimax/minimax-m2.7", LLMProvider.OPENROUTER),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("minimax/minimax-m3", LLMProvider.OPENROUTER),
         ("gpt-5.4-mini", LLMProvider.OPENAI),
         ("grok-4.20-non-reasoning", LLMProvider.XAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
@@ -110,7 +110,7 @@ def pick_long_context_model() -> str:
         ("deepseek/deepseek-v4-flash", LLMProvider.OPENROUTER),
         ("gpt-5.4-nano", LLMProvider.OPENAI),
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
-        ("MiniMax-M2.7", LLMProvider.MINIMAX),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
