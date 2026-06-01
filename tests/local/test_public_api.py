@@ -321,3 +321,120 @@ async def test_get_share_link_404_skips_counter(router):
 
     assert exc.value.status_code == 404
     mock_inc.assert_not_awaited()
+
+
+# ---- /public/share-links/{id}/pdf tests ----
+
+
+def _make_post_share_link(target_type=None):
+    from intentkit.models.share_link import ShareLinkTargetType
+
+    link = MagicMock()
+    link.target_type = target_type or ShareLinkTargetType.POST
+    link.target_id = "post-1"
+    return link
+
+
+@pytest.mark.asyncio
+async def test_get_share_link_pdf_renders_post(router):
+    """A live post share link resolves to its post and returns the PDF response."""
+    get_fn = _get_endpoint(router, "/public/share-links/{share_link_id}/pdf")
+
+    mock_post = MagicMock(spec=AgentPost)
+    expected_response = MagicMock()
+    with (
+        patch(
+            "intentkit.core.public_api.get_share_link", new_callable=AsyncMock
+        ) as mock_link,
+        patch(
+            "intentkit.core.public_api.get_agent_post", new_callable=AsyncMock
+        ) as mock_post_fn,
+        patch(
+            "intentkit.core.public_api.post_pdf_response", new_callable=AsyncMock
+        ) as mock_pdf,
+    ):
+        mock_link.return_value = _make_post_share_link()
+        mock_post_fn.return_value = mock_post
+        mock_pdf.return_value = expected_response
+
+        result = await get_fn(share_link_id="sl-1")
+
+    assert result is expected_response
+    mock_post_fn.assert_awaited_once_with("post-1")
+    mock_pdf.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_share_link_pdf_404_when_missing_or_expired(router):
+    """Missing/expired link returns 404 without touching the post or PDF."""
+    from intentkit.utils.error import IntentKitAPIError
+
+    get_fn = _get_endpoint(router, "/public/share-links/{share_link_id}/pdf")
+
+    with (
+        patch(
+            "intentkit.core.public_api.get_share_link", new_callable=AsyncMock
+        ) as mock_link,
+        patch(
+            "intentkit.core.public_api.get_agent_post", new_callable=AsyncMock
+        ) as mock_post_fn,
+    ):
+        mock_link.return_value = None
+        with pytest.raises(IntentKitAPIError) as exc:
+            await get_fn(share_link_id="sl-gone")
+
+    assert exc.value.status_code == 404
+    mock_post_fn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_share_link_pdf_404_for_chat_share(router):
+    """Chat shares have no PDF representation and must return 404."""
+    from intentkit.models.share_link import ShareLinkTargetType
+    from intentkit.utils.error import IntentKitAPIError
+
+    get_fn = _get_endpoint(router, "/public/share-links/{share_link_id}/pdf")
+
+    with (
+        patch(
+            "intentkit.core.public_api.get_share_link", new_callable=AsyncMock
+        ) as mock_link,
+        patch(
+            "intentkit.core.public_api.get_agent_post", new_callable=AsyncMock
+        ) as mock_post_fn,
+    ):
+        mock_link.return_value = _make_post_share_link(
+            target_type=ShareLinkTargetType.CHAT
+        )
+        with pytest.raises(IntentKitAPIError) as exc:
+            await get_fn(share_link_id="sl-chat")
+
+    assert exc.value.status_code == 404
+    mock_post_fn.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_share_link_pdf_404_when_post_gone(router):
+    """A live link whose post was deleted returns 404."""
+    from intentkit.utils.error import IntentKitAPIError
+
+    get_fn = _get_endpoint(router, "/public/share-links/{share_link_id}/pdf")
+
+    with (
+        patch(
+            "intentkit.core.public_api.get_share_link", new_callable=AsyncMock
+        ) as mock_link,
+        patch(
+            "intentkit.core.public_api.get_agent_post", new_callable=AsyncMock
+        ) as mock_post_fn,
+        patch(
+            "intentkit.core.public_api.post_pdf_response", new_callable=AsyncMock
+        ) as mock_pdf,
+    ):
+        mock_link.return_value = _make_post_share_link()
+        mock_post_fn.return_value = None
+        with pytest.raises(IntentKitAPIError) as exc:
+            await get_fn(share_link_id="sl-1")
+
+    assert exc.value.status_code == 404
+    mock_pdf.assert_not_awaited()

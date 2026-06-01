@@ -1,11 +1,13 @@
 """Shared public API router for both local and team APIs."""
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Response
 from sqlalchemy import select
 
+from intentkit.config.config import config
 from intentkit.config.db import get_session
 from intentkit.core.agent_post import get_agent_post
 from intentkit.core.share_link import (
+    get_share_link,
     get_shared_view,
     increment_share_link_view_count,
 )
@@ -15,9 +17,10 @@ from intentkit.models.agent.core import AgentVisibility
 from intentkit.models.agent.db import AgentTable
 from intentkit.models.agent_activity import AgentActivity
 from intentkit.models.agent_post import AgentPost, AgentPostBrief
-from intentkit.models.share_link import ShareLinkView
+from intentkit.models.share_link import ShareLinkTargetType, ShareLinkView
 from intentkit.models.team_feed import TeamFeedPage
 from intentkit.utils.error import IntentKitAPIError
+from intentkit.utils.pdf import post_pdf_response
 
 PUBLIC_TEAM_ID = "public"
 
@@ -99,5 +102,25 @@ def create_public_router() -> APIRouter:
             raise IntentKitAPIError(404, "NotFound", "Share link not found or expired")
         await increment_share_link_view_count(share_link_id)
         return view
+
+    @router.get(
+        "/share-links/{share_link_id}/pdf",
+        operation_id="public_get_share_link_pdf",
+    )
+    async def public_get_share_link_pdf(
+        share_link_id: str = Path(...),
+    ) -> Response:
+        """Download a shared post as a styled PDF.
+
+        No authentication. Returns 404 if the link is missing, expired, or does
+        not point to a post (chat shares have no PDF representation).
+        """
+        link = await get_share_link(share_link_id)
+        if link is None or link.target_type != ShareLinkTargetType.POST:
+            raise IntentKitAPIError(404, "NotFound", "Share link not found or expired")
+        post = await get_agent_post(link.target_id)
+        if post is None:
+            raise IntentKitAPIError(404, "NotFound", "Post not found")
+        return await post_pdf_response(post, cdn_base=config.aws_s3_cdn_url)
 
     return router
