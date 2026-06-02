@@ -157,7 +157,6 @@ async def build_executor(
         create_post,
         current_time,
         get_post,
-        read_webpage_cloudflare,
         read_webpage_zai,
         recent_activities,
         recent_posts,
@@ -168,14 +167,11 @@ async def build_executor(
 
     model_provider = llm_model.info.provider
 
-    # current_time: public skill, but OpenRouter uses server tool instead
-    if model_provider == LLMProvider.OPENROUTER:
-        datetime_tool: dict[str, Any] = {"type": "openrouter:datetime"}
-        tools.append(datetime_tool)
-        private_tools.append(datetime_tool)
-    else:
-        tools.append(current_time)
-        private_tools.append(current_time)
+    # current_time: system skill used by every provider. We intentionally do
+    # NOT use OpenRouter's openrouter:datetime server tool, so all agents share
+    # the same time behaviour (formatted time plus a Unix timestamp).
+    tools.append(current_time)
+    private_tools.append(current_time)
 
     # call_agent: only when sub-agents are configured
     if agent.sub_agents:
@@ -208,13 +204,15 @@ async def build_executor(
             tools.extend(search_tools)
             private_tools.extend(search_tools)
         elif model_provider == LLMProvider.OPENROUTER:
-            search_tool: dict[str, Any] = {"type": "openrouter:web_search"}
-            tools.append(search_tool)
-            private_tools.append(search_tool)
-            # OpenRouter doesn't have native webpage reading
-            if config.cloudflare_account_id and config.cloudflare_api_token:
-                tools.append(read_webpage_cloudflare)
-                private_tools.append(read_webpage_cloudflare)
+            # Pair web search with OpenRouter's web_fetch server tool so the
+            # agent can both discover and read pages natively, instead of our
+            # own webpage reader skill.
+            search_tools = [
+                {"type": "openrouter:web_search"},
+                {"type": "openrouter:web_fetch"},
+            ]
+            tools.extend(search_tools)
+            private_tools.extend(search_tools)
         elif model_provider == LLMProvider.GOOGLE:
             search_tools = [{"google_search": {}}, {"url_context": {}}]
             tools.extend(search_tools)

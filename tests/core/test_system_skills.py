@@ -59,6 +59,12 @@ def mock_runtime():
 # ──────────────────────────────────────────────
 
 
+def _extract_unix_timestamp(result: str) -> int:
+    """Parse the ``Unix timestamp: <int>`` line from current_time output."""
+    line = next(ln for ln in result.splitlines() if ln.startswith("Unix timestamp: "))
+    return int(line.removeprefix("Unix timestamp: "))
+
+
 @pytest.mark.asyncio
 async def test_current_time_utc():
     """Default timezone returns current time with UTC."""
@@ -66,6 +72,7 @@ async def test_current_time_utc():
     result = await skill._arun()  # pyright: ignore[reportPrivateUsage]
     assert result.startswith("Current time: ")
     assert "UTC" in result
+    assert "Unix timestamp: " in result
 
 
 @pytest.mark.asyncio
@@ -75,6 +82,34 @@ async def test_current_time_custom_timezone():
     result = await skill._arun(timezone="Asia/Tokyo")  # pyright: ignore[reportPrivateUsage]
     assert result.startswith("Current time: ")
     assert "JST" in result or "Asia/Tokyo" in result
+
+
+@pytest.mark.asyncio
+async def test_current_time_includes_unix_timestamp():
+    """Output includes a Unix timestamp close to the current time."""
+    skill = CurrentTimeSkill()
+    before = int(datetime.now().timestamp())
+    result = await skill._arun()  # pyright: ignore[reportPrivateUsage]
+    after = int(datetime.now().timestamp())
+
+    # The timestamp is timezone-independent and should fall within the window
+    # spanning the call.
+    assert before <= _extract_unix_timestamp(result) <= after
+
+
+@pytest.mark.asyncio
+async def test_current_time_unix_timestamp_timezone_independent():
+    """The Unix timestamp does not depend on the requested timezone."""
+    skill = CurrentTimeSkill()
+
+    utc_result = await skill._arun()  # pyright: ignore[reportPrivateUsage]
+    tokyo_result = await skill._arun(timezone="Asia/Tokyo")  # pyright: ignore[reportPrivateUsage]
+
+    # Both calls happen within a second, so timestamps should be within 2s.
+    delta = abs(
+        _extract_unix_timestamp(utc_result) - _extract_unix_timestamp(tokyo_result)
+    )
+    assert delta <= 2
 
 
 @pytest.mark.asyncio

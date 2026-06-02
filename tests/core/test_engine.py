@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain.agents.middleware import ToolRetryMiddleware
 from langchain_core.messages import AIMessage
+from langchain_core.tools import BaseTool
 from langchain_core.tools.base import ToolException
 
 from intentkit.core.engine import stream_agent
@@ -13,6 +14,7 @@ from intentkit.core.executor import (
     agents_updated,
     build_executor,
 )
+from intentkit.core.middleware import ToolBindingMiddleware
 from intentkit.models.agent import Agent, AgentData
 from intentkit.models.agent.core import AgentVisibility
 from intentkit.models.chat import AuthorType, ChatMessage, ChatMessageAttachmentType
@@ -83,6 +85,53 @@ async def test_build_executor(mock_agent, mock_agent_data):
         assert tool_retry.retry_on(ToolException("boom")) is False
         assert tool_retry.retry_on(RuntimeError("boom")) is True
         assert executor == mock_create_lc_agent.return_value
+
+
+@pytest.mark.asyncio
+async def test_build_executor_openrouter_tools(mock_agent, mock_agent_data):
+    """OpenRouter agents use our own current_time skill plus the web_search and
+    web_fetch server tools, and never OpenRouter's datetime server tool or the
+    Cloudflare webpage reader skill."""
+    mock_agent.search_internet = True
+
+    with (
+        patch(
+            "intentkit.core.executor.create_llm_model", new_callable=AsyncMock
+        ) as mock_create_model,
+        patch("langchain.agents.create_agent") as mock_create_lc_agent,
+        patch("intentkit.core.executor.get_checkpointer"),
+        patch("intentkit.core.executor.pick_summarize_model", return_value="gpt-4o"),
+        patch("intentkit.core.middleware.SummarizationMiddleware"),
+    ):
+        mock_llm_instance = AsyncMock()
+        mock_model = AsyncMock()
+        mock_model.create_instance.return_value = mock_llm_instance
+        mock_model.info.context_length = 128000
+        mock_model.info.provider = "openrouter"
+        mock_create_model.return_value = mock_model
+
+        await build_executor(mock_agent, mock_agent_data)
+
+        middleware = mock_create_lc_agent.call_args.kwargs["middleware"]
+        tool_binding = next(
+            m for m in middleware if isinstance(m, ToolBindingMiddleware)
+        )
+
+    def tool_keys(tools: list) -> set[str]:
+        keys: set[str] = set()
+        for tool in tools:
+            if isinstance(tool, BaseTool):
+                keys.add(tool.name)
+            else:
+                keys.add(tool.get("type") or tool.get("name"))
+        return keys
+
+    keys = tool_keys(tool_binding.private_tools)
+    assert "current_time" in keys
+    assert "openrouter:web_search" in keys
+    assert "openrouter:web_fetch" in keys
+    assert "openrouter:datetime" not in keys
+    assert "read_webpage_cloudflare" not in keys
 
 
 @pytest.mark.asyncio
