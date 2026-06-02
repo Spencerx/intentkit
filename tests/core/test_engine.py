@@ -87,6 +87,17 @@ async def test_build_executor(mock_agent, mock_agent_data):
         assert executor == mock_create_lc_agent.return_value
 
 
+def _tool_keys(tools: list) -> set[str]:
+    """Map an executor tool list to identifying keys (BaseTool name or dict type)."""
+    keys: set[str] = set()
+    for tool in tools:
+        if isinstance(tool, BaseTool):
+            keys.add(tool.name)
+        else:
+            keys.add(tool.get("type") or tool.get("name"))
+    return keys
+
+
 @pytest.mark.asyncio
 async def test_build_executor_openrouter_tools(mock_agent, mock_agent_data):
     """OpenRouter agents use our own current_time skill plus the web_search and
@@ -117,21 +128,49 @@ async def test_build_executor_openrouter_tools(mock_agent, mock_agent_data):
             m for m in middleware if isinstance(m, ToolBindingMiddleware)
         )
 
-    def tool_keys(tools: list) -> set[str]:
-        keys: set[str] = set()
-        for tool in tools:
-            if isinstance(tool, BaseTool):
-                keys.add(tool.name)
-            else:
-                keys.add(tool.get("type") or tool.get("name"))
-        return keys
-
-    keys = tool_keys(tool_binding.private_tools)
+    keys = _tool_keys(tool_binding.private_tools)
     assert "current_time" in keys
     assert "openrouter:web_search" in keys
     assert "openrouter:web_fetch" in keys
     assert "openrouter:datetime" not in keys
     assert "read_webpage_cloudflare" not in keys
+
+
+@pytest.mark.asyncio
+async def test_build_executor_compatible_tools(mock_agent, mock_agent_data):
+    """Providers without native search (e.g. deepseek) get the unified
+    web_search skill plus the Cloudflare reader, not the old zai skills."""
+    mock_agent.search_internet = True
+
+    with (
+        patch(
+            "intentkit.core.executor.create_llm_model", new_callable=AsyncMock
+        ) as mock_create_model,
+        patch("langchain.agents.create_agent") as mock_create_lc_agent,
+        patch("intentkit.core.executor.get_checkpointer"),
+        patch("intentkit.core.executor.pick_summarize_model", return_value="gpt-4o"),
+        patch("intentkit.core.middleware.SummarizationMiddleware"),
+    ):
+        mock_llm_instance = AsyncMock()
+        mock_model = AsyncMock()
+        mock_model.create_instance.return_value = mock_llm_instance
+        mock_model.info.context_length = 128000
+        mock_model.info.provider = "deepseek"
+        mock_create_model.return_value = mock_model
+
+        await build_executor(mock_agent, mock_agent_data)
+
+        middleware = mock_create_lc_agent.call_args.kwargs["middleware"]
+        tool_binding = next(
+            m for m in middleware if isinstance(m, ToolBindingMiddleware)
+        )
+
+    keys = _tool_keys(tool_binding.private_tools)
+    assert "current_time" in keys
+    assert "web_search" in keys
+    assert "read_webpage_cloudflare" in keys
+    assert "search_web_zai" not in keys
+    assert "read_webpage_zai" not in keys
 
 
 @pytest.mark.asyncio

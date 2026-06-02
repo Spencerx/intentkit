@@ -96,7 +96,7 @@ def build_agent_manager(team_id: str) -> Agent:
         "To give an agent web search ability, set the agent field "
         "`search_internet` to `true`. That switch enables the LLM provider's "
         "native web search and is the correct way to add general-purpose "
-        "search. Do NOT add categories like `tavily`, `firecrawl`, "
+        "search. Do NOT add categories like `firecrawl`, "
         "`web_scraper`, etc. just to grant search — those are backups for "
         "specialised scraping/extraction needs and only belong in `skills` "
         "when the agent really needs them.\n\n"

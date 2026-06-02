@@ -225,6 +225,7 @@ class Config:
         self.dapplooker_api_key: str | None = self.load("DAPPLOOKER_API_KEY")
         self.moralis_api_key: str | None = self.load("MORALIS_API_KEY")
         self.tavily_api_key: str | None = self.load("TAVILY_API_KEY")
+        self.jina_api_key: str | None = self.load("JINA_API_KEY")
         self.cookiefun_api_key: str | None = self.load("COOKIEFUN_API_KEY")
         self.firecrawl_api_key: str | None = self.load("FIRECRAWL_API_KEY")
         self.cryptopanic_api_key: str | None = self.load("CRYPTOPANIC_API_KEY")

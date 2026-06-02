@@ -51,3 +51,38 @@ class SystemSkill(BaseTool, metaclass=ABCMeta):
         if context is None:
             raise ValueError("No AgentContext found")
         return context
+
+    async def _bill_internal_llm(
+        self, response: Any, tool_call_id: str | None, model_id: str
+    ) -> None:
+        """Bill the team for an internal LLM call made inside a skill.
+
+        Best-effort: token usage is read from the LangChain ``response`` and
+        any billing failure is logged, never raised.
+        """
+        usage = response.usage_metadata or {}
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        cached_input_tokens = usage.get("input_token_details", {}).get("cache_read", 0)
+        try:
+            context = self.get_context()
+            payer = context.payer
+            if payer and tool_call_id:
+                from intentkit.core.credit.expense import expense_skill_internal_llm
+
+                await expense_skill_internal_llm(
+                    team_id=payer,
+                    agent=context.agent,
+                    skill_name=self.name,
+                    skill_call_id=tool_call_id,
+                    start_message_id=context.start_message_id,
+                    model_id=model_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cached_input_tokens=cached_input_tokens,
+                    user_id=context.user_id,
+                )
+        except Exception as e:
+            self.logger.warning(
+                "%s: failed to bill internal LLM usage: %s", self.name, e
+            )

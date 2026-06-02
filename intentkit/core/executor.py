@@ -157,12 +157,12 @@ async def build_executor(
         create_post,
         current_time,
         get_post,
-        read_webpage_zai,
+        read_webpage_cloudflare,
         recent_activities,
         recent_posts,
-        search_web_zai,
         store_image,
         update_memory,
+        web_search,
     )
 
     model_provider = llm_model.info.provider
@@ -218,10 +218,12 @@ async def build_executor(
             tools.extend(search_tools)
             private_tools.extend(search_tools)
         else:
-            # For other providers (e.g. compatible), use zai skills if configured
-            if config.zai_plan_api_key:
-                tools.extend([search_web_zai, read_webpage_zai])
-                private_tools.extend([search_web_zai, read_webpage_zai])
+            # Providers without a native search tool (deepseek, minimax,
+            # mimo_plan, ollama, *_compatible): use our unified web_search skill
+            # plus the Cloudflare webpage reader. Each self-checks its own
+            # config and raises a clear error if unconfigured.
+            tools.extend([web_search, read_webpage_cloudflare])
+            private_tools.extend([web_search, read_webpage_cloudflare])
 
         # store_image: paired with the search/reader skills above so the
         # agent can persist URLs it discovered online. Registered for every

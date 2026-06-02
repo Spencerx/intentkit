@@ -20,13 +20,13 @@ from intentkit.core.system_skills.create_activity import (
 )
 from intentkit.core.system_skills.current_time import CurrentTimeSkill
 from intentkit.core.system_skills.get_post import GetPostSkill
-from intentkit.core.system_skills.read_webpage import (
-    ReadWebpageCloudflareSkill,
-    ReadWebpageZaiSkill,
-)
+from intentkit.core.system_skills.read_webpage import ReadWebpageCloudflareSkill
 from intentkit.core.system_skills.recent_activities import RecentActivitiesSkill
 from intentkit.core.system_skills.recent_posts import RecentPostsSkill
-from intentkit.core.system_skills.search_web import SearchWebZaiSkill
+from intentkit.core.system_skills.search_web import (  # pyright: ignore[reportPrivateUsage]
+    WebSearchSkill,
+    _QuotaError,
+)
 from intentkit.core.system_skills.store_image import StoreImageSkill
 from intentkit.models.chat import (
     AuthorType,
@@ -624,67 +624,226 @@ async def test_read_webpage_cloudflare_success():
 
 
 # ──────────────────────────────────────────────
-# ReadWebpageZaiSkill
+# WebSearchSkill
 # ──────────────────────────────────────────────
 
 
+class _FakeSearchResponse:
+    """Minimal httpx-like response for web_search backend tests."""
+
+    def __init__(
+        self, status_code: int, json_data: dict | None = None, text: str = ""
+    ) -> None:
+        self.status_code = status_code
+        self._json = json_data or {}
+        self.text = text
+
+    def json(self) -> dict:
+        return self._json
+
+
+class _FakeAsyncClient:
+    """Async-context-manager stub that returns a fixed response."""
+
+    def __init__(self, response: _FakeSearchResponse) -> None:
+        self._response = response
+
+    async def __aenter__(self) -> "_FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, *args: object) -> bool:
+        return False
+
+    async def post(self, *args: object, **kwargs: object) -> _FakeSearchResponse:
+        return self._response
+
+    async def get(self, *args: object, **kwargs: object) -> _FakeSearchResponse:
+        return self._response
+
+
+def _set_search_keys(
+    mock_config, *, tavily=None, jina=None, google=None, zai=None
+) -> None:
+    """Set the four web_search backend keys on a mocked config."""
+    mock_config.tavily_api_key = tavily
+    mock_config.jina_api_key = jina
+    mock_config.google_api_key = google
+    mock_config.zai_plan_api_key = zai
+
+
 @pytest.mark.asyncio
-async def test_read_webpage_zai_missing_config():
-    """Missing config raises ToolException."""
-    skill = ReadWebpageZaiSkill()
+async def test_web_search_no_backend_configured():
+    """No keys at all raises a ToolException naming the env vars."""
+    skill = WebSearchSkill()
     with patch("intentkit.config.config.config") as mock_config:
-        mock_config.zai_plan_api_key = None
-        with pytest.raises(ToolException, match="Z.AI Plan API is not configured"):
-            await skill._arun("https://example.com")  # pyright: ignore[reportPrivateUsage]
+        _set_search_keys(mock_config)
+        with pytest.raises(ToolException, match="No web search backend"):
+            await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
 
 
 @pytest.mark.asyncio
-async def test_read_webpage_zai_success():
-    """Successful fetch returns content."""
-    skill = ReadWebpageZaiSkill()
+async def test_web_search_tavily_only_success():
+    """Only Tavily configured → its result is returned."""
+    skill = WebSearchSkill()
     with (
         patch("intentkit.config.config.config") as mock_config,
-        patch(
-            "intentkit.core.system_skills.read_webpage.call_mcp_tool",
-            new=AsyncMock(return_value="raw markdown"),
+        patch.object(skill, "_in_cooldown", new=AsyncMock(return_value=False)),
+        patch.object(
+            skill, "_search_tavily", new=AsyncMock(return_value="tavily result")
         ),
     ):
-        mock_config.zai_plan_api_key = "test_key"
-        result = await skill._arun("https://example.com")  # pyright: ignore[reportPrivateUsage]
-
-    assert result == "raw markdown"
-
-
-# ──────────────────────────────────────────────
-# SearchWebZaiSkill
-# ──────────────────────────────────────────────
+        _set_search_keys(mock_config, tavily="k")
+        result = await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
+    assert result == "tavily result"
 
 
 @pytest.mark.asyncio
-async def test_search_web_zai_missing_config():
-    """Missing config raises ToolException."""
-    skill = SearchWebZaiSkill()
-    with patch("intentkit.config.config.config") as mock_config:
-        mock_config.zai_plan_api_key = None
-        with pytest.raises(ToolException, match="Z.AI Plan API is not configured"):
-            await skill._arun("test query")  # pyright: ignore[reportPrivateUsage]
-
-
-@pytest.mark.asyncio
-async def test_search_web_zai_success():
-    """Successful search returns MCP tool result."""
-    skill = SearchWebZaiSkill()
+async def test_web_search_quota_falls_back_and_sets_cooldown():
+    """Tavily out of quota → cooldown recorded and Jina used instead."""
+    skill = WebSearchSkill()
+    set_cooldown = AsyncMock()
     with (
         patch("intentkit.config.config.config") as mock_config,
+        # Pin the random order so Tavily is attempted first, deterministically.
         patch(
-            "intentkit.core.system_skills.search_web.call_mcp_tool",
-            new=AsyncMock(return_value="MCP search results"),
+            "intentkit.core.system_skills.search_web.random.shuffle",
+            lambda seq: None,
+        ),
+        patch.object(skill, "_in_cooldown", new=AsyncMock(return_value=False)),
+        patch.object(skill, "_set_cooldown", new=set_cooldown),
+        patch.object(
+            skill, "_search_tavily", new=AsyncMock(side_effect=_QuotaError("429"))
+        ),
+        patch.object(skill, "_search_jina", new=AsyncMock(return_value="jina result")),
+    ):
+        _set_search_keys(mock_config, tavily="k", jina="k")
+        result = await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
+    assert result == "jina result"
+    set_cooldown.assert_awaited_once_with("tavily")
+
+
+@pytest.mark.asyncio
+async def test_web_search_falls_back_to_gemini_when_metered_exhausted():
+    """Both Tavily and Jina out of quota → Gemini fallback is used."""
+    skill = WebSearchSkill()
+    with (
+        patch("intentkit.config.config.config") as mock_config,
+        patch.object(skill, "_in_cooldown", new=AsyncMock(return_value=False)),
+        patch.object(skill, "_set_cooldown", new=AsyncMock()),
+        patch.object(
+            skill, "_search_tavily", new=AsyncMock(side_effect=_QuotaError("429"))
+        ),
+        patch.object(
+            skill, "_search_jina", new=AsyncMock(side_effect=_QuotaError("402"))
+        ),
+        patch.object(
+            skill, "_search_gemini", new=AsyncMock(return_value="gemini result")
         ),
     ):
-        mock_config.zai_plan_api_key = "test_key"
-        result = await skill._arun("test query")  # pyright: ignore[reportPrivateUsage]
+        _set_search_keys(mock_config, tavily="k", jina="k", google="k", zai="k")
+        result = await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
+    assert result == "gemini result"
 
-    assert result == "MCP search results"
+
+@pytest.mark.asyncio
+async def test_web_search_zai_is_last_resort():
+    """Only Z.AI configured → it is used."""
+    skill = WebSearchSkill()
+    with (
+        patch("intentkit.config.config.config") as mock_config,
+        patch.object(skill, "_search_zai", new=AsyncMock(return_value="zai result")),
+    ):
+        _set_search_keys(mock_config, zai="k")
+        result = await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
+    assert result == "zai result"
+
+
+@pytest.mark.asyncio
+async def test_web_search_skips_cooled_down_backend():
+    """A cooled-down Tavily is skipped; Jina is used and Tavily never called."""
+    skill = WebSearchSkill()
+
+    async def fake_cooldown(backend: str) -> bool:
+        return backend == "tavily"
+
+    tavily = AsyncMock(return_value="tavily result")
+    with (
+        patch("intentkit.config.config.config") as mock_config,
+        patch.object(skill, "_in_cooldown", new=fake_cooldown),
+        patch.object(skill, "_search_tavily", new=tavily),
+        patch.object(skill, "_search_jina", new=AsyncMock(return_value="jina result")),
+    ):
+        _set_search_keys(mock_config, tavily="k", jina="k")
+        result = await skill._arun("query")  # pyright: ignore[reportPrivateUsage]
+    assert result == "jina result"
+    tavily.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_web_search_tavily_http_parsing():
+    """_search_tavily parses results into the uniform format."""
+    skill = WebSearchSkill()
+    response = _FakeSearchResponse(
+        200,
+        {"results": [{"title": "T", "url": "https://e.com", "content": "snippet"}]},
+    )
+    with patch(
+        "intentkit.core.system_skills.search_web.httpx.AsyncClient",
+        return_value=_FakeAsyncClient(response),
+    ):
+        result = await skill._search_tavily("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+    assert "https://e.com" in result
+    assert "snippet" in result
+    assert "T" in result
+
+
+@pytest.mark.asyncio
+async def test_web_search_tavily_quota_status_raises_quota_error():
+    """A 429 from Tavily becomes a _QuotaError."""
+    skill = WebSearchSkill()
+    response = _FakeSearchResponse(429, text="rate limited")
+    with patch(
+        "intentkit.core.system_skills.search_web.httpx.AsyncClient",
+        return_value=_FakeAsyncClient(response),
+    ):
+        with pytest.raises(_QuotaError):
+            await skill._search_tavily("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.asyncio
+async def test_web_search_jina_http_parsing():
+    """_search_jina parses the data list using description as the snippet."""
+    skill = WebSearchSkill()
+    response = _FakeSearchResponse(
+        200,
+        {"data": [{"title": "J", "url": "https://j.com", "description": "desc"}]},
+    )
+    with patch(
+        "intentkit.core.system_skills.search_web.httpx.AsyncClient",
+        return_value=_FakeAsyncClient(response),
+    ):
+        result = await skill._search_jina("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+    assert "https://j.com" in result
+    assert "desc" in result
+
+
+@pytest.mark.asyncio
+async def test_web_search_jina_quota_status_raises_quota_error():
+    """A 402 from Jina becomes a _QuotaError."""
+    skill = WebSearchSkill()
+    response = _FakeSearchResponse(402, text="payment required")
+    with patch(
+        "intentkit.core.system_skills.search_web.httpx.AsyncClient",
+        return_value=_FakeAsyncClient(response),
+    ):
+        with pytest.raises(_QuotaError):
+            await skill._search_jina("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_web_search_format_results_empty():
+    """No usable results yields a friendly message."""
+    skill = WebSearchSkill()
+    assert "No results found" in skill._format_results("query", [])  # pyright: ignore[reportPrivateUsage]
 
 
 # ──────────────────────────────────────────────

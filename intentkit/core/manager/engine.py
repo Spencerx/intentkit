@@ -107,7 +107,7 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
 
         Internet search: to give an agent web search, set the agent field `search_internet` to `true`.
         That switch enables the LLM provider's native web search and is the right tool for general-purpose
-        searching. Do NOT add categories like `tavily`, `firecrawl`, `web_scraper`, etc. just to give the
+        searching. Do NOT add categories like `firecrawl`, `web_scraper`, etc. just to give the
         agent search ability — those categories are backups for specialised scraping/extraction needs and
         only belong in the skills config when the agent really requires them.
         """
