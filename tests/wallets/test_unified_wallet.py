@@ -157,13 +157,25 @@ class TestGetWalletSigner:
         mock_account = MagicMock()
         mock_account.address = "0x1234567890abcdef1234567890abcdef12345678"
 
-        with patch(
-            "intentkit.wallets.get_evm_account",
-            new_callable=AsyncMock,
-            return_value=mock_account,
+        # Patch the CDP SDK's EvmLocalAccount: its real __init__ eagerly builds
+        # an auth client from server_account.api_clients._cdp_client and validates
+        # the credentials as strings, which a bare MagicMock cannot satisfy. We
+        # only want to verify get_wallet_signer's cdp routing, not the SDK.
+        with (
+            patch(
+                "intentkit.wallets.get_evm_account",
+                new_callable=AsyncMock,
+                return_value=mock_account,
+            ),
+            patch("cdp.EvmLocalAccount") as mock_local_account_class,
         ):
+            mock_signer = MagicMock()
+            mock_signer.address = mock_account.address
+            mock_local_account_class.return_value = mock_signer
+
             signer = await get_wallet_signer(mock_agent)
 
+            mock_local_account_class.assert_called_once_with(mock_account)
             assert signer is not None
             assert signer.address == mock_account.address
 
