@@ -1,10 +1,9 @@
-# Release v1.2.17
+# Release v1.2.18
 
 ## New Features
 
-- Agents now report the current time together with a numeric Unix timestamp, so tools and workflows that need an exact machine-readable time value can use it directly.
+- Agents running on models without a built-in web search (such as DeepSeek and MiniMax) now have reliable Internet Search. It draws on several search providers behind the scenes and automatically falls back to another whenever one is unavailable or out of quota, so searches keep succeeding without any manual switching.
 
 ## Improvements
 
-- Agents running on OpenRouter models with Internet Search enabled can now read full web pages natively, on top of searching — giving more complete and reliable answers when they need details from a specific page.
-- Made timekeeping consistent across every agent: all models now use the same built-in time tool, so the time format and behavior no longer depend on the underlying model provider.
+- Web search is now delivered through a single, consistent built-in capability for these models; the standalone Tavily skill has been retired and its functionality folded into the unified search.
