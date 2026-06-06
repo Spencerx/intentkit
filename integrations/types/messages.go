@@ -5,7 +5,7 @@ package types
 // AuthorType constants mirror intentkit.models.chat.AuthorType.
 const (
 	AuthorTypeAgent    = "agent"
-	AuthorTypeSkill    = "skill"
+	AuthorTypeTool     = "tool"
 	AuthorTypeThinking = "thinking"
 	AuthorTypeSystem   = "system"
 )
@@ -34,18 +34,18 @@ type ChatMessage struct {
 	Message    string `json:"message"`
 
 	// Optional fields
-	Model      *string              `json:"model,omitempty"`
-	ThreadType *string              `json:"thread_type,omitempty"`
-	ReplyTo    *string              `json:"reply_to,omitempty"`
-	Thinking   *string              `json:"thinking,omitempty"`
-	ErrorType  *string              `json:"error_type,omitempty"`
-	CreatedAt  string               `json:"created_at,omitempty"`
-	SkillCalls []ChatMessageSkill   `json:"skill_calls,omitempty"`
+	Model       *string             `json:"model,omitempty"`
+	ThreadType  *string             `json:"thread_type,omitempty"`
+	ReplyTo     *string             `json:"reply_to,omitempty"`
+	Thinking    *string             `json:"thinking,omitempty"`
+	ErrorType   *string             `json:"error_type,omitempty"`
+	CreatedAt   string              `json:"created_at,omitempty"`
+	ToolCalls   []ChatMessageTool   `json:"tool_calls,omitempty"`
 	Attachments []ChatMessageAttach `json:"attachments,omitempty"`
 }
 
-// ChatMessageSkill mirrors intentkit.models.chat.ChatMessageSkillCall.
-type ChatMessageSkill struct {
+// ChatMessageTool mirrors intentkit.models.chat.ChatMessageToolCall.
+type ChatMessageTool struct {
 	ID           string                 `json:"id,omitempty"`
 	Name         string                 `json:"name"`
 	Parameters   map[string]interface{} `json:"parameters"`

@@ -1,4 +1,4 @@
-"""BDD tests for on-chain Aerodrome Slipstream read-only skills using real RPC."""
+"""BDD tests for on-chain Aerodrome Slipstream read-only tools using real RPC."""
 
 import os
 
@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.aerodrome.constants import (
+from intentkit.tools.aerodrome.constants import (
     CL_FACTORY_ABI,
     CL_FACTORY_ADDRESS,
     NETWORK_TO_CHAIN_ID,
@@ -19,12 +19,12 @@ from intentkit.skills.aerodrome.constants import (
     VOTER_ADDRESS,
     WRAPPED_NATIVE_ADDRESS,
 )
-from intentkit.skills.aerodrome.utils import (
+from intentkit.tools.aerodrome.utils import (
     convert_amount,
     format_amount,
     resolve_token,
 )
-from intentkit.skills.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
+from intentkit.tools.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
 
 NETWORK = "base-mainnet"
 CHAIN_ID = NETWORK_TO_CHAIN_ID[NETWORK]

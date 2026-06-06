@@ -121,7 +121,7 @@ def _extract_openrouter_image_url(response: Any) -> str | None:
 
     Different image models put the result in different places: most use
     ``message.images[0].image_url.url``, a few return it as an ``image_url``
-    content part. Check both so avatar and skill callers stay consistent.
+    content part. Check both so avatar and tool callers stay consistent.
     """
     try:
         message = response.choices[0].message

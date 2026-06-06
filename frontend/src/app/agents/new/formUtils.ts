@@ -1,6 +1,6 @@
 import { customizeValidator } from "@rjsf/validator-ajv8";
 import { RegistryFieldsType } from "@rjsf/utils";
-import { SkillsField } from "./SkillsField";
+import { ToolsField } from "./ToolsField";
 
 // Shared RJSF validator
 export const validator = customizeValidator({
@@ -11,7 +11,7 @@ export const validator = customizeValidator({
 
 // Shared RJSF custom fields
 export const fields: RegistryFieldsType = {
-    SkillsField: SkillsField,
+    ToolsField: ToolsField,
 };
 
 // Stable error logger for RJSF onError
@@ -39,8 +39,8 @@ export function generateUiSchema(
             const property = properties[key];
             const uiProperty: Record<string, unknown> = {};
 
-            if (key === "skills") {
-                uiProperty["ui:field"] = "SkillsField";
+            if (key === "tools") {
+                uiProperty["ui:field"] = "ToolsField";
             }
 
             if (readOnlySet.has(key)) {
@@ -106,36 +106,36 @@ export function createTransformErrors(
 }
 
 /**
- * Clean up skills data before submission.
- * - Removes categories where enabled=false
- * - Removes skill states that are 'disabled'
- * - Optionally filters out skills/categories not in schema (for edit mode)
+ * Clean up tools data before submission.
+ * - Removes toolsets where enabled=false
+ * - Removes tool states that are 'disabled'
+ * - Optionally filters out tools/toolsets not in schema (for edit mode)
  */
-export function cleanSkillsData(
+export function cleanToolsData(
     data: Record<string, unknown>,
     schema?: Record<string, unknown>,
 ): Record<string, unknown> {
-    const skills = data.skills as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
-    if (!skills) return data;
+    const tools = data.tools as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
+    if (!tools) return data;
 
     const validCategories = getValidCategories(schema);
 
-    const cleanedSkills: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
-    for (const [categoryKey, categoryData] of Object.entries(skills)) {
+    const cleanedTools: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
+    for (const [categoryKey, categoryData] of Object.entries(tools)) {
         if (categoryData.enabled === false) continue;
         if (validCategories && !validCategories.has(categoryKey)) continue;
 
-        const validSkills = getValidSkillsForCategory(schema, categoryKey);
+        const validTools = getValidToolsForToolset(schema, categoryKey);
         const states = categoryData.states || {};
         const cleanedStates: Record<string, string> = {};
-        for (const [skillKey, skillValue] of Object.entries(states)) {
-            if (skillValue === "disabled") continue;
-            if (validSkills && !validSkills.has(skillKey)) continue;
-            cleanedStates[skillKey] = skillValue;
+        for (const [toolKey, toolValue] of Object.entries(states)) {
+            if (toolValue === "disabled") continue;
+            if (validTools && !validTools.has(toolKey)) continue;
+            cleanedStates[toolKey] = toolValue;
         }
 
         if (categoryData.enabled === true) {
-            cleanedSkills[categoryKey] = {
+            cleanedTools[categoryKey] = {
                 enabled: true,
                 states: Object.keys(cleanedStates).length > 0 ? cleanedStates : undefined,
             };
@@ -146,7 +146,7 @@ export function cleanSkillsData(
     delete (restData as Record<string, unknown>).autonomous;
     return {
         ...restData,
-        skills: Object.keys(cleanedSkills).length > 0 ? cleanedSkills : undefined,
+        tools: Object.keys(cleanedTools).length > 0 ? cleanedTools : undefined,
     };
 }
 
@@ -177,18 +177,18 @@ export function filterBySchema(
 function getValidCategories(schema?: Record<string, unknown>): Set<string> | null {
     if (!schema?.properties) return null;
     const schemaProperties = schema.properties as Record<string, Record<string, unknown>>;
-    const skillsSchema = schemaProperties.skills;
-    if (!skillsSchema?.properties) return null;
-    return new Set(Object.keys(skillsSchema.properties as Record<string, unknown>));
+    const toolsSchema = schemaProperties.tools;
+    if (!toolsSchema?.properties) return null;
+    return new Set(Object.keys(toolsSchema.properties as Record<string, unknown>));
 }
 
-function getValidSkillsForCategory(schema: Record<string, unknown> | undefined, categoryKey: string): Set<string> | null {
+function getValidToolsForToolset(schema: Record<string, unknown> | undefined, categoryKey: string): Set<string> | null {
     if (!schema?.properties) return null;
     const schemaProperties = schema.properties as Record<string, Record<string, unknown>>;
-    const skillsSchema = schemaProperties.skills;
-    if (!skillsSchema?.properties) return null;
-    const skillsCategoriesSchema = skillsSchema.properties as Record<string, Record<string, unknown>>;
-    const categorySchema = skillsCategoriesSchema[categoryKey];
+    const toolsSchema = schemaProperties.tools;
+    if (!toolsSchema?.properties) return null;
+    const toolsetsSchema = toolsSchema.properties as Record<string, Record<string, unknown>>;
+    const categorySchema = toolsetsSchema[categoryKey];
     if (!categorySchema?.properties) return null;
     const categoryProperties = categorySchema.properties as Record<string, Record<string, unknown>>;
     const statesSchema = categoryProperties.states;

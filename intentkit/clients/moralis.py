@@ -5,7 +5,7 @@ import logging
 import httpx
 
 from intentkit.config.config import config
-from intentkit.skills.portfolio.constants import MORALIS_API_BASE_URL
+from intentkit.tools.portfolio.constants import MORALIS_API_BASE_URL
 
 logger = logging.getLogger(__name__)
 

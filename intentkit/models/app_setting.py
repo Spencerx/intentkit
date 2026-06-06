@@ -21,7 +21,7 @@ class SystemMessageType(str, Enum):
     INSUFFICIENT_BALANCE = "insufficient_balance"
     AGENT_INTERNAL_ERROR = "agent_internal_error"
     STEP_LIMIT_EXCEEDED = "step_limit_exceeded"
-    SKILL_INTERRUPTED = "skill_interrupted"
+    TOOL_INTERRUPTED = "tool_interrupted"
     HOURLY_BUDGET_EXCEEDED = "hourly_budget_exceeded"
     RECURSION_LIMIT_EXCEEDED = "recursion_limit_exceeded"
     TIMEOUT_ERROR = "timeout_error"
@@ -38,7 +38,7 @@ DEFAULT_SYSTEM_MESSAGES = {
     "insufficient_balance": "You don't have enough credits to complete this action.",
     "agent_internal_error": "Something went wrong. Please try again.",
     "step_limit_exceeded": "This Agent tried to process too many steps. Please try again later or contact the agent owner to enable super mode.",
-    "skill_interrupted": "You were interrupted after executing a skill. Please retry with caution to avoid repeating the skill.",
+    "tool_interrupted": "You were interrupted after executing a tool. Please retry with caution to avoid repeating the tool.",
     "hourly_budget_exceeded": "Hourly budget exceeded. Please try again later.",
     "recursion_limit_exceeded": "The agent reached the maximum recursion limit. Please type 'continue' to resume execution.",
     "timeout_error": "Network request timed out or the LLM is overloaded. Please try again.",

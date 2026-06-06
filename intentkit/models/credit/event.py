@@ -27,7 +27,7 @@ class EventType(str, Enum):
 
     MEMORY = "memory"
     MESSAGE = "message"
-    SKILL_CALL = "skill_call"
+    TOOL_CALL = "tool_call"
     MEDIA = "media"
     KNOWLEDGE_BASE = "knowledge_base"
     RECHARGE = "recharge"
@@ -66,7 +66,7 @@ class Direction(str, Enum):
 class CreditEventTable(Base):
     """Credit events database table model.
 
-    Records business events for user, like message processing, skill calls, etc.
+    Records business events for user, like message processing, tool calls, etc.
     """
 
     __tablename__: str = "credit_events"
@@ -129,11 +129,11 @@ class CreditEventTable(Base):
         String,
         nullable=True,
     )
-    skill_call_id: Mapped[str | None] = mapped_column(
+    tool_call_id: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
     )
-    skill_name: Mapped[str | None] = mapped_column(
+    tool_name: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
     )
@@ -179,7 +179,7 @@ class CreditEventTable(Base):
         default=0,
         nullable=True,
     )
-    base_skill_amount: Mapped[Decimal | None] = mapped_column(
+    base_tool_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(22, 4),
         default=0,
         nullable=True,
@@ -330,11 +330,11 @@ class CreditEvent(BaseModel):
     model: Annotated[
         str | None, Field(None, description="LLM model used if applicable")
     ]
-    skill_call_id: Annotated[
-        str | None, Field(None, description="ID of the skill call if applicable")
+    tool_call_id: Annotated[
+        str | None, Field(None, description="ID of the tool call if applicable")
     ]
-    skill_name: Annotated[
-        str | None, Field(None, description="Name of the skill if applicable")
+    tool_name: Annotated[
+        str | None, Field(None, description="Name of the tool if applicable")
     ]
     direction: Annotated[Direction, Field(description="Direction of the credit flow")]
     total_amount: Annotated[
@@ -369,9 +369,9 @@ class CreditEvent(BaseModel):
         Decimal | None,
         Field(default=Decimal("0"), description="Base LLM cost amount"),
     ]
-    base_skill_amount: Annotated[
+    base_tool_amount: Annotated[
         Decimal | None,
-        Field(default=Decimal("0"), description="Base skill cost amount"),
+        Field(default=Decimal("0"), description="Base tool cost amount"),
     ]
     base_free_amount: Annotated[
         Decimal | None,
@@ -483,7 +483,7 @@ class CreditEvent(BaseModel):
         "base_discount_amount",
         "base_original_amount",
         "base_llm_amount",
-        "base_skill_amount",
+        "base_tool_amount",
         "base_free_amount",
         "base_reward_amount",
         "base_permanent_amount",

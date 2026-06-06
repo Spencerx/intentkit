@@ -152,11 +152,11 @@ class AgentCore(BaseModel):
             description="Network identifier",
         ),
     ] = "base-mainnet"
-    skills: Annotated[
+    tools: Annotated[
         dict[str, Any] | None,
         PydanticField(
             default=None,
-            description="Dict of skills and their corresponding configurations",
+            description="Dict of tools and their corresponding configurations",
         ),
     ] = None
     search_internet: Annotated[
@@ -184,14 +184,14 @@ class AgentCore(BaseModel):
         bool | None,
         PydanticField(
             default=None,
-            description="Enable activity skills (create activity, recent activities)",
+            description="Enable activity tools (create activity, recent activities)",
         ),
     ] = None
     enable_post: Annotated[
         bool | None,
         PydanticField(
             default=None,
-            description="Enable post skills (create post, get post, recent posts)",
+            description="Enable post tools (create post, get post, recent posts)",
         ),
     ] = None
     enable_long_term_memory: Annotated[
@@ -219,12 +219,12 @@ class AgentCore(BaseModel):
 
     @property
     def is_activity_enabled(self) -> bool:
-        """Whether activity skills are enabled (defaults to True when None)."""
+        """Whether activity tools are enabled (defaults to True when None)."""
         return self.enable_activity is not False
 
     @property
     def is_post_enabled(self) -> bool:
-        """Whether post skills are enabled (defaults to True when None)."""
+        """Whether post tools are enabled (defaults to True when None)."""
         return self.enable_post is not False
 
     @field_validator("search_internet", mode="before")

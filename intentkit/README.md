@@ -7,7 +7,7 @@ IntentKit is a powerful intent-based AI agent platform that enables developers t
 - **Intent-based Architecture**: Build agents that understand and execute user intents
 - **Blockchain Integration**: Native support for multiple blockchain networks
 - **Cryptocurrency Operations**: Built-in tools for DeFi, trading, and token operations
-- **Extensible Skills System**: Modular skill system with 30+ pre-built skills
+- **Extensible Tools System**: Modular tool system with 30+ pre-built tools
 - **Multi-platform Support**: Telegram, Twitter, Slack, and API integrations
 - **Advanced AI Capabilities**: Powered by LangChain and LangGraph
 
@@ -60,9 +60,9 @@ agent = Agent(config=config)
 # Your agent is ready to use!
 ```
 
-## Skills
+## Tools
 
-IntentKit comes with 30+ pre-built skills including:
+IntentKit comes with 30+ pre-built tools including:
 
 - **DeFi**: Uniswap, 1inch, Enso, LiFi
 - **Data**: DexScreener, CoinGecko, DefiLlama, CryptoCompare

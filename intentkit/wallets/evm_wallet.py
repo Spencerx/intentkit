@@ -1,8 +1,8 @@
 """
-Unified EVM wallet wrapper for on-chain skills.
+Unified EVM wallet wrapper for on-chain tools.
 
 This module provides a unified interface for EVM wallets that works with
-both CDP and Safe/Privy wallet providers, enabling on-chain skills to
+both CDP and Safe/Privy wallet providers, enabling on-chain tools to
 work regardless of the underlying wallet implementation.
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class EvmWallet:
     """
-    Unified EVM wallet interface for on-chain skills.
+    Unified EVM wallet interface for on-chain tools.
 
     This class provides a consistent async interface for wallet operations,
     abstracting away the differences between CDP and Safe/Privy providers.

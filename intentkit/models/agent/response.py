@@ -305,34 +305,31 @@ class AgentResponse(Agent):
                     )
             data["examples"] = converted_examples
 
-        # Filter skills to only include enabled ones with specific configurations
-        if "skills" in data and data["skills"]:
-            filtered_skills = {}
-            for skill_name, skill_config in data["skills"].items():
-                if (
-                    isinstance(skill_config, dict)
-                    and skill_config.get("enabled") is True
-                ):
-                    # Filter out disabled states from the skill configuration
-                    original_states = skill_config.get("states", {})
+        # Filter tools to only include enabled ones with specific configurations
+        if "tools" in data and data["tools"]:
+            filtered_tools = {}
+            for tool_name, tool_config in data["tools"].items():
+                if isinstance(tool_config, dict) and tool_config.get("enabled") is True:
+                    # Filter out disabled states from the tool configuration
+                    original_states = tool_config.get("states", {})
                     filtered_states = {
                         state_name: state_value
                         for state_name, state_value in original_states.items()
                         if state_value != "disabled"
                     }
 
-                    # Only include the skill if it has at least one non-disabled state
+                    # Only include the tool if it has at least one non-disabled state
                     if filtered_states:
                         filtered_config = {
-                            "enabled": skill_config["enabled"],
+                            "enabled": tool_config["enabled"],
                             "states": filtered_states,
                         }
                         # Add other non-sensitive config fields if needed
                         for key in ["public", "private"]:
-                            if key in skill_config:
-                                filtered_config[key] = skill_config[key]
-                        filtered_skills[skill_name] = filtered_config
-            data["skills"] = filtered_skills
+                            if key in tool_config:
+                                filtered_config[key] = tool_config[key]
+                        filtered_tools[tool_name] = filtered_config
+            data["tools"] = filtered_tools
 
         return data
 

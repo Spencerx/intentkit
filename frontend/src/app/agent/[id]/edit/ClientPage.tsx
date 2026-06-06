@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { widgets, BaseInputTemplate } from "@/app/agents/new/widgets";
 import { templates } from "@/app/agents/new/templates";
-import { SkillsField } from "@/app/agents/new/SkillsField";
+import { ToolsField } from "@/app/agents/new/ToolsField";
 import { toast } from "@/hooks/use-toast";
 import { useAgentSlugRewrite } from "@/hooks/useAgentSlugRewrite";
 
@@ -24,7 +24,7 @@ const validator = customizeValidator({
 
 // Custom fields for RJSF
 const fields: RegistryFieldsType = {
-    SkillsField: SkillsField,
+    ToolsField: ToolsField,
 };
 
 function generateUiSchema(schema: Record<string, unknown> | undefined, agentData?: Record<string, unknown> | null) {
@@ -39,9 +39,9 @@ function generateUiSchema(schema: Record<string, unknown> | undefined, agentData
             const property = properties[key];
             const uiProperty: Record<string, unknown> = {};
 
-            // Use custom SkillsField for skills
-            if (key === "skills") {
-                uiProperty["ui:field"] = "SkillsField";
+            // Use custom ToolsField for tools
+            if (key === "tools") {
+                uiProperty["ui:field"] = "ToolsField";
             }
 
             // Make id field read-only in edit mode
@@ -142,22 +142,22 @@ export default function EditAgentPage() {
 
     const uiSchema = useMemo(() => generateUiSchema(schema, agent as Record<string, unknown> | null | undefined), [schema, agent]);
 
-    // Clean up skills data before submission:
-    // - Remove categories where enabled=false
-    // - Remove skill states that are 'disabled'
-    // - Remove skills that are not defined in the schema (handles renamed skills)
-    const cleanSkillsData = (data: Record<string, unknown>, schemaData: Record<string, unknown> | undefined): Record<string, unknown> => {
-        const skills = data.skills as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
-        if (!skills) return data;
+    // Clean up tools data before submission:
+    // - Remove toolsets where enabled=false
+    // - Remove tool states that are 'disabled'
+    // - Remove tools that are not defined in the schema (handles renamed tools)
+    const cleanToolsData = (data: Record<string, unknown>, schemaData: Record<string, unknown> | undefined): Record<string, unknown> => {
+        const tools = data.tools as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
+        if (!tools) return data;
 
-        // Extract valid skill keys from the schema for each category
-        const getValidSkillsForCategory = (categoryKey: string): Set<string> | null => {
+        // Extract valid tool keys from the schema for each toolset
+        const getValidToolsForToolset = (categoryKey: string): Set<string> | null => {
             if (!schemaData?.properties) return null;
             const schemaProperties = schemaData.properties as Record<string, Record<string, unknown>>;
-            const skillsSchema = schemaProperties.skills;
-            if (!skillsSchema?.properties) return null;
-            const skillsCategoriesSchema = skillsSchema.properties as Record<string, Record<string, unknown>>;
-            const categorySchema = skillsCategoriesSchema[categoryKey];
+            const toolsSchema = schemaProperties.tools;
+            if (!toolsSchema?.properties) return null;
+            const toolsetsSchema = toolsSchema.properties as Record<string, Record<string, unknown>>;
+            const categorySchema = toolsetsSchema[categoryKey];
             if (!categorySchema?.properties) return null;
             const categoryProperties = categorySchema.properties as Record<string, Record<string, unknown>>;
             const statesSchema = categoryProperties.states;
@@ -166,50 +166,50 @@ export default function EditAgentPage() {
             return new Set(Object.keys(statesProperties));
         };
 
-        // Extract valid category keys from the schema
+        // Extract valid toolset keys from the schema
         const getValidCategories = (): Set<string> | null => {
             if (!schemaData?.properties) return null;
             const schemaProperties = schemaData.properties as Record<string, Record<string, unknown>>;
-            const skillsSchema = schemaProperties.skills;
-            if (!skillsSchema?.properties) return null;
-            const skillsCategoriesSchema = skillsSchema.properties as Record<string, unknown>;
-            return new Set(Object.keys(skillsCategoriesSchema));
+            const toolsSchema = schemaProperties.tools;
+            if (!toolsSchema?.properties) return null;
+            const toolsetsSchema = toolsSchema.properties as Record<string, unknown>;
+            return new Set(Object.keys(toolsetsSchema));
         };
 
         const validCategories = getValidCategories();
-        const cleanedSkills: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
-        for (const [categoryKey, categoryData] of Object.entries(skills)) {
-            // Skip categories that are explicitly disabled
+        const cleanedTools: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
+        for (const [categoryKey, categoryData] of Object.entries(tools)) {
+            // Skip toolsets that are explicitly disabled
             if (categoryData.enabled === false) continue;
 
-            // Skip categories not in schema (removed categories)
+            // Skip toolsets not in schema (removed toolsets)
             if (validCategories && !validCategories.has(categoryKey)) {
-                console.log(`[cleanSkillsData] Removing category not in schema: ${categoryKey}`);
+                console.log(`[cleanToolsData] Removing toolset not in schema: ${categoryKey}`);
                 continue;
             }
 
-            // Get valid skills for this category
-            const validSkills = getValidSkillsForCategory(categoryKey);
+            // Get valid tools for this toolset
+            const validTools = getValidToolsForToolset(categoryKey);
 
-            // Clean up states - only keep non-disabled skills that exist in schema
+            // Clean up states - only keep non-disabled tools that exist in schema
             const states = categoryData.states || {};
             const cleanedStates: Record<string, string> = {};
-            for (const [skillKey, skillValue] of Object.entries(states)) {
-                // Skip disabled skills
-                if (skillValue === 'disabled') continue;
-                
-                // Skip skills not in schema (old/renamed skills)
-                if (validSkills && !validSkills.has(skillKey)) {
-                    console.log(`[cleanSkillsData] Removing skill not in schema: ${categoryKey}.${skillKey}`);
+            for (const [toolKey, toolValue] of Object.entries(states)) {
+                // Skip disabled tools
+                if (toolValue === 'disabled') continue;
+
+                // Skip tools not in schema (old/renamed tools)
+                if (validTools && !validTools.has(toolKey)) {
+                    console.log(`[cleanToolsData] Removing tool not in schema: ${categoryKey}.${toolKey}`);
                     continue;
                 }
-                
-                cleanedStates[skillKey] = skillValue;
+
+                cleanedStates[toolKey] = toolValue;
             }
 
-            // Only include category if it's enabled
+            // Only include toolset if it's enabled
             if (categoryData.enabled === true) {
-                cleanedSkills[categoryKey] = {
+                cleanedTools[categoryKey] = {
                     enabled: true,
                     states: Object.keys(cleanedStates).length > 0 ? cleanedStates : undefined,
                 };
@@ -222,7 +222,7 @@ export default function EditAgentPage() {
         }
         return {
             ...restData,
-            skills: Object.keys(cleanedSkills).length > 0 ? cleanedSkills : undefined,
+            tools: Object.keys(cleanedTools).length > 0 ? cleanedTools : undefined,
         };
     };
 
@@ -231,7 +231,7 @@ export default function EditAgentPage() {
         setIsSubmitting(true);
         setError(null);
         try {
-            const cleanedData = cleanSkillsData(formData, schema);
+            const cleanedData = cleanToolsData(formData, schema);
             await agentApi.patch(resolvedId || agentId, cleanedData);
             toast({
                 title: "Agent updated",

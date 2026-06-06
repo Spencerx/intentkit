@@ -273,7 +273,7 @@ async def send_lead_message(
         attachments=request.attachments,
         model=None,
         reply_to=None,
-        skill_calls=None,
+        tool_calls=None,
         input_tokens=0,
         output_tokens=0,
         time_cost=0.0,

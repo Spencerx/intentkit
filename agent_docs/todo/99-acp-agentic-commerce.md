@@ -205,7 +205,7 @@ Now focuses on product discovery + redirect to merchant sites.
 
 ### Path E: Web Search + Browser Automation
 
-- Search for products via web search skills (already in IntentKit)
+- Search for products via web search tools (already in IntentKit)
 - Complete purchases via browser automation (Induced AI, Zinc-style APIs)
 - Bypasses ACP entirely
 - **Pros**: Works with any merchant
@@ -221,10 +221,10 @@ Now focuses on product discovery + redirect to merchant sites.
 - Implement Stripe Issuing for virtual card creation
 - Build the "platform wallet" model: user deposits → platform holds → agent spends
 
-### Phase 2: ACP Skill Category
+### Phase 2: ACP Tool Category
 
 ```
-intentkit/skills/acp/
+intentkit/tools/acp/
 ├── __init__.py
 ├── base.py                  # HTTP client, auth, signing, merchant registry
 ├── schema.json
@@ -241,9 +241,9 @@ intentkit/skills/acp/
 
 Config:
 ```python
-class Config(SkillConfig):
+class Config(ToolsetConfig):
     enabled: bool
-    states: SkillStates
+    states: ToolStates
     merchants: list[MerchantConfig] | None  # Pre-configured merchants
     stripe_api_key: str | None              # For Issuing + Financial Accounts
 ```

@@ -3,7 +3,7 @@
 Credit Event Consistency Fixer
 
 This script finds inconsistent credit events and recalculates the 12 detailed amount fields
-using the same logic from the expense_skill function, then updates the database records.
+using the same logic from the expense_tool function, then updates the database records.
 
 The 12 fields that will be recalculated and updated are:
 - free_amount, reward_amount, permanent_amount
@@ -115,7 +115,7 @@ class CreditEventConsistencyFixer:
     def calculate_detailed_amounts(
         self, record: CreditEventTable
     ) -> dict[str, Decimal]:
-        """Calculate the 12 detailed amount fields using the same logic as expense_skill.
+        """Calculate the 12 detailed amount fields using the same logic as expense_tool.
 
         Returns:
             Dictionary containing the calculated amounts
@@ -269,7 +269,7 @@ class CreditEventConsistencyFixer:
                         {
                             "id": record.id,
                             "user_id": record.user_id,
-                            "skill_name": record.skill_name,
+                            "tool_name": record.tool_name,
                             "total_amount": record.total_amount,
                             "errors": errors,
                         }
@@ -325,7 +325,7 @@ class CreditEventConsistencyFixer:
                     break
                 print(f"Record ID: {detail['id']}")
                 print(f"User ID: {detail['user_id']}")
-                print(f"Skill: {detail['skill_name']}")
+                print(f"Tool: {detail['tool_name']}")
                 print(f"Total Amount: {detail['total_amount']}")
                 print("Errors:")
                 for error in detail["errors"]:

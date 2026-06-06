@@ -67,7 +67,7 @@ async def migrate_transaction_amounts(
                 CASE 
                     WHEN ct.tx_type IN ('pay', 'recharge', 'refund', 'adjustment', 'refill', 'reward', 'event_reward', 'recharge_bonus') THEN
                         COALESCE(ce.free_amount, 0)
-                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_skill', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
+                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_tool', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
                         COALESCE(ce.base_free_amount, 0)
                     WHEN ct.tx_type = 'receive_fee_dev' THEN
                         COALESCE(ce.fee_dev_free_amount, 0)
@@ -80,7 +80,7 @@ async def migrate_transaction_amounts(
                 CASE 
                     WHEN ct.tx_type IN ('pay', 'recharge', 'refund', 'adjustment', 'refill', 'reward', 'event_reward', 'recharge_bonus') THEN
                         COALESCE(ce.reward_amount, 0)
-                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_skill', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
+                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_tool', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
                         COALESCE(ce.base_reward_amount, 0)
                     WHEN ct.tx_type = 'receive_fee_dev' THEN
                         COALESCE(ce.fee_dev_reward_amount, 0)
@@ -93,7 +93,7 @@ async def migrate_transaction_amounts(
                 CASE 
                     WHEN ct.tx_type IN ('pay', 'recharge', 'refund', 'adjustment', 'refill', 'reward', 'event_reward', 'recharge_bonus') THEN
                         COALESCE(ce.permanent_amount, 0)
-                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_skill', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
+                    WHEN ct.tx_type IN ('receive_base_llm', 'receive_base_tool', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge') THEN
                         COALESCE(ce.base_permanent_amount, 0)
                     WHEN ct.tx_type = 'receive_fee_dev' THEN
                         COALESCE(ce.fee_dev_permanent_amount, 0)
@@ -154,7 +154,7 @@ async def migrate_transaction_amounts(
             permanent_amount = COALESCE(ce.base_permanent_amount, 0)
         FROM credit_events ce
         WHERE credit_transactions.event_id = ce.id
-        AND credit_transactions.tx_type IN ('receive_base_llm', 'receive_base_skill', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge')
+        AND credit_transactions.tx_type IN ('receive_base_llm', 'receive_base_tool', 'receive_base_memory', 'receive_base_voice', 'receive_base_knowledge')
         AND ROUND(COALESCE(credit_transactions.free_amount, 0) + COALESCE(credit_transactions.reward_amount, 0) + COALESCE(credit_transactions.permanent_amount, 0), 4) 
             != ROUND(COALESCE(credit_transactions.change_amount, 0), 4)
     """)

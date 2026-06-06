@@ -7,17 +7,17 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import BaseTool
 
-from intentkit.core.lead.skills.update_user_profile import (
-    lead_update_user_profile_skill,
+from intentkit.core.lead.tools.update_user_profile import (
+    lead_update_user_profile_tool,
 )
 from intentkit.models.agent import Agent
 from intentkit.models.llm_picker import pick_default_model
 
 
-def get_user_manager_skills() -> Sequence[BaseTool]:
-    """Return skills for the user-manager sub-agent."""
+def get_user_manager_tools() -> Sequence[BaseTool]:
+    """Return tools for the user-manager sub-agent."""
     return [
-        lead_update_user_profile_skill,
+        lead_update_user_profile_tool,
     ]
 
 
@@ -66,7 +66,7 @@ def build_user_manager(team_id: str) -> Agent:
         "enable_post": False,
         "enable_long_term_memory": False,
         "sub_agents": None,
-        "skills": {
+        "tools": {
             "ui": {
                 "enabled": True,
                 "states": {

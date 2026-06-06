@@ -9,7 +9,7 @@ from intentkit.config.config import config
 from intentkit.core.credit import (
     expense_message,
     expense_summarize,
-    skill_cost,
+    tool_cost,
 )
 from intentkit.models.agent import Agent
 from intentkit.models.credit import (
@@ -231,15 +231,15 @@ async def test_expense_message_enabled():
 
 
 @pytest.mark.asyncio
-async def test_skill_cost_soft_off():
-    """Test skill_cost with payment disabled."""
+async def test_tool_cost_soft_off():
+    """Test tool_cost with payment disabled."""
     team_id = "team_1"
     agent = MagicMock(spec=Agent)
     agent.id = "agent_1"
     agent.owner = "owner_1"
     agent.team_id = "team_1"
     agent.fee_percentage = Decimal("10.0")
-    agent.skills = {}
+    agent.tools = {}
 
     with (
         patch.object(config, "payment_enabled", False),
@@ -249,7 +249,7 @@ async def test_skill_cost_soft_off():
     ):
         mock_payment_settings.return_value.fee_platform_percentage = Decimal("20.0")
 
-        cost_info = await skill_cost(Decimal("1.0000"), team_id, agent)
+        cost_info = await tool_cost(Decimal("1.0000"), team_id, agent)
 
         assert cost_info.base_original_amount == Decimal("1.0000")
         assert cost_info.base_discount_amount == Decimal("1.0000")

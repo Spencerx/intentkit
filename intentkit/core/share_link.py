@@ -30,7 +30,7 @@ SHARE_LINK_DEFAULT_TTL = timedelta(days=3)
 
 # Author types hidden from public share views (internal machinery).
 _HIDDEN_AUTHOR_TYPES: set[str] = {
-    AuthorType.SKILL.value,
+    AuthorType.TOOL.value,
     AuthorType.THINKING.value,
     AuthorType.SYSTEM.value,
 }
@@ -162,7 +162,7 @@ async def _load_shared_chat(chat_id: str) -> SharedChatView | None:
     for row in rows:
         msg = ChatMessage.model_validate(row)
         msg.thinking = None
-        msg.skill_calls = None
+        msg.tool_calls = None
         messages.append(msg)
 
     info = SharedChatInfo(

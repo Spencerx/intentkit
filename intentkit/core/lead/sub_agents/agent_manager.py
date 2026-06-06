@@ -7,43 +7,43 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import BaseTool
 
-from intentkit.core.lead.skills.add_autonomous_task import (
-    lead_add_autonomous_task_skill,
+from intentkit.core.lead.tools.add_autonomous_task import (
+    lead_add_autonomous_task_tool,
 )
-from intentkit.core.lead.skills.create_team_agent import create_team_agent_skill
-from intentkit.core.lead.skills.delete_autonomous_task import (
-    lead_delete_autonomous_task_skill,
+from intentkit.core.lead.tools.create_team_agent import create_team_agent_tool
+from intentkit.core.lead.tools.delete_autonomous_task import (
+    lead_delete_autonomous_task_tool,
 )
-from intentkit.core.lead.skills.edit_autonomous_task import (
-    lead_edit_autonomous_task_skill,
+from intentkit.core.lead.tools.edit_autonomous_task import (
+    lead_edit_autonomous_task_tool,
 )
-from intentkit.core.lead.skills.get_team_agent import get_team_agent_skill
-from intentkit.core.lead.skills.get_team_info import get_team_info_skill
-from intentkit.core.lead.skills.list_autonomous_tasks import (
-    lead_list_autonomous_tasks_skill,
+from intentkit.core.lead.tools.get_team_agent import get_team_agent_tool
+from intentkit.core.lead.tools.get_team_info import get_team_info_tool
+from intentkit.core.lead.tools.list_autonomous_tasks import (
+    lead_list_autonomous_tasks_tool,
 )
-from intentkit.core.lead.skills.list_skills import lead_list_available_skills_skill
-from intentkit.core.lead.skills.list_team_agents import list_team_agents_skill
-from intentkit.core.lead.skills.llm import lead_get_available_llms_skill
-from intentkit.core.lead.skills.update_team_agent import update_team_agent_skill
+from intentkit.core.lead.tools.list_team_agents import list_team_agents_tool
+from intentkit.core.lead.tools.list_tools import lead_list_available_tools_tool
+from intentkit.core.lead.tools.llm import lead_get_available_llms_tool
+from intentkit.core.lead.tools.update_team_agent import update_team_agent_tool
 from intentkit.models.agent import Agent
 from intentkit.models.llm_picker import pick_default_model
 
 
-def get_agent_manager_skills() -> Sequence[BaseTool]:
-    """Return skills for the agent manager sub-agent."""
+def get_agent_manager_tools() -> Sequence[BaseTool]:
+    """Return tools for the agent manager sub-agent."""
     return [
-        get_team_info_skill,
-        list_team_agents_skill,
-        create_team_agent_skill,
-        get_team_agent_skill,
-        update_team_agent_skill,
-        lead_get_available_llms_skill,
-        lead_list_available_skills_skill,
-        lead_list_autonomous_tasks_skill,
-        lead_add_autonomous_task_skill,
-        lead_edit_autonomous_task_skill,
-        lead_delete_autonomous_task_skill,
+        get_team_info_tool,
+        list_team_agents_tool,
+        create_team_agent_tool,
+        get_team_agent_tool,
+        update_team_agent_tool,
+        lead_get_available_llms_tool,
+        lead_list_available_tools_tool,
+        lead_list_autonomous_tasks_tool,
+        lead_add_autonomous_task_tool,
+        lead_edit_autonomous_task_tool,
+        lead_delete_autonomous_task_tool,
     ]
 
 
@@ -60,26 +60,26 @@ def build_agent_manager(team_id: str) -> Agent:
         "1. Name, slug, and purpose\n"
         "2. Model — `lead_get_available_llms` for options. "
         "High intelligence for complex reasoning, high speed for simple tasks.\n"
-        "3. Skills — ALWAYS call `lead_list_available_skills` first to see all "
-        "available categories and individual skills. Pick only the skills the "
+        "3. Tools — ALWAYS call `lead_list_available_tools` first to see all "
+        "available categories and individual tools. Pick only the tools the "
         "agent needs based on its purpose. Keep under 20.\n"
         "4. Additional settings as needed\n\n"
-        "### Skill Configuration (IMPORTANT)\n\n"
-        "You MUST call `lead_list_available_skills` before configuring skills. "
-        "Only use skill names from that list.\n\n"
+        "### Tool Configuration (IMPORTANT)\n\n"
+        "You MUST call `lead_list_available_tools` before configuring tools. "
+        "Only use tool names from that list.\n\n"
         "Format:\n"
         "```json\n"
         "{\n"
         '  "category_name": {\n'
         '    "enabled": true,\n'
         '    "states": {\n'
-        '      "skill_name_1": "public",\n'
-        '      "skill_name_2": "public"\n'
+        '      "tool_name_1": "public",\n'
+        '      "tool_name_2": "public"\n'
         "    }\n"
         "  }\n"
         "}\n"
         "```\n\n"
-        "Example — enable two image skills and one twitter skill:\n"
+        "Example — enable two image tools and one twitter tool:\n"
         "```json\n"
         "{\n"
         '  "image": {"enabled": true, "states": {"image_gpt": "public", "image_gemini_flash": "public"}},\n'
@@ -88,17 +88,17 @@ def build_agent_manager(team_id: str) -> Agent:
         "```\n\n"
         "Rules:\n"
         "- `enabled`: category-level toggle (must be `true` to activate)\n"
-        "- `states`: map of individual skill names to their access level\n"
+        "- `states`: map of individual tool names to their access level\n"
         "- Access levels: `public` (all users), `private` (owner only)\n"
-        "- Only include skills you want to enable — omitted skills stay disabled\n"
-        "- The backend will reject unknown categories or skill names with an error\n\n"
+        "- Only include tools you want to enable — omitted tools stay disabled\n"
+        "- The backend will reject unknown categories or tool names with an error\n\n"
         "### Internet Search\n\n"
         "To give an agent web search ability, set the agent field "
         "`search_internet` to `true`. That switch enables the LLM provider's "
         "native web search and is the correct way to add general-purpose "
         "search. Do NOT add categories like `firecrawl`, "
         "`web_scraper`, etc. just to grant search — those are backups for "
-        "specialised scraping/extraction needs and only belong in `skills` "
+        "specialised scraping/extraction needs and only belong in `tools` "
         "when the agent really needs them.\n\n"
         "### Autonomous Tasks\n\n"
         "Tasks belong to an agent and run on a cron schedule. Use these tools:\n"
@@ -130,7 +130,7 @@ def build_agent_manager(team_id: str) -> Agent:
         "- `prompt`: Base system prompt\n"
         "- `prompt_append`: Additional system prompt (higher priority)\n"
         "- `temperature`: Randomness (0.0~2.0, lower for rigorous tasks)\n"
-        "- `skills`: Skill configurations dict (see format above)\n"
+        "- `tools`: Tool configurations dict (see format above)\n"
         "- `slug`: URL-friendly slug (immutable once set)\n"
         "- `sub_agents`: List of sub-agent IDs or slugs\n"
         "- `sub_agent_prompt`: Instructions for how to use sub-agents\n"
@@ -165,7 +165,7 @@ def build_agent_manager(team_id: str) -> Agent:
         "enable_post": False,
         "enable_long_term_memory": False,
         "sub_agents": None,
-        "skills": {
+        "tools": {
             "ui": {
                 "enabled": True,
                 "states": {

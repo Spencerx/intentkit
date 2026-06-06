@@ -1,7 +1,7 @@
 """Agent executor building and caching.
 
 This module handles:
-- Building AI agent executors with LLM, skills, and middleware
+- Building AI agent executors with LLM, tools, and middleware
 - Caching executors with timestamp-based invalidation
 - Agent executor lifecycle management
 """
@@ -27,12 +27,12 @@ from intentkit.abstracts.graph import AgentContext, AgentState
 from intentkit.config.config import config
 from intentkit.config.db import get_checkpointer
 from intentkit.core.agent import get_agent
-from intentkit.core.system_skills import SystemSkill
+from intentkit.core.system_tools import SystemTool
 from intentkit.models.agent import Agent
 from intentkit.models.agent_data import AgentData
 from intentkit.models.llm import LLMProvider, create_llm_model
 from intentkit.models.llm_picker import pick_summarize_model, pick_tool_selector_model
-from intentkit.skills.base import IntentKitSkill
+from intentkit.tools.base import IntentKitTool
 from intentkit.utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ def _should_retry_tool_failure(exc: Exception) -> bool:
 async def build_executor(
     agent: Agent,
     agent_data: AgentData,
-    custom_skills: Sequence[BaseTool] = (),
+    custom_tools: Sequence[BaseTool] = (),
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
     """Build an AI agent executor with specified configuration and tools.
 
@@ -74,8 +74,8 @@ async def build_executor(
     Args:
         agent (Agent): Agent configuration object
         agent_data (AgentData): Agent data object
-        custom_skills (list[BaseTool], optional): Designed for advanced user who directly
-            call this function to inject custom skills into the agent tool node.
+        custom_tools (list[BaseTool], optional): Designed for advanced user who directly
+            call this function to inject custom tools into the agent tool node.
 
     Returns:
         CompiledStateGraph: Initialized LangChain agent
@@ -118,40 +118,40 @@ async def build_executor(
     except RuntimeError:
         checkpointer = InMemorySaver()
 
-    # ==== Load skills
+    # ==== Load tools
     tools: list[BaseTool | dict[str, Any]] = []
     private_tools: list[BaseTool | dict[str, Any]] = []
 
-    if agent.skills:
-        for k, v in agent.skills.items():
+    if agent.tools:
+        for k, v in agent.tools.items():
             if not v.get("enabled", False):
                 continue
             try:
-                skill_module = importlib.import_module(f"intentkit.skills.{k}")
-                if hasattr(skill_module, "get_skills"):
+                tool_module = importlib.import_module(f"intentkit.tools.{k}")
+                if hasattr(tool_module, "get_tools"):
                     # all
-                    skill_tools = await skill_module.get_skills(
+                    tool_tools = await tool_module.get_tools(
                         v, False, agent_id=agent.id, agent=agent
                     )
-                    if skill_tools and len(skill_tools) > 0:
-                        tools.extend(skill_tools)
+                    if tool_tools and len(tool_tools) > 0:
+                        tools.extend(tool_tools)
                     # private
-                    skill_private_tools = await skill_module.get_skills(
+                    tool_private_tools = await tool_module.get_tools(
                         v, True, agent_id=agent.id, agent=agent
                     )
-                    if skill_private_tools and len(skill_private_tools) > 0:
-                        private_tools.extend(skill_private_tools)
+                    if tool_private_tools and len(tool_private_tools) > 0:
+                        private_tools.extend(tool_private_tools)
                 else:
-                    logger.error("Skill %s does not have get_skills function", k)
+                    logger.error("Tool %s does not have get_tools function", k)
             except ImportError as e:
-                logger.error("Could not import skill module: %s (%s)", k, e)
+                logger.error("Could not import tool module: %s (%s)", k, e)
 
-    # add custom skills to private tools
-    if custom_skills and len(custom_skills) > 0:
-        private_tools.extend(custom_skills)
+    # add custom tools to private tools
+    if custom_tools and len(custom_tools) > 0:
+        private_tools.extend(custom_tools)
 
-    # add system skills — each conditionally based on agent config and provider
-    from intentkit.core.system_skills import (
+    # add system tools — each conditionally based on agent config and provider
+    from intentkit.core.system_tools import (
         call_agent,
         create_activity,
         create_post,
@@ -167,7 +167,7 @@ async def build_executor(
 
     model_provider = llm_model.info.provider
 
-    # current_time: system skill used by every provider. We intentionally do
+    # current_time: system tool used by every provider. We intentionally do
     # NOT use OpenRouter's openrouter:datetime server tool, so all agents share
     # the same time behaviour (formatted time plus a Unix timestamp).
     tools.append(current_time)
@@ -177,12 +177,12 @@ async def build_executor(
     if agent.sub_agents:
         private_tools.append(call_agent)
 
-    # activity skills: enabled by default
+    # activity tools: enabled by default
     if agent.is_activity_enabled:
         private_tools.append(create_activity)
         private_tools.append(recent_activities)
 
-    # post skills: enabled by default
+    # post tools: enabled by default
     if agent.is_post_enabled:
         private_tools.append(create_post)
         private_tools.append(get_post)
@@ -206,7 +206,7 @@ async def build_executor(
         elif model_provider == LLMProvider.OPENROUTER:
             # Pair web search with OpenRouter's web_fetch server tool so the
             # agent can both discover and read pages natively, instead of our
-            # own webpage reader skill.
+            # own webpage reader tool.
             search_tools = [
                 {"type": "openrouter:web_search"},
                 {"type": "openrouter:web_fetch"},
@@ -219,13 +219,13 @@ async def build_executor(
             private_tools.extend(search_tools)
         else:
             # Providers without a native search tool (deepseek, minimax,
-            # mimo_plan, ollama, *_compatible): use our unified web_search skill
+            # mimo_plan, ollama, *_compatible): use our unified web_search tool
             # plus the Cloudflare webpage reader. Each self-checks its own
             # config and raises a clear error if unconfigured.
             tools.extend([web_search, read_webpage_cloudflare])
             private_tools.extend([web_search, read_webpage_cloudflare])
 
-        # store_image: paired with the search/reader skills above so the
+        # store_image: paired with the search/reader tools above so the
         # agent can persist URLs it discovered online. Registered for every
         # provider — no native LLM search backs images into our S3, so the
         # capability is provider-independent inside the search-enabled
@@ -235,10 +235,10 @@ async def build_executor(
             tools.append(store_image)
             private_tools.append(store_image)
 
-    # filter out unavailable skills
-    tools = [t for t in tools if not isinstance(t, IntentKitSkill) or t.available()]
+    # filter out unavailable tools
+    tools = [t for t in tools if not isinstance(t, IntentKitTool) or t.available()]
     private_tools = [
-        t for t in private_tools if not isinstance(t, IntentKitSkill) or t.available()
+        t for t in private_tools if not isinstance(t, IntentKitTool) or t.available()
     ]
 
     # filter the duplicate tools
@@ -283,7 +283,7 @@ async def build_executor(
     # "web_search"}) — it never filters them, so they shouldn't push a
     # borderline agent into the selector path.
     #
-    # SystemSkill instances are pinned via `always_include` so core
+    # SystemTool instances are pinned via `always_include` so core
     # capabilities (time, memory, posts, activities, sub-agent calls) stay
     # reachable even when the selector picks a small subset.
     selectable_tool_count = sum(1 for t in private_tools if isinstance(t, BaseTool))
@@ -293,7 +293,7 @@ async def build_executor(
             selector_llm = await create_llm_model(model_name=selector_model_name)
             selector_model = await selector_llm.create_instance()
             always_include = [
-                t.name for t in private_tools if isinstance(t, SystemSkill)
+                t.name for t in private_tools if isinstance(t, SystemTool)
             ]
             middleware.append(
                 SafeLLMToolSelectorMiddleware(

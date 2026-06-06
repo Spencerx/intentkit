@@ -265,8 +265,8 @@ class Agent(AgentCreate, AgentPublicInfo):
                 return None
             return cls.model_validate(item)
 
-    def skill_config(self, category: str) -> dict[str, Any]:
-        return self.skills.get(category, {}) if self.skills else {}
+    def tool_config(self, category: str) -> dict[str, Any]:
+        return self.tools.get(category, {}) if self.tools else {}
 
     @classmethod
     async def get_json_schema(
@@ -319,45 +319,45 @@ class Agent(AgentCreate, AgentPublicInfo):
                         else:
                             model_property["default"] = new_enum[0]
 
-            # Process skills property by scanning schema.json files directly
-            skills_property = schema.get("properties", {}).get("skills", {})
+            # Process tools property by scanning schema.json files directly
+            tools_property = schema.get("properties", {}).get("tools", {})
 
-            skills_properties = {}
-            skills_dir = Path(__file__).parent.parent.parent / "skills"
+            tools_properties = {}
+            tools_dir = Path(__file__).parent.parent.parent / "tools"
 
-            # Iterate over all skill category directories with schema.json
-            if skills_dir.exists():
-                for category_dir in sorted(skills_dir.iterdir()):
+            # Iterate over all toolset directories with schema.json
+            if tools_dir.exists():
+                for category_dir in sorted(tools_dir.iterdir()):
                     if not category_dir.is_dir():
                         continue
-                    skill_schema_path = category_dir / "schema.json"
-                    if not skill_schema_path.exists():
+                    tool_schema_path = category_dir / "schema.json"
+                    if not tool_schema_path.exists():
                         continue
                     category = category_dir.name
                     try:
-                        with open(skill_schema_path) as f:
-                            skill_schema = json.load(f)
+                        with open(tool_schema_path) as f:
+                            tool_schema = json.load(f)
 
-                        # Load and embed the full skill schema directly
-                        base_uri = f"file://{skill_schema_path}"
-                        with open(skill_schema_path) as f:
-                            embedded_skill_schema: dict[str, Any] = jsonref.load(  # pyright: ignore[reportAssignmentType]
+                        # Load and embed the full tool schema directly
+                        base_uri = f"file://{tool_schema_path}"
+                        with open(tool_schema_path) as f:
+                            embedded_tool_schema: dict[str, Any] = jsonref.load(  # pyright: ignore[reportAssignmentType]
                                 f, base_uri=base_uri, proxies=False, lazy_load=False
                             )
 
-                        skills_properties[category] = {
-                            "title": skill_schema.get("title", category.title()),
-                            **embedded_skill_schema,
+                        tools_properties[category] = {
+                            "title": tool_schema.get("title", category.title()),
+                            **embedded_tool_schema,
                         }
                     except (FileNotFoundError, json.JSONDecodeError) as e:
                         logger.warning(
-                            f"Could not load schema for skill category '{category}': {e}"
+                            f"Could not load schema for toolset '{category}': {e}"
                         )
                         continue
 
-            # Update the skills property in the schema
-            if skills_property:
-                skills_property["properties"] = skills_properties
+            # Update the tools property in the schema
+            if tools_property:
+                tools_property["properties"] = tools_properties
 
             # Dynamically filter wallet_provider enum based on config
             wallet_property = schema.get("properties", {}).get("wallet_provider", {})
@@ -390,6 +390,6 @@ class Agent(AgentCreate, AgentPublicInfo):
                 wallet_property["x-enum-title"] = wallet_titles
 
             # Log the changes for debugging
-            logger.debug("Schema processed with merged LLM/skill defaults")
+            logger.debug("Schema processed with merged LLM/tool defaults")
 
             return schema

@@ -62,7 +62,7 @@ async def agent_action_cost(agent_id: str) -> dict[str, Decimal]:
             CreditEventTable.created_at >= three_days_ago,
             CreditEventTable.user_id != agent.owner,
             CreditEventTable.upstream_type == UpstreamType.EXECUTOR,
-            CreditEventTable.event_type.in_([EventType.MESSAGE, EventType.SKILL_CALL]),
+            CreditEventTable.event_type.in_([EventType.MESSAGE, EventType.TOOL_CALL]),
             CreditEventTable.start_message_id.is_not(None),
         )
 
@@ -92,7 +92,7 @@ async def agent_action_cost(agent_id: str) -> dict[str, Decimal]:
                 WHERE agent_id = :agent_id
                   AND created_at >= :three_days_ago
                   AND upstream_type = :upstream_type
-                  AND event_type IN (:event_type_message, :event_type_skill_call)
+                  AND event_type IN (:event_type_message, :event_type_tool_call)
                   AND start_message_id IS NOT NULL
                 GROUP BY start_message_id
             )
@@ -114,7 +114,7 @@ async def agent_action_cost(agent_id: str) -> dict[str, Decimal]:
                 WHERE agent_id = :agent_id
                   AND created_at >= :three_days_ago
                   AND upstream_type = :upstream_type
-                  AND event_type IN (:event_type_message, :event_type_skill_call)
+                  AND event_type IN (:event_type_message, :event_type_tool_call)
                   AND start_message_id IS NOT NULL
                 GROUP BY start_message_id
             )
@@ -132,7 +132,7 @@ async def agent_action_cost(agent_id: str) -> dict[str, Decimal]:
             "three_days_ago": three_days_ago,
             "upstream_type": UpstreamType.EXECUTOR,
             "event_type_message": EventType.MESSAGE,
-            "event_type_skill_call": EventType.SKILL_CALL,
+            "event_type_tool_call": EventType.TOOL_CALL,
         }
 
         # Execute the basic metrics query

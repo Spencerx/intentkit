@@ -1,4 +1,4 @@
-"""BDD tests for on-chain ERC721 read-only skills using real RPC."""
+"""BDD tests for on-chain ERC721 read-only tools using real RPC."""
 
 import os
 
@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.erc721.constants import ERC721_ABI
+from intentkit.tools.erc721.constants import ERC721_ABI
 
 # Base mainnet network
 NETWORK = "base-mainnet"

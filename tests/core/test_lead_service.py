@@ -32,7 +32,7 @@ def _mock_agent_row(
     row.description = "desc"
     row.model = "gpt-4o"
     row.prompt = "You are helpful."
-    row.skills = {}
+    row.tools = {}
     row.temperature = 0.7
     row.owner = "owner-1"
     row.visibility = "private"

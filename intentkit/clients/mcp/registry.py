@@ -1,4 +1,4 @@
-"""Registry of remote MCP servers to be wrapped as IntentKit skill categories."""
+"""Registry of remote MCP servers to be wrapped as IntentKit toolsets."""
 
 from dataclasses import dataclass, field
 from typing import Literal
@@ -9,7 +9,7 @@ class McpServerDef:
     """Definition of a remote MCP server."""
 
     name: str
-    """Skill category name, e.g. 'mcp_coingecko'."""
+    """Toolset name, e.g. 'mcp_coingecko'."""
 
     display_name: str
     """Human-readable name for UI display."""

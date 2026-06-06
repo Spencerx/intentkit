@@ -37,7 +37,7 @@ async def test_create_x402_order(monkeypatch):
         chat_id="chat-1",
         user_id="user-1",
         task_id="task-1",
-        skill_name="x402_pay",
+        tool_name="x402_pay",
         method="POST",
         url="https://example.com/api",
         max_value=1000000,
@@ -65,7 +65,7 @@ async def test_create_x402_order(monkeypatch):
     assert result.chat_id == "chat-1"
     assert result.user_id == "user-1"
     assert result.task_id == "task-1"
-    assert result.skill_name == "x402_pay"
+    assert result.tool_name == "x402_pay"
     assert result.method == "POST"
     assert result.url == "https://example.com/api"
     assert result.max_value == 1000000
@@ -103,7 +103,7 @@ async def test_create_x402_order_minimal(monkeypatch):
     order_create = X402OrderCreate(
         agent_id="agent-2",
         chat_id="chat-2",
-        skill_name="x402_http_request",
+        tool_name="x402_http_request",
         method="GET",
         url="https://example.com/resource",
         amount=100000,
@@ -134,7 +134,7 @@ def test_x402_order_table_model():
         id="order-789",
         agent_id="agent-3",
         chat_id="chat-3",
-        skill_name="x402_pay",
+        tool_name="x402_pay",
         method="POST",
         url="https://example.com",
         amount=200000,
@@ -175,7 +175,7 @@ async def test_create_x402_order_optional_payer(monkeypatch):
     order_create = X402OrderCreate(
         agent_id="agent-3",
         chat_id="chat-3",
-        skill_name="x402_pay",
+        tool_name="x402_pay",
         method="POST",
         url="https://example.com/api",
         amount=500000,

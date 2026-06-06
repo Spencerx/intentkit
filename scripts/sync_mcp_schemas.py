@@ -20,15 +20,15 @@ from intentkit.config.config import config
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-SKILLS_DIR = Path(__file__).parent.parent / "intentkit" / "skills"
+TOOLS_DIR = Path(__file__).parent.parent / "intentkit" / "tools"
 
 
 def generate_schema(server_def: McpServerDef, tools: list[McpToolInfo]) -> dict:
-    """Generate schema.json content for an MCP server skill category."""
+    """Generate schema.json content for an MCP server tool category."""
     states_properties: dict[str, object] = {}
     for tool in tools:
-        skill_name = f"{server_def.name}_{tool.name}"
-        states_properties[skill_name] = {
+        tool_name = f"{server_def.name}_{tool.name}"
+        states_properties[tool_name] = {
             "type": "string",
             "title": tool.name.replace("_", " ").title(),
             "description": tool.description or f"MCP tool: {tool.name}",
@@ -55,7 +55,7 @@ def generate_schema(server_def: McpServerDef, tools: list[McpToolInfo]) -> dict:
             },
             "states": {
                 "type": "object",
-                "title": "Skills",
+                "title": "Tools",
                 "properties": states_properties,
             },
         },
@@ -78,14 +78,14 @@ def generate_schema(server_def: McpServerDef, tools: list[McpToolInfo]) -> dict:
 
 
 def generate_init_py(server_name: str) -> str:
-    """Generate __init__.py content for a thin skill category directory."""
-    return f'''"""MCP: {MCP_SERVERS[server_name].display_name} skills (auto-generated)."""
+    """Generate __init__.py content for a thin tool category directory."""
+    return f'''"""MCP: {MCP_SERVERS[server_name].display_name} tools (auto-generated)."""
 
 from intentkit.clients.mcp.wrapper import create_mcp_category
 
 _module = create_mcp_category("{server_name}")
 
-get_skills = _module.get_skills
+get_tools = _module.get_tools
 available = _module.available
 Config = _module.Config
 '''
@@ -115,7 +115,7 @@ async def sync_server(server_def: McpServerDef) -> bool:
     logger.info("  Discovered %d tools", len(tools))
 
     # Create directory
-    category_dir = SKILLS_DIR / server_def.name
+    category_dir = TOOLS_DIR / server_def.name
     category_dir.mkdir(exist_ok=True)
 
     # Write schema.json (preserve x-icon from existing schema if present)

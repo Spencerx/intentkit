@@ -216,7 +216,7 @@ class Config:
         # Telegram Alert
         self.tg_alert_bot_token: str | None = self.load("TG_ALERT_BOT_TOKEN")
         self.tg_alert_chat_id: str | None = self.load("TG_ALERT_CHAT_ID")
-        # Skills - Platform Hosted Keys
+        # Tools - Platform Hosted Keys
         self.allora_api_key: str | None = self.load("ALLORA_API_KEY")
         self.carv_api_key: str | None = self.load("CARV_API_KEY")
         self.elfa_api_key: str | None = self.load("ELFA_API_KEY")

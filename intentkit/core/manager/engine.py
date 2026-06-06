@@ -13,17 +13,17 @@ from langgraph.graph.state import CompiledStateGraph
 from intentkit.abstracts.graph import AgentContext, AgentState
 from intentkit.core.engine import stream_agent_raw
 from intentkit.core.executor import build_executor
-from intentkit.core.manager.skills import (
-    add_autonomous_task_skill,
-    delete_autonomous_task_skill,
-    edit_autonomous_task_skill,
-    get_agent_latest_draft_skill,
-    get_agent_latest_public_info_skill,
-    get_available_llms_skill,
-    list_autonomous_tasks_skill,
-    publish_agent_skill,
-    update_agent_draft_skill,
-    update_public_info_skill,
+from intentkit.core.manager.tools import (
+    add_autonomous_task_tool,
+    delete_autonomous_task_tool,
+    edit_autonomous_task_tool,
+    get_agent_latest_draft_tool,
+    get_agent_latest_public_info_tool,
+    get_available_llms_tool,
+    list_autonomous_tasks_tool,
+    publish_agent_tool,
+    update_agent_draft_tool,
+    update_public_info_tool,
 )
 from intentkit.models.agent import Agent
 from intentkit.models.agent_data import AgentData
@@ -62,8 +62,8 @@ async def stream_manager(
 def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
     now = datetime.now(timezone.utc)
 
-    # Get hierarchical skills text
-    # skills_text = get_skills_hierarchical_text()
+    # Get hierarchical tools text
+    # tools_text = get_tools_hierarchical_text()
 
     prompt = (
         "### Create or Update Agent Draft.\n\n"
@@ -75,8 +75,8 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
         "When you update a draft, ensure the saved content remains consistent"
         " with the agent's purpose and principles.\n"
         "When a user makes a request to create or update an agent,"
-        " you should always use skill get_agent_latest_draft to get the latest draft,"
-        " then make changes from it and use skill update_agent_draft for the changes,"
+        " you should always use tool get_agent_latest_draft to get the latest draft,"
+        " then make changes from it and use tool update_agent_draft for the changes,"
         " remember the tool input data will only update the explicitly provided fields,"
         " at last summarize the changes to the user.\n"
         "The update_agent_draft function is efficient and safe, only updating fields you explicitly provide.\n"
@@ -86,30 +86,30 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
         "\n\n### Avatar Generation\n\n"
         "The field `picture` in the agent draft is used to store the avatar image URL."
         "If the `picture` field is empty after a draft generation, you can ask user if they want to generate an avatar."
-        "Use the `gpt_avatar_generator` skill to generate avatar-friendly images."
-        "After get the avatar url from the skill result, you can update the `picture` field in the draft."
+        "Use the `gpt_avatar_generator` tool to generate avatar-friendly images."
+        "After get the avatar url from the tool result, you can update the `picture` field in the draft."
         "\n\n### Model Choice\n\n"
         "Use `gpt-5.4-mini` for normal requests, and `gpt-5` for complex requests."
-        "If the user specified a model, call the `get_available_llms` skill to retrieve all"
+        "If the user specified a model, call the `get_available_llms` tool to retrieve all"
         " available model IDs and find the closest match."
-        "\n\n### Skill Configuration\n\n"
-        """Because skills consume context, too much context can lead to a decline in LLM performance.
-        Therefore, please use skills sparingly, ideally keeping the number below 20.
-        If multiple skills are available for a single function, choose the one you deem most reliable.
-        In a category, there are often many skills. Please select only the ones that are definitely useful.
+        "\n\n### Tool Configuration\n\n"
+        """Because tools consume context, too much context can lead to a decline in LLM performance.
+        Therefore, please use tools sparingly, ideally keeping the number below 20.
+        If multiple tools are available for a single function, choose the one you deem most reliable.
+        In a category, there are often many tools. Please select only the ones that are definitely useful.
 
-        A typical skill configuration would look like this:
+        A typical tool configuration would look like this:
         ```
-        "skills": {"category1": {"states": {"skill1": "public"}, "enabled": true}}
+        "tools": {"category1": {"states": {"tool1": "public"}, "enabled": true}}
         ```
-        The `enabled` flag is at the category level, and `states` refers to specific skills.
+        The `enabled` flag is at the category level, and `states` refers to specific tools.
         For content involving sensitive material, select `private`. For content suitable for all users, select `public`.
 
         Internet search: to give an agent web search, set the agent field `search_internet` to `true`.
         That switch enables the LLM provider's native web search and is the right tool for general-purpose
         searching. Do NOT add categories like `firecrawl`, `web_scraper`, etc. just to give the
         agent search ability — those categories are backups for specialised scraping/extraction needs and
-        only belong in the skills config when the agent really requires them.
+        only belong in the tools config when the agent really requires them.
         """
         "\n\n### Public Information\n\n"
         "Only agents that have already been deployed at least once can have their public"
@@ -121,11 +121,11 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
         " public info, and use update_public_info only when changes"
         " are necessary.\n"
         "The update_public_info function is efficient and safe, only updating fields you explicitly provide.\n\n"
-        # "### Available Skills for Agent Configuration\n\n"
-        # f"{skills_text}\n\n"
-        # "When using the update_agent_draft tool, select skills from the list above based on the agent's requirements. "
-        # "Use the exact skill names (e.g., 'erc20', 'common', 'twitter', etc.) when configuring the skills property. "
-        # "Each skill can be enabled/disabled and configured with specific states and API key providers according to its schema."
+        # "### Available Tools for Agent Configuration\n\n"
+        # f"{tools_text}\n\n"
+        # "When using the update_agent_draft tool, select tools from the list above based on the agent's requirements. "
+        # "Use the exact tool names (e.g., 'erc20', 'common', 'twitter', etc.) when configuring the tools property. "
+        # "Each tool can be enabled/disabled and configured with specific states and API key providers according to its schema."
     )
 
     agent_data = {
@@ -139,8 +139,8 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
             "2. Preserve important context from prior drafts.\n"
             "3. Only modify drafts using the provided update tool.\n"
             "4. Speak to users in the language they ask their questions, but always use English in Agent Draft.\n"
-            "5. When updating a draft, try to select the right skills. Don't pick too many, just enough to meet user needs.\n"
-            "6. Update skill is override update, you must put the whole fields to input data, not only changed fields."
+            "5. When updating a draft, try to select the right tools. Don't pick too many, just enough to meet user needs.\n"
+            "6. Update tool is override update, you must put the whole fields to input data, not only changed fields."
         ),
         "model": pick_default_model(),
         "prompt": prompt,
@@ -148,7 +148,7 @@ def _build_manager_agent(agent_id: str, user_id: str) -> Agent:
         "temperature": 0.2,
         "frequency_penalty": 0.0,
         "presence_penalty": 0.0,
-        "skills": {
+        "tools": {
             # "system": {
             #     "enabled": True,
             #     "states": {
@@ -194,22 +194,22 @@ async def _get_manager_executor(
 
         # Build executor if not cached
         if not executor:
-            custom_skills = [
-                get_agent_latest_draft_skill,
-                get_agent_latest_public_info_skill,
-                update_agent_draft_skill,
-                update_public_info_skill,
-                publish_agent_skill,
-                add_autonomous_task_skill,
-                delete_autonomous_task_skill,
-                edit_autonomous_task_skill,
-                list_autonomous_tasks_skill,
-                get_available_llms_skill,
+            custom_tools = [
+                get_agent_latest_draft_tool,
+                get_agent_latest_public_info_tool,
+                update_agent_draft_tool,
+                update_public_info_tool,
+                publish_agent_tool,
+                add_autonomous_task_tool,
+                delete_autonomous_task_tool,
+                edit_autonomous_task_tool,
+                list_autonomous_tasks_tool,
+                get_available_llms_tool,
             ]
             executor = await build_executor(
                 manager_agent,
                 AgentData.model_construct(id=manager_agent.id),
-                custom_skills,
+                custom_tools,
             )
             _manager_executors[cache_key] = executor
 

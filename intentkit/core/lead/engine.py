@@ -22,11 +22,11 @@ from intentkit.core.lead.cache import (
 )
 from intentkit.core.lead.constants import LEAD_DEFAULT_NAME, LEAD_DEFAULT_PERSONALITY
 from intentkit.core.lead.service import verify_team_membership
-from intentkit.core.lead.skills import (
-    get_team_info_skill,
-    list_team_agents_skill,
+from intentkit.core.lead.tools import (
+    get_team_info_tool,
+    list_team_agents_tool,
 )
-from intentkit.core.lead.skills.call_agent import lead_call_agent_skill
+from intentkit.core.lead.tools.call_agent import lead_call_agent_tool
 from intentkit.models.agent import Agent
 from intentkit.models.agent_data import AgentData
 from intentkit.models.chat import ChatMessage, ChatMessageCreate
@@ -129,7 +129,7 @@ async def _build_lead_agent(team_id: str) -> Agent:
         "enable_post": False,
         "enable_long_term_memory": True,
         "sub_agents": None,
-        "skills": {
+        "tools": {
             "ui": {
                 "enabled": True,
                 "states": {
@@ -177,15 +177,15 @@ async def _get_lead_executor(
             else:
                 agent_data = await AgentData.get(lead_agent.id)
 
-            custom_skills = [
-                lead_call_agent_skill,
-                get_team_info_skill,
-                list_team_agents_skill,
+            custom_tools = [
+                lead_call_agent_tool,
+                get_team_info_tool,
+                list_team_agents_tool,
             ]
             executor = await build_executor(
                 lead_agent,
                 agent_data,
-                custom_skills,
+                custom_tools,
             )
             lead_executors[team_id] = executor
         elif not lead_agent:

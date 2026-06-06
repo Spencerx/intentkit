@@ -46,7 +46,7 @@ class AuthorType(str, Enum):
 
     # output messages
     AGENT = "agent"
-    SKILL = "skill"
+    TOOL = "tool"
     THINKING = "thinking"
     SYSTEM = "system"
 
@@ -103,8 +103,8 @@ class ChatMessageAttachment(TypedDict):
     ]
 
 
-class ChatMessageSkillCall(TypedDict):
-    """TypedDict for skill call details."""
+class ChatMessageToolCall(TypedDict):
+    """TypedDict for tool call details."""
 
     id: NotRequired[str]
     name: str
@@ -112,10 +112,10 @@ class ChatMessageSkillCall(TypedDict):
     success: bool
     response: NotRequired[
         str
-    ]  # Optional response from the skill call, trimmed to 100 characters
-    error_message: NotRequired[str]  # Optional error message from the skill call
-    credit_event_id: NotRequired[str]  # ID of the credit event for this skill call
-    credit_cost: NotRequired[Decimal]  # Credit cost for the skill call
+    ]  # Optional response from the tool call, trimmed to 100 characters
+    error_message: NotRequired[str]  # Optional error message from the tool call
+    credit_event_id: NotRequired[str]  # ID of the credit event for this tool call
+    credit_cost: NotRequired[Decimal]  # Credit cost for the tool call
 
 
 class ChatMessageRequest(BaseModel):
@@ -221,7 +221,7 @@ class ChatMessageTable(Base):
         JSONB(),
         nullable=True,
     )
-    skill_calls: Mapped[list[ChatMessageSkillCall] | None] = mapped_column(
+    tool_calls: Mapped[list[ChatMessageToolCall] | None] = mapped_column(
         JSONB(),
         nullable=True,
     )
@@ -288,9 +288,9 @@ class ChatMessageCreate(BaseModel):
         list[ChatMessageAttachment] | None,
         Field(None, description="List of attachments in the message"),
     ] = None
-    skill_calls: Annotated[
-        list[ChatMessageSkillCall] | None,
-        Field(None, description="Skill call details"),
+    tool_calls: Annotated[
+        list[ChatMessageToolCall] | None,
+        Field(None, description="Tool call details"),
     ] = None
     input_tokens: Annotated[
         int, Field(0, description="Number of tokens in the input message")
@@ -424,8 +424,8 @@ class ChatMessage(ChatMessageCreate):
     @override
     def __str__(self):
         resp = ""
-        if self.skill_calls:
-            for call in self.skill_calls:
+        if self.tool_calls:
+            for call in self.tool_calls:
                 resp += f"{call['name']} {call['parameters']}: {call.get('response', '') if call['success'] else call.get('error_message', '')}\n"
             resp += "\n"
         resp += self.message
@@ -443,17 +443,15 @@ class ChatMessage(ChatMessageCreate):
             resp += "[ Agent cold start ... ]\n"
             resp += f"\n------------------- start cost: {self.cold_start_cost:.3f} seconds\n\n"
 
-        if self.author_type == AuthorType.SKILL and self.skill_calls:
-            resp += f"[ Skill Calls: ] ({self.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC)\n\n"
-            for skill_call in self.skill_calls:
-                resp += f" {skill_call['name']}: {skill_call['parameters']}\n"
-                if skill_call["success"]:
-                    resp += f"  Success: {skill_call.get('response', '')}\n"
+        if self.author_type == AuthorType.TOOL and self.tool_calls:
+            resp += f"[ Tool Calls: ] ({self.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC)\n\n"
+            for tool_call in self.tool_calls:
+                resp += f" {tool_call['name']}: {tool_call['parameters']}\n"
+                if tool_call["success"]:
+                    resp += f"  Success: {tool_call.get('response', '')}\n"
                 else:
-                    resp += f"  Failed: {skill_call.get('error_message', '')}\n"
-            resp += (
-                f"\n------------------- skill cost: {self.time_cost:.3f} seconds\n\n"
-            )
+                    resp += f"  Failed: {tool_call.get('error_message', '')}\n"
+            resp += f"\n------------------- tool cost: {self.time_cost:.3f} seconds\n\n"
         elif self.author_type == AuthorType.AGENT:
             resp += (
                 f"[ Agent: ] ({self.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC)\n\n"
@@ -484,24 +482,24 @@ class ChatMessage(ChatMessageCreate):
     def sanitize_privacy(self) -> "ChatMessage":
         """Remove sensitive information from the chat message.
 
-        This method clears the skill parameters and response
-        from skill calls while preserving the structure and metadata.
+        This method clears the tool parameters and response
+        from tool calls while preserving the structure and metadata.
 
         Returns:
             ChatMessage: A new ChatMessage instance with sensitive data removed
         """
-        if self.author_type != AuthorType.SKILL:
+        if self.author_type != AuthorType.TOOL:
             return self
         # Create a copy of the current message
         sanitized_data = self.model_dump()
 
-        # Clear sensitive data from skill calls
-        if sanitized_data.get("skill_calls"):
-            for skill_call in sanitized_data["skill_calls"]:
+        # Clear sensitive data from tool calls
+        if sanitized_data.get("tool_calls"):
+            for tool_call in sanitized_data["tool_calls"]:
                 # Clear parameters and response while keeping structure
-                skill_call["parameters"] = {}
-                if "response" in skill_call:
-                    skill_call["response"] = ""
+                tool_call["parameters"] = {}
+                if "response" in tool_call:
+                    tool_call["response"] = ""
 
         # Return a new ChatMessage instance with sanitized data
         return ChatMessage.model_validate(sanitized_data)

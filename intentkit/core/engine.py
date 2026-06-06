@@ -2,7 +2,7 @@
 
 This module provides functionality for initializing and executing AI agents. It handles:
 - Agent initialization with LangChain
-- Tool and skill management
+- Tool and tool management
 - Agent execution and response handling
 - Memory management with PostgreSQL
 - Integration with CDP and Twitter
@@ -42,7 +42,7 @@ from intentkit.config.db import get_session
 from intentkit.core.agent import get_agent
 from intentkit.core.budget import check_hourly_budget_exceeded
 from intentkit.core.chat import clear_thread_memory
-from intentkit.core.credit import expense_message, expense_skill
+from intentkit.core.credit import expense_message, expense_tool
 from intentkit.core.executor import (  # noqa: F401
     agent_executor,
 )
@@ -53,12 +53,12 @@ from intentkit.models.chat import (
     ChatMessage,
     ChatMessageAttachmentType,
     ChatMessageCreate,
-    ChatMessageSkillCall,
+    ChatMessageToolCall,
 )
 from intentkit.models.credit import CreditAccount, OwnerType
 from intentkit.models.llm import LLMModelInfo, LLMProvider, calculate_search_cost
 from intentkit.models.user import User
-from intentkit.skills.base import get_skill_price
+from intentkit.tools.base import get_tool_price
 from intentkit.utils.error import IntentKitAPIError
 
 logger = logging.getLogger(__name__)
@@ -536,7 +536,7 @@ async def _handle_tools_chunk(
         )
         return [], last
 
-    skill_calls: list[ChatMessageSkillCall] = []
+    tool_calls: list[ChatMessageToolCall] = []
     cached_attachments: list[Any] = []
     have_first_call_in_cache = False  # tool node emit every tool call
     for msg in chunk["tools"]["messages"]:
@@ -550,7 +550,7 @@ async def _handle_tools_chunk(
             if call["id"] == msg.tool_call_id:
                 if call_index == 0:
                     have_first_call_in_cache = True
-                skill_call: ChatMessageSkillCall = {
+                tool_call: ChatMessageToolCall = {
                     "id": msg.tool_call_id,
                     "name": call["name"],
                     "parameters": call["args"],
@@ -558,34 +558,34 @@ async def _handle_tools_chunk(
                 }
                 status = getattr(msg, "status", None)
                 if status == "error":
-                    skill_call["success"] = False
-                    skill_call["error_message"] = str(msg.content)
+                    tool_call["success"] = False
+                    tool_call["error_message"] = str(msg.content)
                 else:
                     if config.debug:
-                        skill_call["response"] = str(msg.content)
+                        tool_call["response"] = str(msg.content)
                     else:
-                        skill_call["response"] = textwrap.shorten(
+                        tool_call["response"] = textwrap.shorten(
                             str(msg.content), width=1000, placeholder="..."
                         )
                     artifact = getattr(msg, "artifact", None)
                     if artifact:
                         cached_attachments.extend(artifact)
-                skill_calls.append(skill_call)
+                tool_calls.append(tool_call)
                 break
 
     tool_usage = getattr(cached_tool_step, "usage_metadata", None) or {}
-    skill_message_create = ChatMessageCreate(
+    tool_message_create = ChatMessageCreate(
         id=str(XID()),
         agent_id=user_message.agent_id,
         chat_id=user_message.chat_id,
         user_id=user_message.user_id,
         author_id=user_message.agent_id,
-        author_type=AuthorType.SKILL,
+        author_type=AuthorType.TOOL,
         model=agent.model,
         thread_type=user_message.author_type,
         reply_to=user_message.id,
         message="",
-        skill_calls=skill_calls,
+        tool_calls=tool_calls,
         attachments=cached_attachments,
         input_tokens=(
             tool_usage.get("input_tokens", 0) if have_first_call_in_cache else 0
@@ -605,45 +605,45 @@ async def _handle_tools_chunk(
         # 1. Message-level credit event (if applicable)
         if have_first_call_in_cache:
             message_amount = await model.calculate_cost(
-                skill_message_create.input_tokens,
-                skill_message_create.output_tokens,
-                skill_message_create.cached_input_tokens,
+                tool_message_create.input_tokens,
+                tool_message_create.output_tokens,
+                tool_message_create.cached_input_tokens,
             )
             message_payment_event = await expense_message(
                 session,
                 team_id=payer or "",
-                message_id=skill_message_create.id,
+                message_id=tool_message_create.id,
                 start_message_id=user_message.id,
                 base_llm_amount=message_amount,
                 agent=agent,
                 user_id=user_message.user_id,
             )
-            skill_message_create.credit_event_id = message_payment_event.id
-            skill_message_create.credit_cost = message_payment_event.total_amount
-        # 2. Per-skill credit events
-        for skill_call in skill_calls:
-            if not skill_call["success"]:
+            tool_message_create.credit_event_id = message_payment_event.id
+            tool_message_create.credit_cost = message_payment_event.total_amount
+        # 2. Per-tool credit events
+        for tool_call in tool_calls:
+            if not tool_call["success"]:
                 continue
-            skill_price = get_skill_price(skill_call["name"])
-            payment_event = await expense_skill(
+            tool_price = get_tool_price(tool_call["name"])
+            payment_event = await expense_tool(
                 session,
                 team_id=payer or "",
-                message_id=skill_message_create.id,
+                message_id=tool_message_create.id,
                 start_message_id=user_message.id,
-                skill_call_id=skill_call.get("id", ""),
-                skill_name=skill_call["name"],
-                price=skill_price,
+                tool_call_id=tool_call.get("id", ""),
+                tool_name=tool_call["name"],
+                price=tool_price,
                 agent=agent,
                 user_id=user_message.user_id,
             )
-            skill_call["credit_event_id"] = payment_event.id
-            skill_call["credit_cost"] = payment_event.total_amount
-            logger.info("[%s] skill payment: %s", user_message.agent_id, skill_call)
+            tool_call["credit_event_id"] = payment_event.id
+            tool_call["credit_cost"] = payment_event.total_amount
+            logger.info("[%s] tool payment: %s", user_message.agent_id, tool_call)
         # 3. Single insert with all credit info populated
-        skill_message_create.skill_calls = skill_calls
-        skill_message = await skill_message_create.save_in_session(session)
+        tool_message_create.tool_calls = tool_calls
+        tool_message = await tool_message_create.save_in_session(session)
         await session.commit()
-        return [skill_message], last
+        return [tool_message], last
 
 
 def _is_unrecoverable_checkpoint_error(exc: Exception) -> bool:
@@ -1227,7 +1227,7 @@ async def execute_agent(message: ChatMessageCreate) -> list[ChatMessage]:
 
     Args:
         message (ChatMessageCreate): The chat message containing agent_id, chat_id, and message content
-        debug (bool): Enable debug mode, will save the skill results
+        debug (bool): Enable debug mode, will save the tool results
 
     Returns:
         list[ChatMessage]: Formatted response lines including timing information

@@ -121,7 +121,7 @@ class TestAuthorType:
     def test_author_type_values(self):
         assert AuthorType.AGENT == "agent"
         assert AuthorType.SYSTEM == "system"
-        assert AuthorType.SKILL == "skill"
+        assert AuthorType.TOOL == "tool"
         assert AuthorType.THINKING == "thinking"
         assert AuthorType.TRIGGER == "trigger"
         assert AuthorType.TELEGRAM == "telegram"

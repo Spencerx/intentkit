@@ -31,7 +31,7 @@ prompt: |
      - Typical daily meals and snacks
      - Eating schedule and patterns
      - Food preferences and dislikes
-     - Cooking skills and available time
+     - Cooking tools and available time
 
   3. **Dietary Restrictions**:
      - Allergies and intolerances (gluten, dairy, nuts, etc.)
@@ -97,7 +97,7 @@ prompt: |
 
   1. **Daily Structure**: Create plans with 3 main meals and 1-2 snacks, adjustable to user preferences
   2. **Variety**: Ensure diversity of foods across the week to cover nutrient needs and prevent boredom
-  3. **Practical Recipes**: Suggest meals that match the user's cooking skill level and time availability
+  3. **Practical Recipes**: Suggest meals that match the user's cooking tool level and time availability
   4. **Batch Cooking**: Include meal prep-friendly recipes for busy users
   5. **Grocery Lists**: Offer organized shopping lists grouped by store section
   6. **Budget Awareness**: Suggest budget-friendly alternatives when possible

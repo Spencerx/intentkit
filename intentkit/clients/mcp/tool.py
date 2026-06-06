@@ -1,4 +1,4 @@
-"""McpToolSkill — wraps a single MCP tool as an IntentKit skill."""
+"""McpToolTool — wraps a single MCP tool as an IntentKit tool."""
 
 import logging
 from typing import Any
@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, create_model
 from intentkit.clients.mcp.client import McpToolError, call_mcp_tool
 from intentkit.clients.mcp.registry import MCP_SERVERS, McpServerDef
 from intentkit.config.config import config as system_config
-from intentkit.skills.base import IntentKitSkill
+from intentkit.tools.base import IntentKitTool
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +62,11 @@ def create_args_model(tool_name: str, input_schema: dict[str, Any]) -> type[Base
     return create_model(f"{tool_name}_args", **fields)  # type: ignore[call-overload]
 
 
-class McpToolSkill(IntentKitSkill):
-    """An IntentKit skill that wraps a single MCP tool."""
+class McpToolTool(IntentKitTool):
+    """An IntentKit tool that wraps a single MCP tool."""
 
     category: str
-    """Skill category name, e.g. 'mcp_coingecko'."""
+    """Toolset name, e.g. 'mcp_coingecko'."""
 
     server_name: str
     """Registry key in MCP_SERVERS."""
@@ -75,11 +75,11 @@ class McpToolSkill(IntentKitSkill):
     """Original tool name on the MCP server."""
 
     def _resolve_api_key(self, server_def: McpServerDef) -> str | None:
-        """Resolve API key: agent skill config > system config."""
+        """Resolve API key: agent tool config > system config."""
         try:
             context = self.get_context()
-            skill_config = context.agent.skill_config(self.category)
-            agent_key = skill_config.get("api_key") if skill_config else None
+            tool_config = context.agent.tool_config(self.category)
+            agent_key = tool_config.get("api_key") if tool_config else None
             if agent_key:
                 return agent_key
         except ValueError:
@@ -107,19 +107,19 @@ class McpToolSkill(IntentKitSkill):
             ) from e
 
 
-def create_mcp_skill(
+def create_mcp_tool(
     server_def: McpServerDef,
     tool_name: str,
     tool_description: str,
     input_schema: dict[str, Any],
-) -> McpToolSkill:
-    """Factory to create an McpToolSkill instance from MCP tool info."""
+) -> McpToolTool:
+    """Factory to create an McpToolTool instance from MCP tool info."""
     args_model = create_args_model(tool_name, input_schema)
-    # Prefix skill name with category to avoid name collisions
-    skill_name = f"{server_def.name}_{tool_name}"
+    # Prefix tool name with category to avoid name collisions
+    tool_name = f"{server_def.name}_{tool_name}"
 
-    return McpToolSkill(
-        name=skill_name,
+    return McpToolTool(
+        name=tool_name,
         description=tool_description or f"MCP tool: {tool_name}",
         args_schema=args_model,
         category=server_def.name,

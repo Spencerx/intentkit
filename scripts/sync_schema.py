@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT_DIR = Path(__file__).parent.parent
-SKILLS_DIR = ROOT_DIR / "skills"
+TOOLS_DIR = ROOT_DIR / "tools"
 
 
 def update_enabled_field(schema_path: Path, schema: dict[str, Any]) -> bool:
@@ -40,7 +40,7 @@ def update_enabled_field(schema_path: Path, schema: dict[str, Any]) -> bool:
         schema["properties"]["enabled"] = {
             "type": "boolean",
             "title": "Enabled",
-            "description": "Whether this skill is enabled",
+            "description": "Whether this tool is enabled",
             "default": False,
         }
 
@@ -78,9 +78,9 @@ def update_states_field(schema_path: Path, schema: dict[str, Any]) -> bool:
             changes_made = True
 
         if "description" not in states_schema:
-            skill_name = schema_path.parent.name.capitalize()
+            tool_name = schema_path.parent.name.capitalize()
             states_schema["description"] = (
-                f"States for each {skill_name} skill (disabled, public, or private)"
+                f"States for each {tool_name} tool (disabled, public, or private)"
             )
             changes_made = True
 
@@ -166,8 +166,8 @@ def update_schema_json(schema_path: Path) -> None:
 
 def main():
     """Main function to synchronize all schema.json files."""
-    # Find all schema.json files in the skills directory
-    schema_files = list(SKILLS_DIR.glob("*/schema.json"))
+    # Find all schema.json files in the tools directory
+    schema_files = list(TOOLS_DIR.glob("*/schema.json"))
 
     for schema_path in schema_files:
         update_schema_json(schema_path)

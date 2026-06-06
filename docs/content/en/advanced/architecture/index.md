@@ -20,7 +20,7 @@ The entrypoint layer serves as the interface between the outside world and the A
 At the heart of IntentKit lies the LangGraph layer, which orchestrates the AI processing pipeline. It manages the language model interactions, prompt engineering, and tool execution flow. The layer maintains both thread-specific memory for ongoing conversations and a broader agent memory system, enabling contextual awareness and persistent knowledge across interactions.
 
 ### Processing Layer
-Skills and Memory Runtime
+Tools and Memory Runtime
 
 ### Storage Layer
 The storage layer provides persistent data management across the system. It maintains agent configurations, securely stores credentials, preserves agent state information, and manages the memory store. This layer ensures that all persistent data is properly organized, secured, and readily accessible when needed.

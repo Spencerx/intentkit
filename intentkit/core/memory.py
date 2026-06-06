@@ -79,8 +79,8 @@ async def update_memory(agent_id: str, new_content: str) -> str:
     # Lead agents (id format "team-{team_id}") are cached separately from
     # regular agents and the cache doesn't watch AgentData.updated_at, so we
     # must invalidate it explicitly here. This covers both the self-updater
-    # path (lead_update_self_memory skill) and any direct call to the generic
-    # update_memory system skill by the lead agent itself.
+    # path (lead_update_self_memory tool) and any direct call to the generic
+    # update_memory system tool by the lead agent itself.
     if agent_id.startswith("team-"):
         from intentkit.core.lead.cache import invalidate_lead_cache
 

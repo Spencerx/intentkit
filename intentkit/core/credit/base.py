@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 FOURPLACES = Decimal("0.0001")
 
 
-class SkillCost(BaseModel):
+class ToolCost(BaseModel):
     total_amount: Decimal
     base_amount: Decimal
     base_discount_amount: Decimal
     base_original_amount: Decimal
-    base_skill_amount: Decimal
+    base_tool_amount: Decimal
     fee_platform_amount: Decimal
     fee_agent_amount: Decimal
 

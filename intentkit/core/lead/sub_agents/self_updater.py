@@ -7,19 +7,19 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import BaseTool
 
-from intentkit.core.lead.skills.get_self_info import lead_get_self_info_skill
-from intentkit.core.lead.skills.update_self import lead_update_self_skill
-from intentkit.core.lead.skills.update_self_memory import lead_update_self_memory_skill
+from intentkit.core.lead.tools.get_self_info import lead_get_self_info_tool
+from intentkit.core.lead.tools.update_self import lead_update_self_tool
+from intentkit.core.lead.tools.update_self_memory import lead_update_self_memory_tool
 from intentkit.models.agent import Agent
 from intentkit.models.llm_picker import pick_default_model
 
 
-def get_self_updater_skills() -> Sequence[BaseTool]:
-    """Return skills for the self-updater sub-agent."""
+def get_self_updater_tools() -> Sequence[BaseTool]:
+    """Return tools for the self-updater sub-agent."""
     return [
-        lead_get_self_info_skill,
-        lead_update_self_skill,
-        lead_update_self_memory_skill,
+        lead_get_self_info_tool,
+        lead_update_self_tool,
+        lead_update_self_memory_tool,
     ]
 
 
@@ -60,7 +60,7 @@ def build_self_updater(team_id: str) -> Agent:
         "enable_post": False,
         "enable_long_term_memory": False,
         "sub_agents": None,
-        "skills": {
+        "tools": {
             "ui": {
                 "enabled": True,
                 "states": {

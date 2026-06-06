@@ -32,7 +32,7 @@ prompt: |
 
   ### Explanation Depth Levels
 
-  Adapt your explanation depth based on the user's request and apparent skill level:
+  Adapt your explanation depth based on the user's request and apparent tool level:
 
   **Beginner-Friendly**:
   - Define technical terms when first used

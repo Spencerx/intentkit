@@ -18,7 +18,7 @@ model: google/gemini-3-flash-preview
 temperature: 0.1
 visibility: 20
 search_internet: false
-skills:
+tools:
   cn_stock:
     enabled: true
     states:

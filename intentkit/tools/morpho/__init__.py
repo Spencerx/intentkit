@@ -1,0 +1,80 @@
+"""Morpho lending protocol tools."""
+
+from typing import TypedDict
+
+from intentkit.tools.base import ToolsetConfig, ToolState
+from intentkit.tools.morpho.base import MorphoBaseTool
+from intentkit.tools.morpho.borrow import MorphoBorrow
+from intentkit.tools.morpho.deposit import MorphoDeposit
+from intentkit.tools.morpho.get_position import MorphoGetPosition
+from intentkit.tools.morpho.get_vault_data import MorphoGetVaultData
+from intentkit.tools.morpho.repay import MorphoRepay
+from intentkit.tools.morpho.supply_collateral import MorphoSupplyCollateral
+from intentkit.tools.morpho.withdraw import MorphoWithdraw
+from intentkit.tools.morpho.withdraw_collateral import MorphoWithdrawCollateral
+
+
+class ToolStates(TypedDict):
+    morpho_deposit: ToolState
+    morpho_withdraw: ToolState
+    morpho_get_vault_data: ToolState
+    morpho_supply_collateral: ToolState
+    morpho_withdraw_collateral: ToolState
+    morpho_borrow: ToolState
+    morpho_repay: ToolState
+    morpho_get_position: ToolState
+
+
+class Config(ToolsetConfig):
+    """Configuration for Morpho tools."""
+
+    states: ToolStates
+
+
+# Cache for tool instances
+_cache: dict[str, MorphoBaseTool] = {
+    "morpho_deposit": MorphoDeposit(),
+    "morpho_withdraw": MorphoWithdraw(),
+    "morpho_get_vault_data": MorphoGetVaultData(),
+    "morpho_supply_collateral": MorphoSupplyCollateral(),
+    "morpho_withdraw_collateral": MorphoWithdrawCollateral(),
+    "morpho_borrow": MorphoBorrow(),
+    "morpho_repay": MorphoRepay(),
+    "morpho_get_position": MorphoGetPosition(),
+}
+
+
+async def get_tools(
+    config: Config,
+    is_private: bool,
+    **_,
+) -> list[MorphoBaseTool]:
+    """Get all enabled Morpho tools.
+
+    Args:
+        config: The configuration for Morpho tools.
+        is_private: Whether to include private tools.
+
+    Returns:
+        A list of enabled Morpho tools.
+    """
+    tools: list[MorphoBaseTool] = []
+
+    for tool_name, state in config["states"].items():
+        if state == "disabled":
+            continue
+        if state == "public" or (state == "private" and is_private):
+            # Check cache first
+            if tool_name in _cache:
+                tools.append(_cache[tool_name])
+
+    return tools
+
+
+def available() -> bool:
+    """Check if this toolset is available based on system config.
+
+    Morpho tools are available for any EVM-compatible wallet (CDP, Safe/Privy)
+    on supported networks (base-mainnet, base-sepolia).
+    """
+    return True

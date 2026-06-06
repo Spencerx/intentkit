@@ -1,7 +1,7 @@
 """Predefined tag categories for an agent published to public.
 
 The enum is the source of truth for tag values across both the team API and
-the manager-agent publish skill. UI labels are derived in the frontend.
+the manager-agent publish tool. UI labels are derived in the frontend.
 The grouping (`AGENT_TAG_CATEGORIES`) is the single source of truth for how
 tags are bucketed in the UI selector.
 """

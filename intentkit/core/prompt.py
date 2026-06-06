@@ -15,7 +15,7 @@ from intentkit.models.user import User
 
 # Base system prompt components
 INTENTKIT_PROMPT = """You are an AI agent created with IntentKit.
-Your tools are called 'skills'.
+You can use the tools available to you to take actions and access external information.
 """
 
 # ============================================================================
@@ -36,14 +36,14 @@ def _build_system_header(agent: Agent) -> str:
     return prompt
 
 
-def build_system_skills_section(agent: Agent, context: AgentContext) -> str:
-    """Build system skills guide section if running in private context."""
+def build_system_tools_section(agent: Agent, context: AgentContext) -> str:
+    """Build system tools guide section if running in private context."""
     if not context.is_private:
         return ""
 
     lines = [
-        "## System Skills Guide\n\n",
-        "You have access to several system skills for internal operations:\n",
+        "## System Tools Guide\n\n",
+        "You have access to several system tools for internal operations:\n",
     ]
 
     if agent.is_post_enabled:
@@ -88,7 +88,7 @@ async def build_sub_agents_section(agent: Agent, context: AgentContext) -> str:
 
     lines = [
         "## Sub-Agents\n\n",
-        "You **only** can use the `call_agent` skill to call the following sub-agents:\n\n",
+        "You **only** can use the `call_agent` tool to call the following sub-agents:\n\n",
     ]
 
     for agent_ref in agent.sub_agents:
@@ -121,11 +121,11 @@ def _build_social_accounts_section(agent: Agent, agent_data: AgentData) -> str:
 
     social_parts = []
 
-    # Twitter info - only include if twitter skill is enabled
+    # Twitter info - only include if twitter tool is enabled
     twitter_enabled = (
-        agent.skills
-        and "twitter" in agent.skills
-        and agent.skills["twitter"].get("enabled") is True
+        agent.tools
+        and "twitter" in agent.tools
+        and agent.tools["twitter"].get("enabled") is True
     )
 
     if twitter_enabled and agent_data.twitter_id:
@@ -251,7 +251,7 @@ def build_agent_prompt(
     - Social accounts (Twitter, Telegram)
     - Wallet information
     - Agent characteristics (purpose, personality, principles)
-    - Skills-specific guides
+    - Tools-specific guides
     - Extra prompt from template
 
     Args:
@@ -263,7 +263,7 @@ def build_agent_prompt(
     """
     prompt_sections = [
         _build_system_header(agent),
-        build_system_skills_section(agent, context),
+        build_system_tools_section(agent, context),
         _build_agent_identity_section(agent),
         _build_agent_characteristics_section(agent),
         _build_social_accounts_section(agent, agent_data),
@@ -371,7 +371,7 @@ async def build_entrypoint_prompt(agent: Agent, context: AgentContext) -> str | 
     elif entrypoint == AuthorType.WECHAT.value:
         wechat_hardcoded = (
             "WeChat only supports plain text and emoji. Do not use markdown formatting. "
-            "WeChat does not support rendering UI components. Do not call ui_ skills."
+            "WeChat does not support rendering UI components. Do not call ui_ tools."
         )
         entrypoint_prompt = _append(entrypoint_prompt, wechat_hardcoded)
         if config.wechat_system_prompt:
@@ -431,7 +431,9 @@ async def build_system_prompt(
 
     if agent.enable_long_term_memory:
         memory_section = "## Memory\n\n"
-        memory_section += "If you want to add or update your memory, call the update_memory skill.\n\n"
+        memory_section += (
+            "If you want to add or update your memory, call the update_memory tool.\n\n"
+        )
         memory_section += "Here is your current memory:\n\n"
         if agent_data.long_term_memory:
             memory_section += agent_data.long_term_memory + "\n\n"

@@ -68,6 +68,92 @@ async def update_table_schema(conn, dialect, model_cls) -> None:
             await add_column_if_not_exists(conn, dialect, table_name, column)
 
 
+# Legacy one-time, idempotent rename of the "skill" concept to "tool"/"toolset".
+# Guarded by information_schema so it is a no-op once applied (safe on every startup).
+# Mirrors scripts/migrate_skill_to_tool.sql (the manual psql equivalent).
+_SKILL_TO_TOOL_DDL = """
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agent_skill_data')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'agent_tool_data') THEN
+        ALTER TABLE agent_skill_data RENAME TO agent_tool_data;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'chat_skill_data')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'chat_tool_data') THEN
+        ALTER TABLE chat_skill_data RENAME TO chat_tool_data;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agent_tool_data' AND column_name='skill')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agent_tool_data' AND column_name='tool') THEN
+        ALTER TABLE agent_tool_data RENAME COLUMN skill TO tool;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_tool_data' AND column_name='skill')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_tool_data' AND column_name='tool') THEN
+        ALTER TABLE chat_tool_data RENAME COLUMN skill TO tool;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='skills')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='tools') THEN
+        ALTER TABLE agents RENAME COLUMN skills TO tools;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='templates' AND column_name='skills')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='templates' AND column_name='tools') THEN
+        ALTER TABLE templates RENAME COLUMN skills TO tools;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_messages' AND column_name='skill_calls')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_messages' AND column_name='tool_calls') THEN
+        ALTER TABLE chat_messages RENAME COLUMN skill_calls TO tool_calls;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='skill_call_id')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='tool_call_id') THEN
+        ALTER TABLE credit_events RENAME COLUMN skill_call_id TO tool_call_id;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='skill_name')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='tool_name') THEN
+        ALTER TABLE credit_events RENAME COLUMN skill_name TO tool_name;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='base_skill_amount')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='base_tool_amount') THEN
+        ALTER TABLE credit_events RENAME COLUMN base_skill_amount TO base_tool_amount;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='x402_orders' AND column_name='skill_name')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='x402_orders' AND column_name='tool_name') THEN
+        ALTER TABLE x402_orders RENAME COLUMN skill_name TO tool_name;
+    END IF;
+
+    -- persisted enum value flips (guarded per-column: a missing column has no skill rows)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_messages' AND column_name='author_type') THEN
+        UPDATE chat_messages SET author_type = 'tool' WHERE author_type = 'skill';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='chat_messages' AND column_name='thread_type') THEN
+        UPDATE chat_messages SET thread_type = 'tool' WHERE thread_type = 'skill';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_events' AND column_name='event_type') THEN
+        UPDATE credit_events SET event_type = 'tool_call' WHERE event_type = 'skill_call';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_prices' AND column_name='price_entity') THEN
+        UPDATE credit_prices SET price_entity = 'tool_call' WHERE price_entity = 'skill_call';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_transactions' AND column_name='tx_type') THEN
+        UPDATE credit_transactions SET tx_type = 'receive_base_tool' WHERE tx_type = 'receive_base_skill';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='credit_accounts' AND column_name='owner_id') THEN
+        UPDATE credit_accounts SET owner_id = 'platform_tool' WHERE owner_id = 'platform_skill';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='app_settings' AND column_name='value') THEN
+        UPDATE app_settings SET value = (value - 'skill_interrupted') || jsonb_build_object('tool_interrupted', value -> 'skill_interrupted') WHERE key = 'errors' AND jsonb_exists(value, 'skill_interrupted');
+    END IF;
+END $$;
+"""
+
+
+async def _migrate_skill_to_tool(conn) -> None:
+    """Apply the idempotent skill -> tool/toolset rename + value flips (one guarded block).
+
+    Runs raw DDL/DML via the driver (no bind params). Safe to call repeatedly and on a
+    fresh DB -- every statement is guarded by information_schema.
+    """
+    await conn.exec_driver_sql(_SKILL_TO_TOOL_DDL)
+
+
 async def safe_migrate(engine) -> None:
     """Safely migrate all SQLAlchemy models by adding new columns.
 
@@ -79,6 +165,11 @@ async def safe_migrate(engine) -> None:
 
     async with engine.begin() as conn:
         try:
+            # Legacy skill -> tool/toolset rename. MUST run before create_all so the
+            # additive auto-migration cannot create empty new-named columns/tables
+            # alongside the old data. Idempotent / guarded -> no-op once applied.
+            await _migrate_skill_to_tool(conn)
+
             # Create tables if they don't exist
             await conn.run_sync(Base.metadata.create_all)
 

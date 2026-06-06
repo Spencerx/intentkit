@@ -5,8 +5,8 @@ import sys
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from intentkit.core.system_skills.create_activity import CreateActivitySkill
-from intentkit.core.system_skills.create_post import CreatePostSkill
+from intentkit.core.system_tools.create_activity import CreateActivityTool
+from intentkit.core.system_tools.create_post import CreatePostTool
 
 
 # Mock runtime context
@@ -37,34 +37,34 @@ async def verify_activity_creation():
     agent_id = agent_table.id
     print(f"Using agent: {agent_id}, Name: {agent_table.name}")
 
-    # Mock context setup for Skill execution if needed, but we can call creation functions directly
-    # OR we can mock the runtime context for skills.
-    # Let's verify the logic in the SKILLs since that's what we changed.
+    # Mock context setup for Tool execution if needed, but we can call creation functions directly
+    # OR we can mock the runtime context for tools.
+    # Let's verify the logic in the TOOLs since that's what we changed.
 
-    # To test skills, we need to mock get_runtime.
+    # To test tools, we need to mock get_runtime.
     # Since patching might be complex in this script without pytest,
     # let's try to instantiate imports carefully or verify the logic by "dry running" the code paths
     # via copying the logic or using a test harness if available.
 
-    # Actually, simpler: create an activity via create_agent_activity with explicit fields matched from what the skill WOULD do.
-    # Wait, the meaningful change is IN the skill/entrypoint code.
-    # So I must execute the SKILL code.
+    # Actually, simpler: create an activity via create_agent_activity with explicit fields matched from what the tool WOULD do.
+    # Wait, the meaningful change is IN the tool/entrypoint code.
+    # So I must execute the TOOL code.
 
     # Let's try to patch get_runtime
     from unittest.mock import patch
 
     with patch(
-        "intentkit.core.system_skills.create_activity.get_runtime"
+        "intentkit.core.system_tools.create_activity.get_runtime"
     ) as mock_get_runtime:
         mock_get_runtime.return_value.context = MockContext(agent_id)
 
-        skill = CreateActivitySkill()
+        tool = CreateActivityTool()
         # We need to run _arun. BaseTool hides it.
         # But we can call input schema manually?
         # BaseTool call method handles it.
 
         try:
-            res = await skill._arun(text="Test Activity for Redundant Fields")  # pyright: ignore[reportPrivateUsage]
+            res = await tool._arun(text="Test Activity for Redundant Fields")  # pyright: ignore[reportPrivateUsage]
             print(f"Activity creation result: {res}")
 
             # Extract ID and check DB
@@ -93,7 +93,7 @@ async def verify_activity_creation():
                 )
 
         except Exception as e:
-            print(f"Error testing CreateActivitySkill: {e}")
+            print(f"Error testing CreateActivityTool: {e}")
             import traceback
 
             traceback.print_exc()
@@ -119,17 +119,17 @@ async def verify_post_creation():
     from unittest.mock import patch
 
     with patch(
-        "intentkit.core.system_skills.create_post.get_runtime"
+        "intentkit.core.system_tools.create_post.get_runtime"
     ) as mock_get_runtime:
         mock_get_runtime.return_value.context = MockContext(agent_id)
 
-        skill = CreatePostSkill()
+        tool = CreatePostTool()
 
         try:
             import time
 
             slug = f"test-post-{int(time.time())}"
-            res = await skill._arun(  # pyright: ignore[reportPrivateUsage]
+            res = await tool._arun(  # pyright: ignore[reportPrivateUsage]
                 title="Test Post for Redundant Fields",
                 markdown="Content...",
                 slug=slug,
@@ -177,7 +177,7 @@ async def verify_post_creation():
                     print("FAILURE: agent_picture mismatch in Activity")
 
         except Exception as e:
-            print(f"Error testing CreatePostSkill: {e}")
+            print(f"Error testing CreatePostTool: {e}")
             import traceback
 
             traceback.print_exc()

@@ -1,8 +1,8 @@
 """
-Unified wallet abstractions for on-chain skills.
+Unified wallet abstractions for on-chain tools.
 
 This module defines abstract interfaces for wallet providers and signers,
-allowing skills to work with different wallet implementations (CDP, Privy, etc.)
+allowing tools to work with different wallet implementations (CDP, Privy, etc.)
 without knowing the specific implementation details.
 """
 
@@ -15,7 +15,7 @@ class UnifiedWalletProvider(ABC):
     Abstract interface for wallet providers.
 
     This interface defines the common operations that any wallet provider
-    (CDP, Privy/Safe, etc.) must implement to be used by on-chain skills.
+    (CDP, Privy/Safe, etc.) must implement to be used by on-chain tools.
     """
 
     @abstractmethod

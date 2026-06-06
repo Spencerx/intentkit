@@ -19,7 +19,7 @@ from intentkit.config.base import Base
 class PriceEntity(str, Enum):
     """Type of credit price."""
 
-    SKILL_CALL = "skill_call"
+    TOOL_CALL = "tool_call"
 
 
 class DiscountType(str, Enum):
@@ -28,7 +28,7 @@ class DiscountType(str, Enum):
     STANDARD = "standard"
 
 
-DEFAULT_SKILL_CALL_PRICE = Decimal("10.0000")
+DEFAULT_TOOL_CALL_PRICE = Decimal("10.0000")
 
 
 class CreditPriceTable(Base):
@@ -89,10 +89,10 @@ class CreditPrice(BaseModel):
         ),
     ]
     price_entity: Annotated[
-        PriceEntity, Field(description="Type of the price (agent or skill_call)")
+        PriceEntity, Field(description="Type of the price (agent or tool_call)")
     ]
     price_entity_id: Annotated[
-        str, Field(description="ID of the price entity, the skill is the name")
+        str, Field(description="ID of the price entity, the tool is the name")
     ]
     discount_type: Annotated[
         DiscountType,

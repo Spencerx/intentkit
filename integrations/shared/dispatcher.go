@@ -22,11 +22,11 @@ func DispatchMessage(ctx context.Context, msg types.ChatMessage, sender MessageS
 	case types.AuthorTypeThinking:
 		return
 
-	case types.AuthorTypeSkill:
-		if len(msg.SkillCalls) > 0 {
-			text := fmt.Sprintf("🔧 Running %s...", msg.SkillCalls[0].Name)
+	case types.AuthorTypeTool:
+		if len(msg.ToolCalls) > 0 {
+			text := fmt.Sprintf("🔧 Running %s...", msg.ToolCalls[0].Name)
 			if err := sender.SendText(ctx, text); err != nil {
-				slog.Error("Failed to send skill status", "error", err)
+				slog.Error("Failed to send tool status", "error", err)
 			}
 		}
 		for _, att := range msg.Attachments {

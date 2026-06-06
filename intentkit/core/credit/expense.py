@@ -16,7 +16,7 @@ from intentkit.models.credit import (
     DEFAULT_PLATFORM_ACCOUNT_MEDIA,
     DEFAULT_PLATFORM_ACCOUNT_MEMORY,
     DEFAULT_PLATFORM_ACCOUNT_MESSAGE,
-    DEFAULT_PLATFORM_ACCOUNT_SKILL,
+    DEFAULT_PLATFORM_ACCOUNT_TOOL,
     CreditAccount,
     CreditDebit,
     CreditEvent,
@@ -31,7 +31,7 @@ from intentkit.models.credit import (
 )
 from intentkit.models.llm import LLMModelInfo
 
-from .base import FOURPLACES, SkillCost
+from .base import FOURPLACES, ToolCost
 
 logger = logging.getLogger(__name__)
 
@@ -39,21 +39,21 @@ logger = logging.getLogger(__name__)
 # PAYMENT FLOW OVERVIEW
 # =============================================================================
 #
-# The three main expense functions below (expense_message, expense_skill,
+# The three main expense functions below (expense_message, expense_tool,
 # expense_summarize) share ~80% identical structure. This is INTENTIONAL.
 #
 # Why the duplication exists and why it should NOT be refactored:
 #
 # 1. CLARITY OVER ABSTRACTION: Payment/billing code is among the most
 #    audited and debugged code in any system. Each function represents a
-#    distinct billing event type (message, skill call, memory/summarize)
+#    distinct billing event type (message, tool call, memory/summarize)
 #    with its own event type, upstream transaction IDs, destination
 #    accounts, and transaction types. Abstracting the shared logic into
 #    a helper would obscure the full payment flow when reading any single
 #    function, making auditing and debugging harder.
 #
 # 2. INDEPENDENT EVOLUTION: Each expense type may diverge over time
-#    (e.g. skill expenses already have a separate skill_cost() pre-check,
+#    (e.g. tool expenses already have a separate tool_cost() pre-check,
 #    message expenses track hourly budget). Keeping them separate means
 #    changes to one billing path never accidentally affect another.
 #
@@ -63,22 +63,22 @@ logger = logging.getLogger(__name__)
 #
 # SHARED PAYMENT FLOW (common to all three functions):
 #   Step 0: Idempotency check — reject duplicate upstream transaction IDs
-#   Step 1: Validate & quantize the base amount (LLM cost or skill price)
+#   Step 1: Validate & quantize the base amount (LLM cost or tool price)
 #   Step 2: Compute fees — discount, platform fee %, agent fee %
 #   Step 3: Deduct total from team's credit account (or get/create if $0)
 #   Step 4: Track free credit usage against agent's daily quota
 #   Step 5: Split the deducted amount by credit type (free/reward/permanent)
 #   Step 6: Proportionally allocate platform & agent fees across credit types
 #   Step 7: Derive base amounts per credit type via subtraction
-#   Step 8: Credit the destination accounts (message/skill/memory + platform fee + agent fee)
+#   Step 8: Credit the destination accounts (message/tool/memory + platform fee + agent fee)
 #   Step 9: Create the CreditEvent record with full breakdown
 #   Step 10: Create CreditTransaction records (one debit + N credits)
 #
 # DIFFERENCES between the three functions:
 #   - expense_message: EventType.MESSAGE, destination = PLATFORM_ACCOUNT_MESSAGE,
 #     tracks hourly LLM budget via accumulate_hourly_base_llm_amount
-#   - expense_skill: EventType.SKILL_CALL, destination = PLATFORM_ACCOUNT_SKILL,
-#     uses skill_cost() for pre-calculation, upstream_tx_id includes skill_call_id
+#   - expense_tool: EventType.TOOL_CALL, destination = PLATFORM_ACCOUNT_TOOL,
+#     uses tool_cost() for pre-calculation, upstream_tx_id includes tool_call_id
 #   - expense_summarize: EventType.MEMORY, destination = PLATFORM_ACCOUNT_MEMORY,
 #     similar to message but billed to the memory account
 # =============================================================================
@@ -410,32 +410,32 @@ async def expense_message(
     return CreditEvent.model_validate(event)
 
 
-async def skill_cost(
+async def tool_cost(
     price: Decimal,
     team_id: str,
     agent: Agent,
-) -> SkillCost:
+) -> ToolCost:
     """
-    Calculate the cost for a skill call including all fees.
+    Calculate the cost for a tool call including all fees.
 
     Args:
-        price: Base price for the skill
-        team_id: ID of the team paying for the skill call
-        agent: Agent using the skill
+        price: Base price for the tool
+        team_id: ID of the team paying for the tool call
+        agent: Agent using the tool
 
     Returns:
-        SkillCost: Object containing all cost components
+        ToolCost: Object containing all cost components
     """
-    base_skill_amount = price.quantize(FOURPLACES, rounding=ROUND_HALF_UP)
+    base_tool_amount = price.quantize(FOURPLACES, rounding=ROUND_HALF_UP)
 
     # Get payment settings
     payment_settings = await AppSetting.payment()
 
-    if base_skill_amount < Decimal("0"):
-        raise ValueError("Base skill amount must be non-negative")
+    if base_tool_amount < Decimal("0"):
+        raise ValueError("Base tool amount must be non-negative")
 
     # Calculate amount with exact 4 decimal places
-    base_original_amount = base_skill_amount
+    base_original_amount = base_tool_amount
 
     # Determine base_discount_amount based on payment_enabled flag
 
@@ -457,31 +457,31 @@ async def skill_cost(
         FOURPLACES, rounding=ROUND_HALF_UP
     )
 
-    # Return the SkillCost object with all calculated values
-    return SkillCost(
+    # Return the ToolCost object with all calculated values
+    return ToolCost(
         total_amount=total_amount,
         base_amount=base_amount,
         base_discount_amount=base_discount_amount,
         base_original_amount=base_original_amount,
-        base_skill_amount=base_skill_amount,
+        base_tool_amount=base_tool_amount,
         fee_platform_amount=fee_platform_amount,
         fee_agent_amount=fee_agent_amount,
     )
 
 
-async def expense_skill(
+async def expense_tool(
     session: AsyncSession,
     team_id: str,
     message_id: str,
     start_message_id: str,
-    skill_call_id: str,
-    skill_name: str,
+    tool_call_id: str,
+    tool_name: str,
     price: Decimal,
     agent: Agent,
     user_id: str | None = None,
 ) -> CreditEvent:
     """
-    Deduct credits from a team account for skill call expenses.
+    Deduct credits from a team account for tool call expenses.
     Don't forget to commit the session after calling this function.
 
     Args:
@@ -489,28 +489,28 @@ async def expense_skill(
         team_id: ID of the team to deduct credits from
         message_id: ID of the message that incurred the expense
         start_message_id: ID of the starting message in a conversation
-        skill_call_id: ID of the skill call
-        skill_name: Name of the skill being used
-        price: Base price for the skill
-        agent: Agent using the skill
+        tool_call_id: ID of the tool call
+        tool_name: Name of the tool being used
+        price: Base price for the tool
+        agent: Agent using the tool
         user_id: ID of the user who triggered the expense (for audit trail)
 
     Returns:
         CreditEvent: The created credit event
     """
     # --- SHARED STEP 0: Idempotency check ---
-    # SKILL-SPECIFIC: upstream_tx_id combines message_id + skill_call_id
+    # TOOL-SPECIFIC: upstream_tx_id combines message_id + tool_call_id
     # Check for idempotency - prevent duplicate transactions
-    upstream_tx_id = f"{message_id}_{skill_call_id}"
+    upstream_tx_id = f"{message_id}_{tool_call_id}"
     await CreditEvent.check_upstream_tx_id_exists(
         session, UpstreamType.EXECUTOR, upstream_tx_id
     )
-    logger.info("[%s] skill payment %s", agent.id, skill_name)
+    logger.info("[%s] tool payment %s", agent.id, tool_name)
 
     # --- SHARED STEPS 1-2: Validate amount & compute fees ---
-    # SKILL-SPECIFIC: Uses skill_cost() helper for pre-calculation
-    # Calculate skill cost using the skill_cost function
-    skill_cost_info = await skill_cost(price, team_id, agent)
+    # TOOL-SPECIFIC: Uses tool_cost() helper for pre-calculation
+    # Calculate tool cost using the tool_cost function
+    tool_cost_info = await tool_cost(price, team_id, agent)
 
     # --- SHARED STEP 3: Deduct from team account ---
     # 1. Create credit event record first to get event_id
@@ -519,12 +519,12 @@ async def expense_skill(
     # 2. Update team account - deduct credits
     details = {}
     team_account: CreditAccount | None = None
-    if skill_cost_info.total_amount > 0:
+    if tool_cost_info.total_amount > 0:
         team_account, details = await CreditAccount.expense_in_session(
             session=session,
             owner_type=OwnerType.TEAM,
             owner_id=team_id,
-            amount=skill_cost_info.total_amount,
+            amount=tool_cost_info.total_amount,
             event_id=event_id,
         )
     else:
@@ -536,7 +536,7 @@ async def expense_skill(
 
     # --- SHARED STEP 4: Track free credit usage against agent quota ---
     # If using free credits, add to agent's free_income_daily
-    if skill_cost_info.total_amount > 0 and CreditType.FREE in details:
+    if tool_cost_info.total_amount > 0 and CreditType.FREE in details:
         await AgentQuota.add_free_income_in_session(
             session=session, id=agent.id, amount=details[CreditType.FREE]
         )
@@ -560,27 +560,27 @@ async def expense_skill(
     fee_platform_reward_amount = Decimal("0")
     fee_platform_permanent_amount = Decimal("0")
 
-    if skill_cost_info.fee_platform_amount > Decimal(
+    if tool_cost_info.fee_platform_amount > Decimal(
         "0"
-    ) and skill_cost_info.total_amount > Decimal("0"):
+    ) and tool_cost_info.total_amount > Decimal("0"):
         # Calculate proportions based on the formula
         if free_amount > Decimal("0"):
             fee_platform_free_amount = (
                 free_amount
-                * skill_cost_info.fee_platform_amount
-                / skill_cost_info.total_amount
+                * tool_cost_info.fee_platform_amount
+                / tool_cost_info.total_amount
             ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
 
         if reward_amount > Decimal("0"):
             fee_platform_reward_amount = (
                 reward_amount
-                * skill_cost_info.fee_platform_amount
-                / skill_cost_info.total_amount
+                * tool_cost_info.fee_platform_amount
+                / tool_cost_info.total_amount
             ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
 
         # Calculate permanent amount as the remainder to ensure the sum equals fee_platform_amount
         fee_platform_permanent_amount = (
-            skill_cost_info.fee_platform_amount
+            tool_cost_info.fee_platform_amount
             - fee_platform_free_amount
             - fee_platform_reward_amount
         ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
@@ -590,27 +590,27 @@ async def expense_skill(
     fee_agent_reward_amount = Decimal("0")
     fee_agent_permanent_amount = Decimal("0")
 
-    if skill_cost_info.fee_agent_amount > Decimal(
+    if tool_cost_info.fee_agent_amount > Decimal(
         "0"
-    ) and skill_cost_info.total_amount > Decimal("0"):
+    ) and tool_cost_info.total_amount > Decimal("0"):
         # Calculate proportions based on the formula
         if free_amount > Decimal("0"):
             fee_agent_free_amount = (
                 free_amount
-                * skill_cost_info.fee_agent_amount
-                / skill_cost_info.total_amount
+                * tool_cost_info.fee_agent_amount
+                / tool_cost_info.total_amount
             ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
 
         if reward_amount > Decimal("0"):
             fee_agent_reward_amount = (
                 reward_amount
-                * skill_cost_info.fee_agent_amount
-                / skill_cost_info.total_amount
+                * tool_cost_info.fee_agent_amount
+                / tool_cost_info.total_amount
             ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
 
         # Calculate permanent amount as the remainder to ensure the sum equals fee_agent_amount
         fee_agent_permanent_amount = (
-            skill_cost_info.fee_agent_amount
+            tool_cost_info.fee_agent_amount
             - fee_agent_free_amount
             - fee_agent_reward_amount
         ).quantize(FOURPLACES, rounding=ROUND_HALF_UP)
@@ -628,17 +628,17 @@ async def expense_skill(
     )
 
     # --- SHARED STEP 8: Credit destination accounts ---
-    # SKILL-SPECIFIC: base amount goes to PLATFORM_ACCOUNT_SKILL
+    # TOOL-SPECIFIC: base amount goes to PLATFORM_ACCOUNT_TOOL
     # 4. Update fee account - add credits
-    skill_account: CreditAccount | None = None
+    tool_account: CreditAccount | None = None
     platform_account: CreditAccount | None = None
     agent_account: CreditAccount | None = None
 
-    if skill_cost_info.total_amount > 0:
-        skill_account = await CreditAccount.income_in_session(
+    if tool_cost_info.total_amount > 0:
+        tool_account = await CreditAccount.income_in_session(
             session=session,
             owner_type=OwnerType.PLATFORM,
-            owner_id=DEFAULT_PLATFORM_ACCOUNT_SKILL,
+            owner_id=DEFAULT_PLATFORM_ACCOUNT_TOOL,
             amount_details={
                 CreditType.FREE: base_free_amount,
                 CreditType.REWARD: base_reward_amount,
@@ -657,7 +657,7 @@ async def expense_skill(
             },
             event_id=event_id,
         )
-        if skill_cost_info.fee_agent_amount > 0:
+        if tool_cost_info.fee_agent_amount > 0:
             agent_account = await CreditAccount.income_in_session(
                 session=session,
                 owner_type=OwnerType.AGENT,
@@ -671,7 +671,7 @@ async def expense_skill(
             )
 
     # --- SHARED STEP 9: Create CreditEvent record with full breakdown ---
-    # SKILL-SPECIFIC: event_type=SKILL_CALL, records base_skill_amount and skill metadata
+    # TOOL-SPECIFIC: event_type=TOOL_CALL, records base_tool_amount and tool metadata
 
     # Get agent wallet address
     agent_data = await AgentData.get(agent.id)
@@ -680,7 +680,7 @@ async def expense_skill(
     event = CreditEventTable(
         id=event_id,
         account_id=team_account.id,
-        event_type=EventType.SKILL_CALL,
+        event_type=EventType.TOOL_CALL,
         user_id=user_id,
         team_id=team_id,
         upstream_type=UpstreamType.EXECUTOR,
@@ -689,26 +689,26 @@ async def expense_skill(
         agent_id=agent.id,
         message_id=message_id,
         start_message_id=start_message_id,
-        skill_call_id=skill_call_id,
-        skill_name=skill_name,
-        total_amount=skill_cost_info.total_amount,
+        tool_call_id=tool_call_id,
+        tool_name=tool_name,
+        total_amount=tool_cost_info.total_amount,
         credit_type=credit_type,
         credit_types=list(details.keys()),
         balance_after=team_account.credits
         + team_account.free_credits
         + team_account.reward_credits,
-        base_amount=skill_cost_info.base_amount,
-        base_original_amount=skill_cost_info.base_original_amount,
-        base_discount_amount=skill_cost_info.base_discount_amount,
-        base_skill_amount=skill_cost_info.base_skill_amount,
+        base_amount=tool_cost_info.base_amount,
+        base_original_amount=tool_cost_info.base_original_amount,
+        base_discount_amount=tool_cost_info.base_discount_amount,
+        base_tool_amount=tool_cost_info.base_tool_amount,
         base_free_amount=base_free_amount,
         base_reward_amount=base_reward_amount,
         base_permanent_amount=base_permanent_amount,
-        fee_platform_amount=skill_cost_info.fee_platform_amount,
+        fee_platform_amount=tool_cost_info.fee_platform_amount,
         fee_platform_free_amount=fee_platform_free_amount,
         fee_platform_reward_amount=fee_platform_reward_amount,
         fee_platform_permanent_amount=fee_platform_permanent_amount,
-        fee_agent_amount=skill_cost_info.fee_agent_amount,
+        fee_agent_amount=tool_cost_info.fee_agent_amount,
         fee_agent_account=agent_account.id if agent_account else None,
         fee_agent_free_amount=fee_agent_free_amount,
         fee_agent_reward_amount=fee_agent_reward_amount,
@@ -728,7 +728,7 @@ async def expense_skill(
 
     # --- SHARED STEP 10: Create CreditTransaction records ---
     # 4. Create credit transaction records
-    if skill_cost_info.total_amount > 0:
+    if tool_cost_info.total_amount > 0:
         # 4.1 Team account transaction (debit)
         team_tx = CreditTransactionTable(
             id=str(XID()),
@@ -736,7 +736,7 @@ async def expense_skill(
             event_id=event_id,
             tx_type=TransactionType.PAY,
             credit_debit=CreditDebit.DEBIT,
-            change_amount=skill_cost_info.total_amount,
+            change_amount=tool_cost_info.total_amount,
             credit_type=credit_type,
             free_amount=free_amount,
             reward_amount=reward_amount,
@@ -744,21 +744,21 @@ async def expense_skill(
         )
         session.add(team_tx)
 
-        # 4.2 Skill account transaction (credit)
-        assert skill_account is not None
-        skill_tx = CreditTransactionTable(
+        # 4.2 Tool account transaction (credit)
+        assert tool_account is not None
+        tool_tx = CreditTransactionTable(
             id=str(XID()),
-            account_id=skill_account.id,
+            account_id=tool_account.id,
             event_id=event_id,
-            tx_type=TransactionType.RECEIVE_BASE_SKILL,
+            tx_type=TransactionType.RECEIVE_BASE_TOOL,
             credit_debit=CreditDebit.CREDIT,
-            change_amount=skill_cost_info.base_amount,
+            change_amount=tool_cost_info.base_amount,
             credit_type=credit_type,
             free_amount=base_free_amount,
             reward_amount=base_reward_amount,
             permanent_amount=base_permanent_amount,
         )
-        session.add(skill_tx)
+        session.add(tool_tx)
 
         # 4.3 Platform fee account transaction (credit)
         assert platform_account is not None
@@ -768,7 +768,7 @@ async def expense_skill(
             event_id=event_id,
             tx_type=TransactionType.RECEIVE_FEE_PLATFORM,
             credit_debit=CreditDebit.CREDIT,
-            change_amount=skill_cost_info.fee_platform_amount,
+            change_amount=tool_cost_info.fee_platform_amount,
             credit_type=credit_type,
             free_amount=fee_platform_free_amount,
             reward_amount=fee_platform_reward_amount,
@@ -777,14 +777,14 @@ async def expense_skill(
         session.add(platform_tx)
 
         # 4.4 Agent fee account transaction (credit)
-        if skill_cost_info.fee_agent_amount > 0 and agent_account:
+        if tool_cost_info.fee_agent_amount > 0 and agent_account:
             agent_tx = CreditTransactionTable(
                 id=str(XID()),
                 account_id=agent_account.id,
                 event_id=event_id,
                 tx_type=TransactionType.RECEIVE_FEE_AGENT,
                 credit_debit=CreditDebit.CREDIT,
-                change_amount=skill_cost_info.fee_agent_amount,
+                change_amount=tool_cost_info.fee_agent_amount,
                 credit_type=credit_type,
                 free_amount=fee_agent_free_amount,
                 reward_amount=fee_agent_reward_amount,
@@ -1132,11 +1132,11 @@ async def expense_summarize(
     return CreditEvent.model_validate(event)
 
 
-async def expense_skill_internal_llm(
+async def expense_tool_internal_llm(
     team_id: str,
     agent: Agent,
-    skill_name: str,
-    skill_call_id: str,
+    tool_name: str,
+    tool_call_id: str,
     start_message_id: str,
     model_id: str,
     input_tokens: int,
@@ -1145,17 +1145,17 @@ async def expense_skill_internal_llm(
     user_id: str | None = None,
 ) -> None:
     """
-    Bill for an LLM call made internally within a skill execution.
+    Bill for an LLM call made internally within a tool execution.
 
-    This is a convenience function for skills that need to call an LLM
+    This is a convenience function for tools that need to call an LLM
     (e.g. for content cleaning) and bill the team for the token cost.
-    It calculates the cost from token usage and creates a SKILL_CALL credit event.
+    It calculates the cost from token usage and creates a TOOL_CALL credit event.
 
     Args:
         team_id: ID of the team to charge
         agent: Agent instance
-        skill_name: Name of the skill making the LLM call
-        skill_call_id: ID of the tool call (from LangChain runtime)
+        tool_name: Name of the tool making the LLM call
+        tool_call_id: ID of the tool call (from LangChain runtime)
         start_message_id: ID of the starting user message
         model_id: ID of the LLM model used
         input_tokens: Number of input tokens used
@@ -1174,13 +1174,13 @@ async def expense_skill_internal_llm(
         return
 
     async with get_session() as session:
-        await expense_skill(
+        await expense_tool(
             session,
             team_id,
-            "",  # no message_id available from within skill
+            "",  # no message_id available from within tool
             start_message_id,
-            skill_call_id,
-            skill_name,
+            tool_call_id,
+            tool_name,
             llm_cost,
             agent,
             user_id=user_id,
@@ -1198,7 +1198,7 @@ async def expense_media(
     """Deduct credits from a team account for direct-API media generation.
 
     Used by endpoints that generate media (e.g. avatar) outside of a chat /
-    agent context. No agent fee, no skill/message metadata. Platform fee still
+    agent context. No agent fee, no tool/message metadata. Platform fee still
     applies. Caller must commit the session.
 
     Args:
@@ -1334,7 +1334,7 @@ async def expense_media(
         base_original_amount=base_original_amount,
         base_discount_amount=base_discount_amount,
         base_llm_amount=Decimal("0"),
-        base_skill_amount=Decimal("0"),
+        base_tool_amount=Decimal("0"),
         base_free_amount=base_free_amount,
         base_reward_amount=base_reward_amount,
         base_permanent_amount=base_permanent_amount,

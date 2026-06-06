@@ -1,7 +1,7 @@
 import type {
   ChatMessage,
   ChatMessagesResponse,
-  ChatMessageSkillCall,
+  ChatMessageToolCall,
   ChatThread,
 } from "@/types/chat";
 import type { AgentResponse } from "@/types/agent";
@@ -792,7 +792,7 @@ export const leadApi = {
  */
 export interface StreamingState {
   isStreaming: boolean;
-  currentSkillCalls: ChatMessageSkillCall[];
+  currentToolCalls: ChatMessageToolCall[];
   pendingMessage: string;
 }
 

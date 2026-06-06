@@ -21,7 +21,7 @@ async def test_process_agent_wallet_privy_requires_privy_did_owner(monkeypatch):
         updated_at=now,
         created_at=now,
         owner="user_1",
-        skills={},
+        tools={},
         prompt="You are a helper.",
         temperature=0.7,
         visibility=AgentVisibility.PRIVATE,

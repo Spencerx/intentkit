@@ -103,11 +103,11 @@ class AgentUserInputColumns:
         comment="Network identifier",
     )
 
-    # Skills configuration from AgentCore
-    skills: Mapped[dict[str, Any] | None] = mapped_column(
+    # Tools configuration from AgentCore
+    tools: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB(),
         nullable=True,
-        comment="Dict of skills and their corresponding configurations",
+        comment="Dict of tools and their corresponding configurations",
     )
 
     search_internet: Mapped[bool | None] = mapped_column(
@@ -124,12 +124,12 @@ class AgentUserInputColumns:
     enable_activity: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
-        comment="Enable activity skills (create activity, recent activities)",
+        comment="Enable activity tools (create activity, recent activities)",
     )
     enable_post: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
-        comment="Enable post skills (create post, get post, recent posts)",
+        comment="Enable post tools (create post, get post, recent posts)",
     )
     enable_long_term_memory: Mapped[bool | None] = mapped_column(
         Boolean,

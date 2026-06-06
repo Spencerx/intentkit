@@ -9,24 +9,24 @@ from pathlib import Path
 
 # Root directory of the project
 ROOT_DIR = Path(__file__).parent.parent
-SKILLS_DIR = ROOT_DIR / "skills"
+TOOLS_DIR = ROOT_DIR / "tools"
 
 # Folders to exclude from processing
 EXCLUDED_FOLDERS = ["cdp", "goat", "defillama"]
 
 
-def get_skill_states_from_file(skill_dir: Path) -> set[str] | None:
-    """Extract state names from the SkillStates class in __init__.py.
+def get_tool_states_from_file(tool_dir: Path) -> set[str] | None:
+    """Extract state names from the ToolStates class in __init__.py.
 
     Args:
-        skill_dir: The directory of the skill
+        tool_dir: The directory of the tool
 
     Returns:
         A set of state names if found, None otherwise
     """
-    init_file = skill_dir / "__init__.py"
+    init_file = tool_dir / "__init__.py"
     if not init_file.exists():
-        print(f"No __init__.py found in {skill_dir}")
+        print(f"No __init__.py found in {tool_dir}")
         return None
 
     try:
@@ -37,9 +37,9 @@ def get_skill_states_from_file(skill_dir: Path) -> set[str] | None:
         # Parse the file into an AST
         tree = ast.parse(content)
 
-        # Find the SkillStates class
+        # Find the ToolStates class
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name == "SkillStates":
+            if isinstance(node, ast.ClassDef) and node.name == "ToolStates":
                 # Look for annotations in the class
                 states = set()
                 for child in node.body:
@@ -49,26 +49,26 @@ def get_skill_states_from_file(skill_dir: Path) -> set[str] | None:
                         states.add(child.target.id)
                 return states
 
-        print(f"No SkillStates class found in {init_file}")
+        print(f"No ToolStates class found in {init_file}")
         return None
     except Exception as e:
         print(f"Error parsing {init_file}: {e}")
         return None
 
 
-def find_skill_classes(skill_dir: Path) -> dict[str, tuple[str, str]]:
-    """Find all skill classes in a skill directory and extract their descriptions.
+def find_tool_classes(tool_dir: Path) -> dict[str, tuple[str, str]]:
+    """Find all tool classes in a tool directory and extract their descriptions.
 
     Args:
-        skill_dir: The directory of the skill
+        tool_dir: The directory of the tool
 
     Returns:
-        A dictionary mapping skill class names to (description, file_path) tuples
+        A dictionary mapping tool class names to (description, file_path) tuples
     """
-    skill_classes = {}
+    tool_classes = {}
 
-    # Walk through all Python files in the skill directory
-    for root, _, files in os.walk(skill_dir):
+    # Walk through all Python files in the tool directory
+    for root, _, files in os.walk(tool_dir):
         for file in files:
             if file.endswith(".py") and file != "__init__.py":
                 file_path = Path(root) / file
@@ -96,7 +96,7 @@ def find_skill_classes(skill_dir: Path) -> dict[str, tuple[str, str]]:
                                     ) and isinstance(child.value.value, str):
                                         description = child.value.value.strip()
                                         class_name = node.name.lower()
-                                        skill_classes[class_name] = (
+                                        tool_classes[class_name] = (
                                             description,
                                             str(file_path),
                                         )
@@ -112,7 +112,7 @@ def find_skill_classes(skill_dir: Path) -> dict[str, tuple[str, str]]:
                                             ) and isinstance(child.value.value, str):
                                                 description = child.value.value.strip()
                                                 class_name = node.name.lower()
-                                                skill_classes[class_name] = (
+                                                tool_classes[class_name] = (
                                                     description,
                                                     str(file_path),
                                                 )
@@ -123,49 +123,49 @@ def find_skill_classes(skill_dir: Path) -> dict[str, tuple[str, str]]:
                                                     if isinstance(value, ast.Constant):
                                                         description += str(value.value)
                                                 class_name = node.name.lower()
-                                                skill_classes[class_name] = (
+                                                tool_classes[class_name] = (
                                                     description.strip(),
                                                     str(file_path),
                                                 )
                 except Exception as e:
                     print(f"Error parsing {file_path}: {e}")
 
-    return skill_classes
+    return tool_classes
 
 
-def map_state_to_skill_class(
-    state_name: str, skill_classes: dict[str, tuple[str, str]], skill_name: str
+def map_state_to_tool_class(
+    state_name: str, tool_classes: dict[str, tuple[str, str]], tool_name: str
 ) -> str | None:
-    """Map a state name to a skill class description.
+    """Map a state name to a tool class description.
 
     Args:
         state_name: The name of the state
-        skill_classes: Dictionary of skill classes with their descriptions
-        skill_name: The name of the skill directory
+        tool_classes: Dictionary of tool classes with their descriptions
+        tool_name: The name of the tool directory
 
     Returns:
-        The description of the skill class if found, None otherwise
+        The description of the tool class if found, None otherwise
     """
     # Try direct mapping (state_name -> ClassName)
     # Convert snake_case to CamelCase for class name matching
     class_name = "".join(word.capitalize() for word in state_name.split("_")).lower()
-    if class_name in skill_classes:
-        return skill_classes[class_name][0]
+    if class_name in tool_classes:
+        return tool_classes[class_name][0]
 
-    # Try with skill name prefix (e.g., "send_message" -> "SlackSendMessage")
-    prefixed_class_name = f"{skill_name}{class_name}".lower()
-    if prefixed_class_name in skill_classes:
-        return skill_classes[prefixed_class_name][0]
+    # Try with tool name prefix (e.g., "send_message" -> "SlackSendMessage")
+    prefixed_class_name = f"{tool_name}{class_name}".lower()
+    if prefixed_class_name in tool_classes:
+        return tool_classes[prefixed_class_name][0]
 
     # Try partial matching
-    for cls_name, (description, _) in skill_classes.items():
+    for cls_name, (description, _) in tool_classes.items():
         # Check if the state name is contained in the class name (case insensitive)
         if state_name.lower() in cls_name.lower():
             return description
 
         # Check if the last part of the state name matches the last part of the class name
         state_parts = state_name.lower().split("_")
-        class_parts = cls_name.lower().replace(skill_name.lower(), "").split()
+        class_parts = cls_name.lower().replace(tool_name.lower(), "").split()
 
         if state_parts and class_parts and state_parts[-1] == class_parts[-1].lower():
             return description
@@ -174,7 +174,7 @@ def map_state_to_skill_class(
 
 
 def update_states_schema(schema_path: Path) -> None:
-    """Update the states field in schema.json files based on SkillStates class and skill descriptions.
+    """Update the states field in schema.json files based on ToolStates class and tool descriptions.
 
     Args:
         schema_path: The path to the schema.json file
@@ -184,25 +184,25 @@ def update_states_schema(schema_path: Path) -> None:
         print(f"No schema.json found at {schema_path}")
         return
 
-    # Get the skill directory
-    skill_dir = schema_path.parent
-    skill_name = skill_dir.name
+    # Get the tool directory
+    tool_dir = schema_path.parent
+    tool_name = tool_dir.name
 
     # Skip excluded folders
-    if skill_name in EXCLUDED_FOLDERS:
-        print(f"Skipping {skill_name} as it's in the excluded list")
+    if tool_name in EXCLUDED_FOLDERS:
+        print(f"Skipping {tool_name} as it's in the excluded list")
         return
 
-    # Get the state names from the SkillStates class
-    class_states = get_skill_states_from_file(skill_dir)
+    # Get the state names from the ToolStates class
+    class_states = get_tool_states_from_file(tool_dir)
     if not class_states:
-        print(f"No states found for {skill_name}")
+        print(f"No states found for {tool_name}")
         return
 
-    # Find all skill classes and their descriptions
-    skill_classes = find_skill_classes(skill_dir)
-    if not skill_classes:
-        print(f"No skill classes found for {skill_name}")
+    # Find all tool classes and their descriptions
+    tool_classes = find_tool_classes(tool_dir)
+    if not tool_classes:
+        print(f"No tool classes found for {tool_name}")
 
     # Load the existing schema
     with open(schema_path, "r") as f:
@@ -219,7 +219,7 @@ def update_states_schema(schema_path: Path) -> None:
         schema["properties"]["states"] = {
             "type": "object",
             "properties": {},
-            "description": f"States for each {skill_name.capitalize()} skill (disabled, public, or private)",
+            "description": f"States for each {tool_name.capitalize()} tool (disabled, public, or private)",
         }
         changes_made = True
 
@@ -232,7 +232,7 @@ def update_states_schema(schema_path: Path) -> None:
 
     if "description" not in states_schema:
         states_schema["description"] = (
-            f"States for each {skill_name.capitalize()} skill (disabled, public, or private)"
+            f"States for each {tool_name.capitalize()} tool (disabled, public, or private)"
         )
         changes_made = True
 
@@ -243,8 +243,8 @@ def update_states_schema(schema_path: Path) -> None:
 
     # Add missing states from the class to the schema
     for state_name in class_states:
-        # Get the description from the skill class if available
-        description = map_state_to_skill_class(state_name, skill_classes, skill_name)
+        # Get the description from the tool class if available
+        description = map_state_to_tool_class(state_name, tool_classes, tool_name)
         default_description = f"State for {state_name}"
 
         if state_name not in states_schema["properties"]:
@@ -276,7 +276,7 @@ def update_states_schema(schema_path: Path) -> None:
                 state_props["default"] = "disabled"
                 changes_made = True
 
-            # Update description if we have a better one from the skill class
+            # Update description if we have a better one from the tool class
             if description and (
                 "description" not in state_props
                 or state_props["description"] == default_description
@@ -297,8 +297,8 @@ def update_states_schema(schema_path: Path) -> None:
 
 def main():
     """Main function to synchronize all schema.json files."""
-    # Find all schema.json files in the skills directory
-    schema_files = list(SKILLS_DIR.glob("*/schema.json"))
+    # Find all schema.json files in the tools directory
+    schema_files = list(TOOLS_DIR.glob("*/schema.json"))
 
     for schema_path in schema_files:
         update_states_schema(schema_path)

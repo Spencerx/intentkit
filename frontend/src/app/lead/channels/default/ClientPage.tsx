@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { leadApi, channelApi } from "@/lib/api";
 import { ChatSidebar } from "@/components/features/ChatSidebar";
-import { SkillCallBadgeList } from "@/components/features/SkillCallBadge";
+import { ToolCallBadgeList } from "@/components/features/ToolCallBadge";
 import { ThinkingBlock } from "@/components/features/ThinkingBlock";
 import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
 import { ImageAttachment } from "@/components/features/ImageAttachment";
@@ -30,7 +30,7 @@ function apiMessageToUIMessage(msg: ChatMessage): UIMessage {
     role: msg.author_type === "agent" ? "agent"
       : msg.author_type === "system" ? "system"
       : msg.author_type === "thinking" ? "agent"
-      : msg.author_type === "skill" ? "agent"
+      : msg.author_type === "tool" ? "agent"
       : isUserAuthoredMessage(msg.author_type) ? "user"
       : "user",
     authorType: msg.author_type,
@@ -38,7 +38,7 @@ function apiMessageToUIMessage(msg: ChatMessage): UIMessage {
     thinking: msg.thinking,
     errorType: msg.error_type,
     timestamp: new Date(msg.created_at),
-    skillCalls: msg.skill_calls,
+    toolCalls: msg.tool_calls,
     attachments: msg.attachments,
   };
 }
@@ -314,11 +314,11 @@ export default function DefaultChannelPage() {
                   <div key={msg.id} className="flex w-full max-w-[85%] pl-10">
                     <ThinkingBlock thinking={msg.content} />
                   </div>
-                ) : msg.authorType === "skill" ? (
+                ) : msg.authorType === "tool" ? (
                   <div key={msg.id} className="flex w-full max-w-[85%] pl-10">
                     <div className="space-y-2">
-                      {msg.skillCalls && msg.skillCalls.length > 0 && (
-                        <SkillCallBadgeList skillCalls={msg.skillCalls} />
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <ToolCallBadgeList toolCalls={msg.toolCalls} />
                       )}
                       {hasUIAttachments(msg) &&
                         msg.attachments!

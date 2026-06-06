@@ -1,4 +1,4 @@
-"""BDD tests for on-chain Uniswap V3 read-only skills using real RPC."""
+"""BDD tests for on-chain Uniswap V3 read-only tools using real RPC."""
 
 import os
 
@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
-from intentkit.skills.uniswap.constants import (
+from intentkit.tools.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
+from intentkit.tools.uniswap.constants import (
     FACTORY_ABI,
     FACTORY_ADDRESSES,
     NETWORK_TO_CHAIN_ID,
@@ -17,7 +17,7 @@ from intentkit.skills.uniswap.constants import (
     QUOTER_V2_ADDRESSES,
     WRAPPED_NATIVE_ADDRESSES,
 )
-from intentkit.skills.uniswap.utils import convert_amount, resolve_token
+from intentkit.tools.uniswap.utils import convert_amount, resolve_token
 
 NETWORK = "base-mainnet"
 CHAIN_ID = NETWORK_TO_CHAIN_ID[NETWORK]

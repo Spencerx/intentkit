@@ -1,5 +1,5 @@
 """
-Temporary script to exercise the x402_check_price skill against a local seller.
+Temporary script to exercise the x402_check_price tool against a local seller.
 
 Usage:
     python intentkit/scripts/test_x402_check_price.py \
@@ -8,7 +8,7 @@ Usage:
 
 Notes:
 - This script only checks the payment requirements (price) and does not pay.
-- It uses the x402_check_price skill directly.
+- It uses the x402_check_price tool directly.
 """
 
 import argparse
@@ -16,7 +16,7 @@ import asyncio
 import json
 from typing import Any
 
-from intentkit.skills.x402.check_price import X402CheckPrice
+from intentkit.tools.x402.check_price import X402CheckPrice
 
 
 def _build_payload(
@@ -44,7 +44,7 @@ def _build_payload(
 
 
 async def _run(args: argparse.Namespace) -> None:
-    skill = X402CheckPrice()
+    tool = X402CheckPrice()
     payload = _build_payload(
         asin=args.asin,
         name=args.name,
@@ -60,7 +60,7 @@ async def _run(args: argparse.Namespace) -> None:
         print("Request payload:")
         print(json.dumps(payload, indent=2))
 
-    result = await skill._arun(  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun(  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         method=args.method,
         url=args.url,
         headers=None,
@@ -73,7 +73,7 @@ async def _run(args: argparse.Namespace) -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Test the x402_check_price skill against a local seller."
+        description="Test the x402_check_price tool against a local seller."
     )
     parser.add_argument(
         "--url",

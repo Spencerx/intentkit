@@ -1,4 +1,4 @@
-"""BDD tests for on-chain Aave V3 read-only skills using real RPC."""
+"""BDD tests for on-chain Aave V3 read-only tools using real RPC."""
 
 import os
 
@@ -6,20 +6,20 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.aave_v3.constants import (
+from intentkit.tools.aave_v3.constants import (
     NETWORK_TO_CHAIN_ID,
     POOL_ABI,
     POOL_ADDRESSES,
     POOL_DATA_PROVIDER_ABI,
     POOL_DATA_PROVIDER_ADDRESSES,
 )
-from intentkit.skills.aave_v3.utils import (
+from intentkit.tools.aave_v3.utils import (
     format_amount,
     format_base_currency,
     format_health_factor,
     format_ray,
 )
-from intentkit.skills.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
+from intentkit.tools.erc20.constants import TOKEN_ADDRESSES_BY_SYMBOLS
 
 NETWORK = "base-mainnet"
 CHAIN_ID = NETWORK_TO_CHAIN_ID[NETWORK]

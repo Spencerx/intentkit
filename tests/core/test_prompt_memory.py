@@ -9,9 +9,9 @@ from intentkit.core.prompt import (
     _build_user_info_section,  # pyright: ignore[reportPrivateUsage]
     build_sub_agents_section,
     build_system_prompt,
-    build_system_skills_section,
+    build_system_tools_section,
 )
-from intentkit.core.system_skills import (
+from intentkit.core.system_tools import (
     call_agent,
     create_activity,
     create_post,
@@ -23,14 +23,14 @@ from intentkit.core.system_skills import (
 )
 
 
-class TestSystemSkillsSection:
+class TestSystemToolsSection:
     @staticmethod
     def _make_agent(**overrides):
         agent = MagicMock()
         agent.is_activity_enabled = overrides.get("is_activity_enabled", True)
         agent.is_post_enabled = overrides.get("is_post_enabled", True)
         agent.enable_long_term_memory = overrides.get("enable_long_term_memory", False)
-        agent.skills = None
+        agent.tools = None
         agent.telegram_entrypoint_enabled = False
         return agent
 
@@ -39,7 +39,7 @@ class TestSystemSkillsSection:
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "update_memory" in result
 
     def test_excludes_update_memory_when_disabled(self):
@@ -47,7 +47,7 @@ class TestSystemSkillsSection:
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "update_memory" not in result
 
     def test_excludes_update_memory_when_none(self):
@@ -55,33 +55,33 @@ class TestSystemSkillsSection:
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "update_memory" not in result
 
-    def test_excludes_call_agent_from_system_skills_section(self):
+    def test_excludes_call_agent_from_system_tools_section(self):
         agent = self._make_agent()
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "call_agent" not in result
 
-    def test_excludes_post_skills_when_disabled(self):
+    def test_excludes_post_tools_when_disabled(self):
         agent = self._make_agent(is_post_enabled=False)
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "create_post" not in result
         assert "get_post" not in result
         assert "recent_posts" not in result
 
-    def test_excludes_activity_skills_when_disabled(self):
+    def test_excludes_activity_tools_when_disabled(self):
         agent = self._make_agent(is_activity_enabled=False)
         context = MagicMock(spec=AgentContext)
         context.is_private = True
 
-        result = build_system_skills_section(agent, context)
+        result = build_system_tools_section(agent, context)
         assert "create_activity" not in result
         assert "recent_activities" not in result
 
@@ -96,7 +96,7 @@ class TestBuildSystemPromptMemory:
         agent.enable_long_term_memory = True
         agent.is_activity_enabled = True
         agent.is_post_enabled = True
-        agent.skills = None
+        agent.tools = None
         agent.telegram_entrypoint_enabled = False
         agent.purpose = None
         agent.personality = None
@@ -144,7 +144,7 @@ class TestBuildSystemPromptMemory:
         agent.enable_long_term_memory = True
         agent.is_activity_enabled = True
         agent.is_post_enabled = True
-        agent.skills = None
+        agent.tools = None
         agent.telegram_entrypoint_enabled = False
         agent.purpose = None
         agent.personality = None
@@ -191,7 +191,7 @@ class TestBuildSystemPromptMemory:
         agent.enable_long_term_memory = False
         agent.is_activity_enabled = True
         agent.is_post_enabled = True
-        agent.skills = None
+        agent.tools = None
         agent.telegram_entrypoint_enabled = False
         agent.purpose = None
         agent.personality = None
@@ -229,8 +229,8 @@ class TestBuildSystemPromptMemory:
         assert "## Memory" not in result
 
 
-class TestSystemSkillInstances:
-    """Test that system skill singleton instances are correctly initialized."""
+class TestSystemToolInstances:
+    """Test that system tool singleton instances are correctly initialized."""
 
     def test_current_time_instance(self):
         assert current_time.name == "current_time"
@@ -359,7 +359,7 @@ class TestSubAgentsPromptSection:
         agent.enable_long_term_memory = False
         agent.is_activity_enabled = True
         agent.is_post_enabled = True
-        agent.skills = None
+        agent.tools = None
         agent.telegram_entrypoint_enabled = False
         agent.purpose = None
         agent.personality = None

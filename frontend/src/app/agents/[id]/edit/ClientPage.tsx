@@ -16,7 +16,7 @@ import {
     onFormError,
     generateUiSchema,
     createTransformErrors,
-    cleanSkillsData,
+    cleanToolsData,
     filterBySchema,
 } from "../../new/formUtils";
 import { toast } from "@/hooks/use-toast";
@@ -64,7 +64,7 @@ export default function EditAgentPage() {
         setIsSubmitting(true);
         setError(null);
         try {
-            const cleanedData = cleanSkillsData(formData, schema);
+            const cleanedData = cleanToolsData(formData, schema);
             await agentApi.patch(resolvedId || agentId, cleanedData);
             toast({
                 title: "Agent updated",

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class CdpWalletProvider:
-    """CDP SDK backed wallet provider for unified on-chain skills."""
+    """CDP SDK backed wallet provider for unified on-chain tools."""
 
     _cdp_client: CdpClient
     _account: EvmServerAccount
@@ -149,7 +149,7 @@ def _assert_cdp_wallet_provider(agent: Agent) -> None:
         raise IntentKitAPIError(
             400,
             "BadWalletProvider",
-            "Your agent wallet provider is not cdp but you selected a skill that requires a cdp wallet.",
+            "Your agent wallet provider is not cdp but you selected a tool that requires a cdp wallet.",
         )
 
 

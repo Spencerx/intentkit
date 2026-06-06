@@ -4,7 +4,7 @@ BDD Tests: Core Engine Conversation Flow
 Feature: Agent Conversation Lifecycle
 As an IntentKit operator, I want to verify that the core engine correctly
 handles conversations end-to-end, including chat message persistence,
-credit event recording, and skill invocations.
+credit event recording, and tool invocations.
 
 Model: GLM-4.7 (via OpenAI-compatible endpoint configured in environment)
 """
@@ -81,9 +81,9 @@ async def query_credit_events(
 @pytest.mark.bdd
 async def test_simple_conversation() -> None:
     """
-    Scenario: Simple Conversation Without Skills
+    Scenario: Simple Conversation Without Tools
 
-    Given a deployed agent with `model=GLM-4.7` and no skills
+    Given a deployed agent with `model=GLM-4.7` and no tools
     When a user sends "Hello, who are you?"
     Then the engine returns at least one agent reply message
     And the user input message is persisted in the database
@@ -140,18 +140,18 @@ async def test_simple_conversation() -> None:
 
 
 @pytest.mark.bdd
-async def test_skill_call_current_time() -> None:
+async def test_tool_call_current_time() -> None:
     """
-    Scenario: Skill Call (current_time)
+    Scenario: Tool Call (current_time)
 
     Given a deployed agent
     When a user sends a message requiring the current time
-    Then the engine returns messages including a skill call message with
+    Then the engine returns messages including a tool call message with
         `current_time` / `success=True` and a date-like string
     And credit events are recorded
 
     Every provider (including OpenRouter) uses our own `current_time` system
-    skill — we no longer rely on OpenRouter's openrouter:datetime server tool.
+    tool — we no longer rely on OpenRouter's openrouter:datetime server tool.
 
     Note: Free-tier models may not reliably follow tool-calling instructions,
     so we retry up to 3 times with fresh chat IDs.
@@ -163,12 +163,12 @@ async def test_skill_call_current_time() -> None:
         "NEVER guess or infer the time. ALWAYS use the tool first."
     )
     agent_input = AgentCreate(
-        id="engine-skill-1",
-        name="Skill Agent",
+        id="engine-tool-1",
+        name="Tool Agent",
         model=MODEL,
         owner="system",
         prompt=prompt,
-        skills={},
+        tools={},
     )
     await create_agent(agent_input)
 
@@ -176,10 +176,10 @@ async def test_skill_call_current_time() -> None:
     max_attempts = 3
     last_responses: list[ChatMessage] = []
     for attempt in range(1, max_attempts + 1):
-        chat_id = f"chat-skill-{attempt}"
+        chat_id = f"chat-tool-{attempt}"
         message = ChatMessageCreate(
-            id=f"msg-skill-in-{attempt}",
-            agent_id="engine-skill-1",
+            id=f"msg-tool-in-{attempt}",
+            agent_id="engine-tool-1",
             chat_id=chat_id,
             user_id="system",
             author_id="system",
@@ -188,34 +188,34 @@ async def test_skill_call_current_time() -> None:
         )
         last_responses = await execute_agent(message)
 
-        skill_msgs = [r for r in last_responses if r.author_type == AuthorType.SKILL]
-        if skill_msgs:
+        tool_msgs = [r for r in last_responses if r.author_type == AuthorType.TOOL]
+        if tool_msgs:
             break  # Model used a tool — proceed with assertions
 
     responses = last_responses
 
-    # Then — verify visible skill call
+    # Then — verify visible tool call
     assert len(responses) >= 2, (
         f"Expected >= 2 responses (tool call + reply), got {len(responses)} after {max_attempts} attempts. "
         "The free-tier model may not support tool calling reliably."
     )
-    skill_msgs = [r for r in responses if r.author_type == AuthorType.SKILL]
-    assert len(skill_msgs) >= 1, (
-        f"Expected at least one skill call message after {max_attempts} attempts. "
+    tool_msgs = [r for r in responses if r.author_type == AuthorType.TOOL]
+    assert len(tool_msgs) >= 1, (
+        f"Expected at least one tool call message after {max_attempts} attempts. "
         "The free-tier model may not support tool calling reliably."
     )
 
-    # Then — check skill call details
-    skill_msg = skill_msgs[0]
-    assert skill_msg.skill_calls is not None
-    assert len(skill_msg.skill_calls) >= 1
+    # Then — check tool call details
+    tool_msg = tool_msgs[0]
+    assert tool_msg.tool_calls is not None
+    assert len(tool_msg.tool_calls) >= 1
 
     time_call = None
-    for call in skill_msg.skill_calls:
+    for call in tool_msg.tool_calls:
         if call["name"] == "current_time":
             time_call = call
             break
-    assert time_call is not None, "Expected current_time skill call"
+    assert time_call is not None, "Expected current_time tool call"
     assert time_call["success"] is True
     # Response should contain a date pattern like "2026-02-10"
     assert re.search(r"\d{4}-\d{2}-\d{2}", time_call.get("response", ""))
@@ -225,10 +225,10 @@ async def test_skill_call_current_time() -> None:
     assert len(agent_replies) >= 1
 
     # Then — check credit events
-    message_events = await query_credit_events("engine-skill-1", EventType.MESSAGE)
+    message_events = await query_credit_events("engine-tool-1", EventType.MESSAGE)
     assert len(message_events) >= 1, "Expected at least one message credit event"
-    skill_events = await query_credit_events("engine-skill-1", EventType.SKILL_CALL)
-    assert len(skill_events) >= 1, "Expected at least one skill call credit event"
+    tool_events = await query_credit_events("engine-tool-1", EventType.TOOL_CALL)
+    assert len(tool_events) >= 1, "Expected at least one tool call credit event"
 
 
 @pytest.mark.bdd

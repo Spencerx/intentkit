@@ -29,8 +29,8 @@ class X402OrderBase(BaseModel):
     task_id: Annotated[str | None, PydanticField(description="Autonomous task ID")] = (
         None
     )
-    skill_name: Annotated[
-        str, PydanticField(description="Skill name (x402_pay, x402_http_request)")
+    tool_name: Annotated[
+        str, PydanticField(description="Tool name (x402_pay, x402_http_request)")
     ]
     method: Annotated[str, PydanticField(description="HTTP method (GET/POST)")]
     url: Annotated[str, PydanticField(description="Target URL")]
@@ -87,7 +87,7 @@ class X402Order(X402OrderBase):
                 chat_id=order.chat_id,
                 user_id=order.user_id,
                 task_id=order.task_id,
-                skill_name=order.skill_name,
+                tool_name=order.tool_name,
                 method=order.method,
                 url=order.url,
                 max_value=order.max_value,
@@ -156,9 +156,7 @@ class X402OrderTable(Base):
     task_id: Mapped[str | None] = mapped_column(
         String, nullable=True, comment="Autonomous task ID"
     )
-    skill_name: Mapped[str] = mapped_column(
-        String, nullable=False, comment="Skill name"
-    )
+    tool_name: Mapped[str] = mapped_column(String, nullable=False, comment="Tool name")
     method: Mapped[str] = mapped_column(String, nullable=False, comment="HTTP method")
     url: Mapped[str] = mapped_column(String, nullable=False, comment="Target URL")
     max_value: Mapped[int | None] = mapped_column(

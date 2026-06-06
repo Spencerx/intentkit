@@ -1,4 +1,4 @@
-"""BDD tests for on-chain Morpho read-only skills using real RPC."""
+"""BDD tests for on-chain Morpho read-only tools using real RPC."""
 
 import os
 
@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.erc20.constants import ERC20_ABI
-from intentkit.skills.morpho.constants import (
+from intentkit.tools.erc20.constants import ERC20_ABI
+from intentkit.tools.morpho.constants import (
     METAMORPHO_ABI,
     MORPHO_BLUE_ABI,
     MORPHO_BLUE_ADDRESS,

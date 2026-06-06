@@ -13,11 +13,11 @@ from fastapi import status
 
 from intentkit.core.agent import get_agent
 from intentkit.models.agent import AgentPublicInfo, AgentUserInput
-from intentkit.skills.availability import (
+from intentkit.tools.availability import (
     filter_unavailable_states,
-    import_skill_category,
-    is_individual_skill_available,
-    is_skill_category_available,
+    import_toolset,
+    is_individual_tool_available,
+    is_toolset_available,
 )
 from intentkit.utils.error import IntentKitAPIError
 
@@ -38,17 +38,17 @@ def agent_draft_json_schema() -> dict[str, object]:
             field for field in schema["required"] if field not in fields_to_remove
         ]
 
-    skills_property = properties.get("skills")
-    if not isinstance(skills_property, dict):
+    tools_property = properties.get("tools")
+    if not isinstance(tools_property, dict):
         return schema
 
-    skills_property = cast(dict[str, Any], skills_property)
+    tools_property = cast(dict[str, Any], tools_property)
 
-    skills_properties: dict[str, object] = {}
+    tools_properties: dict[str, object] = {}
     try:
-        traversable = resources.files("intentkit.skills")
-        with resources.as_file(traversable) as skills_root:
-            for entry in skills_root.iterdir():
+        traversable = resources.files("intentkit.tools")
+        with resources.as_file(traversable) as tools_root:
+            for entry in tools_root.iterdir():
                 if not entry.is_dir():
                     continue
 
@@ -58,16 +58,16 @@ def agent_draft_json_schema() -> dict[str, object]:
 
                 category = entry.name
 
-                module = import_skill_category(category)
-                if module is None or not is_skill_category_available(module):
+                module = import_toolset(category)
+                if module is None or not is_toolset_available(module):
                     logger.info(
-                        "Skipped skill category '%s' for manager schema: not available",
+                        "Skipped toolset '%s' for manager schema: not available",
                         category,
                     )
                     continue
 
                 try:
-                    skill_schema = _load_skill_schema(schema_path)
+                    tool_schema = _load_tool_schema(schema_path)
                 except (
                     OSError,
                     ValueError,
@@ -75,11 +75,11 @@ def agent_draft_json_schema() -> dict[str, object]:
                     jsonref.JsonRefError,
                 ) as exc:
                     logger.warning(
-                        "Failed to load schema for skill '%s': %s", category, exc
+                        "Failed to load schema for tool '%s': %s", category, exc
                     )
                     continue
 
-                schema_props = skill_schema.get("properties")
+                schema_props = tool_schema.get("properties")
                 if isinstance(schema_props, dict):
                     states = schema_props.get("states")
                     if isinstance(states, dict):
@@ -87,26 +87,26 @@ def agent_draft_json_schema() -> dict[str, object]:
                             module, category, states
                         )
 
-                skills_properties[category] = skill_schema
+                tools_properties[category] = tool_schema
     except (AttributeError, ModuleNotFoundError, ImportError):
-        logger.warning("intentkit skills package not found when building schema")
+        logger.warning("intentkit tools package not found when building schema")
         return schema
 
-    if skills_properties:
-        _ = skills_property.setdefault("type", "object")
-        skills_property["properties"] = skills_properties
+    if tools_properties:
+        _ = tools_property.setdefault("type", "object")
+        tools_property["properties"] = tools_properties
 
     return schema
 
 
-def get_skills_hierarchical_text() -> str:
-    """Extract skills organized by category and return as hierarchical text."""
+def get_tools_hierarchical_text() -> str:
+    """Extract tools organized by category and return as hierarchical text."""
     try:
-        traversable = resources.files("intentkit.skills")
-        with resources.as_file(traversable) as skills_root:
-            # Group skills by category (x-tags)
+        traversable = resources.files("intentkit.tools")
+        with resources.as_file(traversable) as tools_root:
+            # Group tools by category (x-tags)
             categories: dict[str, list[Any]] = {}
-            for entry in skills_root.iterdir():
+            for entry in tools_root.iterdir():
                 if not entry.is_dir():
                     continue
 
@@ -116,33 +116,32 @@ def get_skills_hierarchical_text() -> str:
 
                 category = entry.name
 
-                module = import_skill_category(category)
-                if module is None or not is_skill_category_available(module):
+                module = import_toolset(category)
+                if module is None or not is_toolset_available(module):
                     logger.info(
-                        "Skipped skill category '%s' for hierarchical text: "
-                        "not available",
+                        "Skipped toolset '%s' for hierarchical text: not available",
                         category,
                     )
                     continue
 
                 try:
-                    skill_schema = _load_skill_schema(schema_path)
-                    skill_title = skill_schema.get(
+                    tool_schema = _load_tool_schema(schema_path)
+                    tool_title = tool_schema.get(
                         "title", category.replace("_", " ").title()
                     )
-                    skill_description = skill_schema.get(
+                    tool_description = tool_schema.get(
                         "description", "No description available"
                     )
-                    skill_tags = cast(list[str], skill_schema.get("x-tags", ["Other"]))
+                    tool_tags = cast(list[str], tool_schema.get("x-tags", ["Other"]))
 
                     # Use the first tag as the primary group
-                    primary_category = skill_tags[0] if skill_tags else "Other"
+                    primary_category = tool_tags[0] if tool_tags else "Other"
 
-                    individual_skills: list[dict[str, str]] = []
-                    states_props = _get_states_properties(skill_schema)
+                    individual_tools: list[dict[str, str]] = []
+                    states_props = _get_states_properties(tool_schema)
                     if states_props:
                         for ind_name, ind_def in states_props.items():
-                            if not is_individual_skill_available(
+                            if not is_individual_tool_available(
                                 module, category, ind_name
                             ):
                                 continue
@@ -151,13 +150,13 @@ def get_skills_hierarchical_text() -> str:
                                 if isinstance(ind_def, dict)
                                 else "No description available"
                             )
-                            individual_skills.append(
+                            individual_tools.append(
                                 {"name": ind_name, "description": ind_desc}
                             )
 
-                    # Drop the category entirely if every skill was filtered;
+                    # Drop the category entirely if every tool was filtered;
                     # surfacing an empty group would just be noise to the LLM.
-                    if states_props and not individual_skills:
+                    if states_props and not individual_tools:
                         continue
 
                     if primary_category not in categories:
@@ -166,9 +165,9 @@ def get_skills_hierarchical_text() -> str:
                     categories[primary_category].append(
                         {
                             "name": category,
-                            "title": skill_title,
-                            "description": skill_description,
-                            "individual_skills": individual_skills,
+                            "title": tool_title,
+                            "description": tool_description,
+                            "individual_tools": individual_tools,
                         }
                     )
 
@@ -179,16 +178,16 @@ def get_skills_hierarchical_text() -> str:
                     jsonref.JsonRefError,
                 ) as exc:
                     logger.warning(
-                        "Failed to load schema for skill '%s': %s", category, exc
+                        "Failed to load schema for tool '%s': %s", category, exc
                     )
                     continue
     except (AttributeError, ModuleNotFoundError, ImportError):
-        logger.warning("intentkit skills package not found when building skills text")
-        return "No skills available"
+        logger.warning("intentkit tools package not found when building tools text")
+        return "No tools available"
 
     # Build hierarchical text
     text_lines = []
-    text_lines.append("Available Skills by Category:")
+    text_lines.append("Available Tools by Category:")
     text_lines.append("")
 
     # Sort categories alphabetically
@@ -196,17 +195,17 @@ def get_skills_hierarchical_text() -> str:
         text_lines.append(f"#### {category}")
         text_lines.append("")
 
-        # Sort skills within category alphabetically by name
-        for skill in sorted(categories[category], key=lambda x: x["name"]):
+        # Sort tools within category alphabetically by name
+        for tool in sorted(categories[category], key=lambda x: x["name"]):
             text_lines.append(
-                f"- **{skill['name']}** ({skill['title']}): {skill['description']}"
+                f"- **{tool['name']}** ({tool['title']}): {tool['description']}"
             )
-            # Add individual skills indented under the category skill
-            for ind_skill in sorted(
-                skill.get("individual_skills", []), key=lambda x: x["name"]
+            # Add individual tools indented under the category tool
+            for ind_tool in sorted(
+                tool.get("individual_tools", []), key=lambda x: x["name"]
             ):
                 text_lines.append(
-                    f"  - `{ind_skill['name']}`: {ind_skill['description']}"
+                    f"  - `{ind_tool['name']}`: {ind_tool['description']}"
                 )
 
         text_lines.append("")
@@ -214,7 +213,7 @@ def get_skills_hierarchical_text() -> str:
     return "\n".join(text_lines)
 
 
-def _load_skill_schema(schema_path: Path) -> dict[str, object]:
+def _load_tool_schema(schema_path: Path) -> dict[str, object]:
     base_uri = f"file://{schema_path}"
     with schema_path.open("r", encoding="utf-8") as schema_file:
         embedded_schema: dict[str, object] = cast(
@@ -231,9 +230,9 @@ def _load_skill_schema(schema_path: Path) -> dict[str, object]:
     return schema_copy
 
 
-def _get_states_properties(skill_schema: dict[str, object]) -> dict[str, Any] | None:
-    """Extract states.properties from a skill schema, or None if invalid."""
-    properties = skill_schema.get("properties", {})
+def _get_states_properties(tool_schema: dict[str, object]) -> dict[str, Any] | None:
+    """Extract states.properties from a tool schema, or None if invalid."""
+    properties = tool_schema.get("properties", {})
     if not isinstance(properties, dict):
         return None
     states = properties.get("states", {})
@@ -243,19 +242,19 @@ def _get_states_properties(skill_schema: dict[str, object]) -> dict[str, Any] | 
     return cast(dict[str, Any], state_props) if isinstance(state_props, dict) else None
 
 
-def get_valid_skills_registry() -> dict[str, dict[str, str]]:
-    """Load all skill schemas and return a registry of valid skills.
+def get_valid_tools_registry() -> dict[str, dict[str, str]]:
+    """Load all tool schemas and return a registry of valid tools.
 
-    Returns a nested dict mapping category name to a dict of skill names
-    and their descriptions: ``{category: {skill_name: description}}``.
+    Returns a nested dict mapping category name to a dict of tool names
+    and their descriptions: ``{category: {tool_name: description}}``.
 
     Broken or unreadable schemas are silently skipped.
     """
     registry: dict[str, dict[str, str]] = {}
     try:
-        traversable = resources.files("intentkit.skills")
-        with resources.as_file(traversable) as skills_root:
-            for entry in sorted(skills_root.iterdir(), key=lambda p: p.name):
+        traversable = resources.files("intentkit.tools")
+        with resources.as_file(traversable) as tools_root:
+            for entry in sorted(tools_root.iterdir(), key=lambda p: p.name):
                 if not entry.is_dir():
                     continue
 
@@ -264,7 +263,7 @@ def get_valid_skills_registry() -> dict[str, dict[str, str]]:
                     continue
 
                 try:
-                    skill_schema = _load_skill_schema(schema_path)
+                    tool_schema = _load_tool_schema(schema_path)
                 except (
                     OSError,
                     ValueError,
@@ -272,95 +271,93 @@ def get_valid_skills_registry() -> dict[str, dict[str, str]]:
                     jsonref.JsonRefError,
                 ) as exc:
                     logger.warning(
-                        "Failed to load schema for skill '%s': %s", entry.name, exc
+                        "Failed to load schema for tool '%s': %s", entry.name, exc
                     )
                     continue
 
-                state_props = _get_states_properties(skill_schema)
+                state_props = _get_states_properties(tool_schema)
                 if not state_props:
                     continue
 
                 category_name = entry.name
-                skills: dict[str, str] = {}
-                for skill_name, skill_def in state_props.items():
-                    if isinstance(skill_def, dict):
-                        description = skill_def.get("description", "")
+                tools: dict[str, str] = {}
+                for tool_name, tool_def in state_props.items():
+                    if isinstance(tool_def, dict):
+                        description = tool_def.get("description", "")
                         if isinstance(description, str) and description:
-                            skills[skill_name] = description
+                            tools[tool_name] = description
 
-                if skills:
-                    registry[category_name] = skills
+                if tools:
+                    registry[category_name] = tools
 
     except (AttributeError, ModuleNotFoundError, ImportError):
-        logger.warning(
-            "intentkit skills package not found when building skills registry"
-        )
+        logger.warning("intentkit tools package not found when building tools registry")
 
     return registry
 
 
-_VALID_SKILL_STATES = {"disabled", "public", "private"}
+_VALID_TOOL_STATES = {"disabled", "public", "private"}
 
 
-def validate_skills(skills: dict[str, Any] | None) -> None:
-    """Validate skills config. Raises IntentKitAPIError(400) on invalid entries."""
-    if not skills:
+def validate_tools(tools: dict[str, Any] | None) -> None:
+    """Validate tools config. Raises IntentKitAPIError(400) on invalid entries."""
+    if not tools:
         return
 
-    registry = get_valid_skills_registry()
+    registry = get_valid_tools_registry()
     valid_categories = sorted(registry.keys())
 
-    for category, config in skills.items():
+    for category, config in tools.items():
         if category not in registry:
             raise IntentKitAPIError(
                 400,
-                "InvalidSkillCategory",
-                f"Unknown skill category '{category}'. Valid categories: {valid_categories}",
+                "InvalidToolset",
+                f"Unknown toolset '{category}'. Valid categories: {valid_categories}",
             )
 
         if not isinstance(config, dict):
             raise IntentKitAPIError(
                 400,
-                "InvalidSkillFormat",
-                f"Skill category '{category}' config must be a dict, got {type(config).__name__}",
+                "InvalidToolFormat",
+                f"Toolset '{category}' config must be a dict, got {type(config).__name__}",
             )
 
         states = config.get("states")
         if states is not None and not isinstance(states, dict):
             raise IntentKitAPIError(
                 400,
-                "InvalidSkillFormat",
+                "InvalidToolFormat",
                 f"'states' in category '{category}' must be a dict, got {type(states).__name__}",
             )
 
         if not isinstance(states, dict):
             states = {}
-        valid_skill_names = sorted(registry[category].keys())
+        valid_tool_names = sorted(registry[category].keys())
 
-        for skill_name, state_value in states.items():
-            if skill_name not in registry[category]:
+        for tool_name, state_value in states.items():
+            if tool_name not in registry[category]:
                 raise IntentKitAPIError(
                     400,
-                    "InvalidSkillName",
-                    f"Unknown skill '{skill_name}' in category '{category}'. Valid skills: {valid_skill_names}",
+                    "InvalidToolName",
+                    f"Unknown tool '{tool_name}' in category '{category}'. Valid tools: {valid_tool_names}",
                 )
-            if state_value not in _VALID_SKILL_STATES:
+            if state_value not in _VALID_TOOL_STATES:
                 raise IntentKitAPIError(
                     400,
-                    "InvalidSkillState",
-                    f"Invalid state '{state_value}' for skill '{skill_name}'. Valid states: {sorted(_VALID_SKILL_STATES)}",
+                    "InvalidToolState",
+                    f"Invalid state '{state_value}' for tool '{tool_name}'. Valid states: {sorted(_VALID_TOOL_STATES)}",
                 )
 
 
-def sanitize_skills(skills: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Remove skills/categories not in schema. Returns cleaned dict or None if empty."""
-    if not skills:
+def sanitize_tools(tools: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Remove tools/categories not in schema. Returns cleaned dict or None if empty."""
+    if not tools:
         return None
 
-    registry = get_valid_skills_registry()
+    registry = get_valid_tools_registry()
     cleaned: dict[str, Any] = {}
 
-    for category, config in skills.items():
+    for category, config in tools.items():
         if category not in registry:
             continue
 
@@ -376,9 +373,9 @@ def sanitize_skills(skills: dict[str, Any] | None) -> dict[str, Any] | None:
             continue
 
         cleaned_states = {
-            skill_name: state_value
-            for skill_name, state_value in states.items()
-            if skill_name in registry[category]
+            tool_name: state_value
+            for tool_name, state_value in states.items()
+            if tool_name in registry[category]
         }
 
         if cleaned_states:

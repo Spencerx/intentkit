@@ -32,7 +32,7 @@ class SubAgentDefinition:
     slug: str
     description: str
     build_fn: Callable[[str], Agent]  # (team_id) -> Agent
-    skills_fn: Callable[[], Sequence[BaseTool]]  # () -> skills list
+    tools_fn: Callable[[], Sequence[BaseTool]]  # () -> tools list
 
 
 # Caches keyed by "team_id:slug"
@@ -60,12 +60,12 @@ async def get_sub_agent_executor(
 
     definition = SUB_AGENT_REGISTRY[slug]
     agent = definition.build_fn(team_id)
-    skills = definition.skills_fn()
+    tools = definition.tools_fn()
 
     executor = await build_executor(
         agent,
         AgentData.model_construct(id=agent.id),
-        skills,
+        tools,
     )
 
     _sub_executors[key] = executor
@@ -98,19 +98,19 @@ def cleanup_sub_agent_caches(expired_before: datetime) -> None:
 # Registry populated after imports to avoid circular deps
 from intentkit.core.lead.sub_agents.agent_manager import (  # noqa: E402
     build_agent_manager,
-    get_agent_manager_skills,
+    get_agent_manager_tools,
 )
 from intentkit.core.lead.sub_agents.content_manager import (  # noqa: E402
     build_content_manager,
-    get_content_manager_skills,
+    get_content_manager_tools,
 )
 from intentkit.core.lead.sub_agents.self_updater import (  # noqa: E402
     build_self_updater,
-    get_self_updater_skills,
+    get_self_updater_tools,
 )
 from intentkit.core.lead.sub_agents.user_manager import (  # noqa: E402
     build_user_manager,
-    get_user_manager_skills,
+    get_user_manager_tools,
 )
 
 SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
@@ -119,10 +119,10 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
         description=(
             "Manages team agents end-to-end: create, update, configure, list "
             "agents, and schedule autonomous tasks on them. Also exposes LLM "
-            "model info and available skills for agent configuration."
+            "model info and available tools for agent configuration."
         ),
         build_fn=build_agent_manager,
-        skills_fn=get_agent_manager_skills,
+        tools_fn=get_agent_manager_tools,
     ),
     SLUG_SELF_UPDATER: SubAgentDefinition(
         slug=SLUG_SELF_UPDATER,
@@ -130,7 +130,7 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
             "Updates the lead agent itself: name, avatar, personality, and memory."
         ),
         build_fn=build_self_updater,
-        skills_fn=get_self_updater_skills,
+        tools_fn=get_self_updater_tools,
     ),
     SLUG_CONTENT_MANAGER: SubAgentDefinition(
         slug=SLUG_CONTENT_MANAGER,
@@ -138,12 +138,12 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
             "Reads team content: recent activities, post listings, and full post content."
         ),
         build_fn=build_content_manager,
-        skills_fn=get_content_manager_skills,
+        tools_fn=get_content_manager_tools,
     ),
     SLUG_USER_MANAGER: SubAgentDefinition(
         slug=SLUG_USER_MANAGER,
         description=("Manages the current user's profile: name, timezone, language."),
         build_fn=build_user_manager,
-        skills_fn=get_user_manager_skills,
+        tools_fn=get_user_manager_tools,
     ),
 }

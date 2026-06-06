@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_db
 from intentkit.models.agent import AGENT_TAG_CATEGORIES, Agent, AgentPublicInfo
-from intentkit.skills.availability import (
+from intentkit.tools.availability import (
     filter_unavailable_states,
-    import_skill_category,
-    is_skill_category_available,
+    import_toolset,
+    is_toolset_available,
 )
 from intentkit.utils.error import IntentKitAPIError
 
@@ -32,11 +32,11 @@ schema_router = APIRouter()
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
-def _simplify_skill_schema(skill_schema: dict[str, Any]) -> dict[str, Any]:
-    """Simplify skill schema to only keep enabled and states fields.
+def _simplify_tool_schema(tool_schema: dict[str, Any]) -> dict[str, Any]:
+    """Simplify tool schema to only keep enabled and states fields.
 
     Args:
-        skill_schema: The original skill schema
+        tool_schema: The original tool schema
 
     Returns:
         Simplified schema with only enabled, states, title, description, and type
@@ -45,11 +45,11 @@ def _simplify_skill_schema(skill_schema: dict[str, Any]) -> dict[str, Any]:
 
     # Keep basic metadata
     for key in ["title", "description", "type", "x-icon"]:
-        if key in skill_schema:
-            simplified[key] = skill_schema[key]
+        if key in tool_schema:
+            simplified[key] = tool_schema[key]
 
     # Keep only enabled and states in properties
-    original_properties = skill_schema.get("properties", {})
+    original_properties = tool_schema.get("properties", {})
     if original_properties:
         simplified_properties: dict[str, Any] = {}
         if "enabled" in original_properties:
@@ -67,8 +67,8 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Get the JSON schema for Agent model with all $ref references resolved.
 
     This function applies additional adaptations:
-    - Filters out skill categories where available() returns False
-    - Simplifies skill schemas to only keep enabled and states fields
+    - Filters out toolsets where available() returns False
+    - Simplifies tool schemas to only keep enabled and states fields
     - Removes autonomous configuration
     - Removes telegram-related fields
 
@@ -98,22 +98,22 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
             group for group in schema["x-groups"] if group.get("id") != "autonomous"
         ]
 
-    # Filter and simplify skills
-    skills_property = properties.get("skills", {})
-    if skills_property and "properties" in skills_property:
-        original_skills = skills_property["properties"]
-        filtered_skills: dict[str, Any] = {}
+    # Filter and simplify tools
+    tools_property = properties.get("tools", {})
+    if tools_property and "properties" in tools_property:
+        original_tools = tools_property["properties"]
+        filtered_tools: dict[str, Any] = {}
 
-        for category, skill_schema in original_skills.items():
-            module = import_skill_category(category)
-            if module is None or not is_skill_category_available(module):
+        for category, tool_schema in original_tools.items():
+            module = import_toolset(category)
+            if module is None or not is_toolset_available(module):
                 logger.info(
-                    "Filtered out skill '%s': not available in current config",
+                    "Filtered out tool '%s': not available in current config",
                     category,
                 )
                 continue
 
-            simplified = _simplify_skill_schema(skill_schema)
+            simplified = _simplify_tool_schema(tool_schema)
 
             states = simplified.get("properties", {}).get("states")
             if states:
@@ -121,9 +121,9 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
                     module, category, states
                 )
 
-            filtered_skills[category] = simplified
+            filtered_tools[category] = simplified
 
-        skills_property["properties"] = filtered_skills
+        tools_property["properties"] = filtered_tools
 
     return JSONResponse(
         content=schema,
@@ -167,66 +167,66 @@ async def get_agent_public_tags() -> JSONResponse:
 
 
 @schema_router.get(
-    "/skills/{skill}/schema.json",
+    "/tools/{tool}/schema.json",
     tags=["Metadata"],
-    operation_id="get_skill_schema",
+    operation_id="get_tool_schema",
     responses={
         200: {"description": "Success"},
-        404: {"description": "Skill not found"},
-        400: {"description": "Invalid skill name"},
+        404: {"description": "Tool not found"},
+        400: {"description": "Invalid tool name"},
     },
 )
-async def get_skill_schema(
-    skill: str = PathParam(..., description="Skill name", pattern="^[a-zA-Z0-9_-]+$"),
+async def get_tool_schema(
+    tool: str = PathParam(..., description="Tool name", pattern="^[a-zA-Z0-9_-]+$"),
 ) -> JSONResponse:
-    """Get the JSON schema for a specific skill.
+    """Get the JSON schema for a specific tool.
 
     **Path Parameters:**
-    * `skill` - Skill name
+    * `tool` - Tool name
 
     **Returns:**
-    * `JSONResponse` - The complete JSON schema for the skill with application/json content type
+    * `JSONResponse` - The complete JSON schema for the tool with application/json content type
 
     **Raises:**
-    * `IntentKitAPIError` - If the skill is not found or name is invalid
+    * `IntentKitAPIError` - If the tool is not found or name is invalid
     """
-    base_path = PROJECT_ROOT / "intentkit" / "skills"
-    schema_path = base_path / skill / "schema.json"
+    base_path = PROJECT_ROOT / "intentkit" / "tools"
+    schema_path = base_path / tool / "schema.json"
     normalized_path = schema_path.resolve()
 
     if not normalized_path.is_relative_to(base_path):
-        raise IntentKitAPIError(400, "BadRequest", "Invalid skill name")
+        raise IntentKitAPIError(400, "BadRequest", "Invalid tool name")
 
     try:
         with open(normalized_path) as f:
             schema = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        raise IntentKitAPIError(404, "NotFound", "Skill schema not found")
+        raise IntentKitAPIError(404, "NotFound", "Tool schema not found")
 
     return JSONResponse(content=schema, media_type="application/json")
 
 
 @schema_router.get(
-    "/skills/{skill}/{icon_name}.{ext}",
+    "/tools/{tool}/{icon_name}.{ext}",
     tags=["Metadata"],
-    operation_id="get_skill_icon",
+    operation_id="get_tool_icon",
     responses={
         200: {"description": "Success"},
-        404: {"description": "Skill icon not found"},
-        400: {"description": "Invalid skill name or extension"},
+        404: {"description": "Tool icon not found"},
+        400: {"description": "Invalid tool name or extension"},
     },
 )
-async def get_skill_icon(
-    skill: str = PathParam(..., description="Skill name", pattern="^[a-zA-Z0-9_-]+$"),
+async def get_tool_icon(
+    tool: str = PathParam(..., description="Tool name", pattern="^[a-zA-Z0-9_-]+$"),
     icon_name: str = PathParam(..., description="Icon name"),
     ext: str = PathParam(
         ..., description="Icon file extension", pattern="^(png|svg|jpg|jpeg|webp)$"
     ),
 ) -> FileResponse:
-    """Get the icon for a specific skill.
+    """Get the icon for a specific tool.
 
     **Path Parameters:**
-    * `skill` - Skill name
+    * `tool` - Tool name
     * `icon_name` - Icon name
     * `ext` - Icon file extension (png or svg)
 
@@ -234,17 +234,17 @@ async def get_skill_icon(
     * `FileResponse` - The icon file with appropriate content type
 
     **Raises:**
-    * `IntentKitAPIError` - If the skill or icon is not found or name is invalid
+    * `IntentKitAPIError` - If the tool or icon is not found or name is invalid
     """
-    base_path = PROJECT_ROOT / "intentkit" / "skills"
-    icon_path = base_path / skill / f"{icon_name}.{ext}"
+    base_path = PROJECT_ROOT / "intentkit" / "tools"
+    icon_path = base_path / tool / f"{icon_name}.{ext}"
     normalized_path = icon_path.resolve()
 
     if not normalized_path.is_relative_to(base_path):
-        raise IntentKitAPIError(400, "BadRequest", "Invalid skill name")
+        raise IntentKitAPIError(400, "BadRequest", "Invalid tool name")
 
     if not normalized_path.exists():
-        raise IntentKitAPIError(404, "NotFound", "Skill icon not found")
+        raise IntentKitAPIError(404, "NotFound", "Tool icon not found")
 
     content_type = (
         "image/svg+xml"

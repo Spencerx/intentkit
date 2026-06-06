@@ -20,9 +20,9 @@ export function AgentCard({ agent }: AgentCardProps) {
   const displayDescription = agent.description || agent.purpose || "No description available";
   const resolvedImage = getImageUrl(agent.picture);
 
-  // Extract active skills
-  const activeSkills = agent.skills
-    ? Object.entries(agent.skills)
+  // Extract active toolsets
+  const activeTools = agent.tools
+    ? Object.entries(agent.tools)
       .filter(([, config]) => (config as { enabled: boolean }).enabled)
       .map(([category]) => category)
     : [];
@@ -77,14 +77,14 @@ export function AgentCard({ agent }: AgentCardProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 pt-0">
-          {activeSkills.length > 0 && (
+          {activeTools.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-auto">
-              {activeSkills.map((skill) => (
+              {activeTools.map((tool) => (
                 <span
-                  key={skill}
+                  key={tool}
                   className="inline-flex items-center rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground ring-1 ring-inset ring-gray-500/10"
                 >
-                  {skill}
+                  {tool}
                 </span>
               ))}
             </div>

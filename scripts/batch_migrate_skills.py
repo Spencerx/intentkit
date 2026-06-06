@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Batch migration script for Agent skills configuration.
+Batch migration script for Agent tools configuration.
 
-This script fetches all agents from the database, migrates their skills configuration
-from the old format (xxx_skills and xxx_config) to the new format where they are moved
-into the skills field as a sub-dictionary, and saves them back to the database.
+This script fetches all agents from the database, migrates their tools configuration
+from the old format (xxx_tools and xxx_config) to the new format where they are moved
+into the tools field as a sub-dictionary, and saves them back to the database.
 
 Usage:
   intentkit export AGENT_ID
@@ -27,19 +27,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def migrate_agent_skills(agent: AgentTable) -> bool:
+async def migrate_agent_tools(agent: AgentTable) -> bool:
     """
-    Migrate an agent's skills from old format to new format.
+    Migrate an agent's tools from old format to new format.
 
     Old format:
     ```
-    acolyt_skills = ["ask_gpt"]
+    acolyt_tools = ["ask_gpt"]
     acolyt_config = {"api_key": "abc"}
     ```
 
     New format:
     ```
-    skills = {
+    tools = {
         "acolyt": {
             "states": {"ask_gpt": "public"},
             "enabled": true
@@ -53,56 +53,56 @@ async def migrate_agent_skills(agent: AgentTable) -> bool:
     Returns:
         bool: True if the agent was modified, False otherwise
     """
-    # Initialize skills field if it doesn't exist
-    if agent.skills is None:
-        agent.skills = {}
+    # Initialize tools field if it doesn't exist
+    if agent.tools is None:
+        agent.tools = {}
 
-    # Define the mapping of old skill fields to new skill names
-    skill_mappings = [
-        {"skills": "cdp_skills", "config": None, "name": "cdp"},
-        {"skills": "twitter_skills", "config": "twitter_config", "name": "twitter"},
-        {"skills": "enso_skills", "config": "enso_config", "name": "enso"},
-        {"skills": "acolyt_skills", "config": "acolyt_config", "name": "acolyt"},
-        {"skills": "allora_skills", "config": "allora_config", "name": "allora"},
-        {"skills": "elfa_skills", "config": "elfa_config", "name": "elfa"},
+    # Define the mapping of old tool fields to new tool names
+    tool_mappings = [
+        {"tools": "cdp_tools", "config": None, "name": "cdp"},
+        {"tools": "twitter_tools", "config": "twitter_config", "name": "twitter"},
+        {"tools": "enso_tools", "config": "enso_config", "name": "enso"},
+        {"tools": "acolyt_tools", "config": "acolyt_config", "name": "acolyt"},
+        {"tools": "allora_tools", "config": "allora_config", "name": "allora"},
+        {"tools": "elfa_tools", "config": "elfa_config", "name": "elfa"},
     ]
 
     modified = False
 
-    # Process each skill mapping
-    for mapping in skill_mappings:
-        skills_field = mapping["skills"]
+    # Process each tool mapping
+    for mapping in tool_mappings:
+        tools_field = mapping["tools"]
         config_field = mapping["config"]
-        skill_name = mapping["name"]
+        tool_name = mapping["name"]
 
-        # Get the skills list using getattr to access the column values
-        skills_list = getattr(agent, skills_field, None)
+        # Get the tools list using getattr to access the column values
+        tools_list = getattr(agent, tools_field, None)
 
-        # Skip if the skills list is empty or None
-        if not skills_list:
+        # Skip if the tools list is empty or None
+        if not tools_list:
             continue
 
         # Get the config if it exists
         config = getattr(agent, config_field, {}) if config_field else {}
 
-        # Create the new skill entry
-        skill_entry = {
-            "states": {skill: "public" for skill in skills_list},
+        # Create the new tool entry
+        tool_entry = {
+            "states": {tool: "public" for tool in tools_list},
             "enabled": True,
         }
 
         # Add any config values
         if config:
-            # Merge config with the skill entry
+            # Merge config with the tool entry
             for key, value in config.items():
                 if key != "states" and key != "enabled":
-                    skill_entry[key] = value
+                    tool_entry[key] = value
 
-        # Add the skill entry to the skills field
-        agent.skills[skill_name] = skill_entry
+        # Add the tool entry to the tools field
+        agent.tools[tool_name] = tool_entry
 
         # Clear the old fields
-        setattr(agent, skills_field, None)
+        setattr(agent, tools_field, None)
         if config_field:
             setattr(agent, config_field, None)
 
@@ -111,9 +111,9 @@ async def migrate_agent_skills(agent: AgentTable) -> bool:
     return modified
 
 
-async def batch_migrate_skills():
+async def batch_migrate_tools():
     """
-    Fetch all agents from the database, migrate their skills, and save them back.
+    Fetch all agents from the database, migrate their tools, and save them back.
     """
     async with get_session() as session:
         # Fetch all agents
@@ -125,8 +125,8 @@ async def batch_migrate_skills():
         migrated_count = 0
         for agent in agents:
             try:
-                # Migrate the agent's skills
-                modified = await migrate_agent_skills(agent)
+                # Migrate the agent's tools
+                modified = await migrate_agent_tools(agent)
 
                 if modified:
                     # Save the agent back to the database
@@ -152,7 +152,7 @@ async def main():
     await init_db(**config.db)
 
     # Run the batch migration
-    await batch_migrate_skills()
+    await batch_migrate_tools()
 
 
 if __name__ == "__main__":

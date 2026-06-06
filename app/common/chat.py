@@ -241,7 +241,7 @@ async def _load_first_three_round_transcript(agent_id: str, chat_id: str) -> str
             role = "User"
         elif message.author_type == AuthorType.AGENT:
             role = "Assistant"
-        elif message.author_type == AuthorType.SKILL:
+        elif message.author_type == AuthorType.TOOL:
             role = "Tool"
         else:
             role = "System"

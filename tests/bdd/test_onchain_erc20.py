@@ -1,4 +1,4 @@
-"""BDD tests for on-chain ERC20 read-only skills using real RPC."""
+"""BDD tests for on-chain ERC20 read-only tools using real RPC."""
 
 import os
 
@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from web3 import AsyncWeb3
 
-from intentkit.skills.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
-from intentkit.skills.erc20.utils import (
+from intentkit.tools.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
+from intentkit.tools.erc20.utils import (
     get_available_token_symbols,
     get_token_address_by_symbol,
 )

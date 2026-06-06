@@ -77,7 +77,7 @@ async def transfer_usdc(
     wallet_address: str,
     network_id: str,
 ) -> tuple[str, str]:
-    from intentkit.skills.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
+    from intentkit.tools.erc20.constants import ERC20_ABI, TOKEN_ADDRESSES_BY_SYMBOLS
     from intentkit.wallets.web3 import get_async_web3_client
 
     token_address = TOKEN_ADDRESSES_BY_SYMBOLS.get(network_id, {}).get("USDC")

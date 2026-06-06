@@ -13,8 +13,8 @@ export function AgentInfoBar({ agent }: AgentInfoBarProps) {
           <Info className="h-3 w-3 text-muted-foreground" />
           {agent.model}
         </span>
-        {agent.skills &&
-          Object.entries(agent.skills)
+        {agent.tools &&
+          Object.entries(agent.tools)
             .filter(([, config]) => (config as { enabled: boolean }).enabled)
             .map(([category]) => (
               <span

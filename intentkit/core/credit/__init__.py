@@ -19,17 +19,17 @@ from intentkit.models.credit import (
 
 from .adjustment import adjustment
 from .base import (
-    SkillCost,
+    ToolCost,
     update_credit_event_note,
     update_daily_quota,
 )
 from .expense import (
     expense_media,
     expense_message,
-    expense_skill,
-    expense_skill_internal_llm,
     expense_summarize,
-    skill_cost,
+    expense_tool,
+    expense_tool_internal_llm,
+    tool_cost,
 )
 from .list_events import (
     fetch_credit_event_by_id,
@@ -61,15 +61,15 @@ __all__ = [
     "Direction",
     "EventType",
     "OwnerType",
-    "SkillCost",
+    "ToolCost",
     "TransactionType",
     "UpstreamType",
     "accumulate_hourly_base_llm_amount",
     "adjustment",
     "expense_media",
     "expense_message",
-    "expense_skill",
-    "expense_skill_internal_llm",
+    "expense_tool",
+    "expense_tool_internal_llm",
     "expense_summarize",
     "fetch_credit_event_by_id",
     "fetch_credit_event_by_upstream_tx_id",
@@ -80,7 +80,7 @@ __all__ = [
     "refill_all_free_credits",
     "refill_free_credits_for_account",
     "reward",
-    "skill_cost",
+    "tool_cost",
     "update_credit_event_note",
     "update_daily_quota",
     "withdraw",

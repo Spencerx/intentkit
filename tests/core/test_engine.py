@@ -34,7 +34,7 @@ def mock_agent():
         updated_at=datetime.now(),
         created_at=datetime.now(),
         owner="user_1",
-        skills={},
+        tools={},
         prompt="You are a helper.",
         temperature=0.7,
         visibility=AgentVisibility.PRIVATE,
@@ -100,9 +100,9 @@ def _tool_keys(tools: list) -> set[str]:
 
 @pytest.mark.asyncio
 async def test_build_executor_openrouter_tools(mock_agent, mock_agent_data):
-    """OpenRouter agents use our own current_time skill plus the web_search and
+    """OpenRouter agents use our own current_time tool plus the web_search and
     web_fetch server tools, and never OpenRouter's datetime server tool or the
-    Cloudflare webpage reader skill."""
+    Cloudflare webpage reader tool."""
     mock_agent.search_internet = True
 
     with (
@@ -139,7 +139,7 @@ async def test_build_executor_openrouter_tools(mock_agent, mock_agent_data):
 @pytest.mark.asyncio
 async def test_build_executor_compatible_tools(mock_agent, mock_agent_data):
     """Providers without native search (e.g. deepseek) get the unified
-    web_search skill plus the Cloudflare reader, not the old zai skills."""
+    web_search tool plus the Cloudflare reader, not the old zai tools."""
     mock_agent.search_internet = True
 
     with (

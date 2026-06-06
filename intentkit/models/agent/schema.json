@@ -10,8 +10,8 @@
       "order": 1
     },
     {
-      "id": "skills",
-      "title": "Skills",
+      "id": "tools",
+      "title": "Tools",
       "order": 2
     },
     {
@@ -118,7 +118,7 @@
     "principles": {
       "title": "Principles",
       "type": "string",
-      "description": "Tell the agents what it should and shouldn't do when it interacts with users or skills.",
+      "description": "Tell the agents what it should and shouldn't do when it interacts with users or tools.",
       "maxLength": 20000,
       "pattern": "^(([^#].*)|#[^# ].*|#{3,}[ ].*|$)(\n(([^#].*)|#[^# ].*|#{3,}[ ].*|$))*$",
       "errorMessage": {
@@ -265,14 +265,14 @@
     "enable_activity": {
       "title": "Activity Publishing",
       "type": "boolean",
-      "description": "Enable activity skills (create activity, recent activities)",
+      "description": "Enable activity tools (create activity, recent activities)",
       "default": true,
       "x-group": "llm"
     },
     "enable_post": {
       "title": "Post Publishing",
       "type": "boolean",
-      "description": "Enable post skills (create post, get post, recent posts)",
+      "description": "Enable post tools (create post, get post, recent posts)",
       "default": true,
       "x-group": "llm"
     },
@@ -286,11 +286,11 @@
     "sub_agents": {
       "title": "Sub-Agents",
       "type": "array",
-      "description": "List of sub-agent IDs or slugs that this agent can call using the call_agent skill. Only listed agents can be called.",
+      "description": "List of sub-agent IDs or slugs that this agent can call using the call_agent tool. Only listed agents can be called.",
       "items": {
         "type": "string"
       },
-      "x-group": "skills"
+      "x-group": "tools"
     },
     "sub_agent_prompt": {
       "title": "Sub-Agent Instructions",
@@ -302,13 +302,13 @@
         "pattern": "Level 1 and 2 headings (# and ##) are not allowed. Please use level 3+ headings (###, ####, etc.) instead."
       },
       "x-str-type": "prompt",
-      "x-group": "skills"
+      "x-group": "tools"
     },
-    "skills": {
-      "title": "Skills",
+    "tools": {
+      "title": "Tools",
       "type": "object",
-      "description": "Please choose the Agent's skills carefully. Excessive skills will pollute the context and reduce the Agent's intelligence. Only select the necessary skills, and it is best not to exceed 10.",
-      "x-group": "skills",
+      "description": "Please choose the Agent's tools carefully. Excessive tools will pollute the context and reduce the Agent's intelligence. Only select the necessary tools, and it is best not to exceed 10.",
+      "x-group": "tools",
       "x-inline": true,
       "properties": {}
     },
@@ -396,7 +396,7 @@
     "network_id": {
       "title": "Default Network",
       "type": "string",
-      "description": "Default Network, please note that some CDP Wallet native skills like swap only support the base network.",
+      "description": "Default Network, please note that some CDP Wallet native tools like swap only support the base network.",
       "default": "base-mainnet",
       "enum": [
         "base-mainnet",

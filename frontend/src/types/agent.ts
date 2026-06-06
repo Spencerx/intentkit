@@ -20,7 +20,7 @@ export interface Agent {
   wallet_provider: "cdp" | "native" | "readonly" | "safe" | "privy" | "none" | null;
   readonly_wallet_address: string | null;
   network_id: string | null;
-  skills: Record<string, unknown> | null;
+  tools: Record<string, unknown> | null;
   version: string | null;
   statistics: Record<string, unknown> | null;
   assets: Record<string, unknown> | null;

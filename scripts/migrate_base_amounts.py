@@ -3,7 +3,7 @@
 Migration script to populate base_free_amount, base_reward_amount, and base_permanent_amount
 for existing credit events where these fields are all zero.
 
-This script uses the same algorithm as the expense_skill function to calculate the base amounts
+This script uses the same algorithm as the expense_tool function to calculate the base amounts
 by subtracting platform, agent, and dev fees from the respective credit type amounts.
 """
 
@@ -30,7 +30,7 @@ def calculate_base_amounts(
     event: CreditEventTable,
 ) -> tuple[Decimal, Decimal, Decimal]:
     """
-    Calculate base amounts using the same algorithm as expense_skill function.
+    Calculate base amounts using the same algorithm as expense_tool function.
 
     Args:
         event: CreditEventTable instance

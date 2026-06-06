@@ -16,7 +16,7 @@ import {
     onFormError,
     generateUiSchema,
     createTransformErrors,
-    cleanSkillsData,
+    cleanToolsData,
 } from "./formUtils";
 import { toast } from "@/hooks/use-toast";
 
@@ -41,7 +41,7 @@ export default function NewAgentPage() {
         setIsSubmitting(true);
         setError(null);
         try {
-            const cleanedData = cleanSkillsData(formData);
+            const cleanedData = cleanToolsData(formData);
             const newAgent = await agentApi.create(cleanedData);
             toast({
                 title: "Agent created",

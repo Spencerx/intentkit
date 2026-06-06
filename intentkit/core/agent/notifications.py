@@ -29,36 +29,36 @@ def send_agent_notification(agent: Agent, agent_data: AgentData, message: str) -
     else:
         autonomous_formatted = "None"
 
-    skills_formatted = ""
-    if agent.skills:
+    tools_formatted = ""
+    if agent.tools:
         enabled_categories = []
-        for category, skill_config in agent.skills.items():
-            if skill_config and skill_config.get("enabled") is True:
-                skills_list = []
-                states = skill_config.get("states", {})
-                public_skills = [
-                    skill for skill, state in states.items() if state == "public"
+        for category, tool_config in agent.tools.items():
+            if tool_config and tool_config.get("enabled") is True:
+                tools_list = []
+                states = tool_config.get("states", {})
+                public_tools = [
+                    tool for tool, state in states.items() if state == "public"
                 ]
-                private_skills = [
-                    skill for skill, state in states.items() if state == "private"
+                private_tools = [
+                    tool for tool, state in states.items() if state == "private"
                 ]
 
-                if public_skills:
-                    skills_list.append(f"  Public: {', '.join(public_skills)}")
-                if private_skills:
-                    skills_list.append(f"  Private: {', '.join(private_skills)}")
+                if public_tools:
+                    tools_list.append(f"  Public: {', '.join(public_tools)}")
+                if private_tools:
+                    tools_list.append(f"  Private: {', '.join(private_tools)}")
 
-                if skills_list:
+                if tools_list:
                     enabled_categories.append(
-                        f"• {category}:\n{chr(10).join(skills_list)}"
+                        f"• {category}:\n{chr(10).join(tools_list)}"
                     )
 
         if enabled_categories:
-            skills_formatted = "\n".join(enabled_categories)
+            tools_formatted = "\n".join(enabled_categories)
         else:
-            skills_formatted = "No enabled skills"
+            tools_formatted = "No enabled tools"
     else:
-        skills_formatted = "None"
+        tools_formatted = "None"
 
     send_alert(
         message,
@@ -98,8 +98,8 @@ def send_agent_notification(agent: Agent, agent_data: AgentData, message: str) -
                         "value": autonomous_formatted,
                     },
                     {
-                        "title": "Skills",
-                        "value": skills_formatted,
+                        "title": "Tools",
+                        "value": tools_formatted,
                     },
                 ],
             }

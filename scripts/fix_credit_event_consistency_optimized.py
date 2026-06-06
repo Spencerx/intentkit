@@ -131,7 +131,7 @@ class OptimizedCreditEventConsistencyFixer:
     def calculate_detailed_amounts(
         self, record: CreditEventTable
     ) -> dict[str, Decimal]:
-        """Calculate the 12 detailed amount fields using the same logic as expense_skill.
+        """Calculate the 12 detailed amount fields using the same logic as expense_tool.
 
         Returns:
             Dictionary containing the calculated amounts

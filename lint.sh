@@ -36,12 +36,12 @@ if ! validate_schema "intentkit/models/agent/schema.json"; then
     exit 1
 fi
 
-# Validate all schema.json files in skills subdirectories
-echo "Validating schema.json files in skills subdirectories..."
+# Validate all schema.json files in tools subdirectories
+echo "Validating schema.json files in tools subdirectories..."
 find_exit_code=0
 
 # Find all schema.json files and store them in a temporary file
-find intentkit/skills -name "schema.json" > /tmp/schema_files.txt
+find intentkit/tools -name "schema.json" > /tmp/schema_files.txt
 
 # Read each line from the temporary file
 while IFS= read -r schema_file; do

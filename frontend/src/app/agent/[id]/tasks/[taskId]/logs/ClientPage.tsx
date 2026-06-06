@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Bot, User } from "lucide-react";
 import Link from "next/link";
 import { ChatSidebar } from "@/components/features/ChatSidebar";
-import { SkillCallBadgeList } from "@/components/features/SkillCallBadge";
+import { ToolCallBadgeList } from "@/components/features/ToolCallBadge";
 import { ThinkingBlock } from "@/components/features/ThinkingBlock";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ function apiMessageToUIMessage(msg: ChatMessage): UIMessage {
     content: msg.message,
     thinking: msg.thinking,
     timestamp: new Date(msg.created_at),
-    skillCalls: msg.skill_calls,
+    toolCalls: msg.tool_calls,
     attachments: msg.attachments,
   };
 }
@@ -454,10 +454,10 @@ export default function TaskLogsPage() {
                         : "bg-muted text-foreground",
                     )}
                   >
-                    {/* Skill Call Badges and UI Attachments */}
-                    {msg.skillCalls && msg.skillCalls.length > 0 && (
+                    {/* Tool Call Badges and UI Attachments */}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
                       <div className="mb-2">
-                        <SkillCallBadgeList skillCalls={msg.skillCalls} />
+                        <ToolCallBadgeList toolCalls={msg.toolCalls} />
                       </div>
                     )}
                     {hasUIAttachments(msg) && (

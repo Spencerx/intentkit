@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { widgets, BaseInputTemplate } from "@/app/agents/new/widgets";
 import { templates } from "@/app/agents/new/templates";
-import { SkillsField } from "@/app/agents/new/SkillsField";
+import { ToolsField } from "@/app/agents/new/ToolsField";
 import { toast } from "@/hooks/use-toast";
 
 // Custom validator with options to handle optional fields properly
@@ -44,7 +44,7 @@ const removeEmptyValues = (obj: unknown): unknown => {
 
 // Custom fields for RJSF
 const fields: RegistryFieldsType = {
-    SkillsField: SkillsField,
+    ToolsField: ToolsField,
 };
 
 function generateUiSchema(schema: Record<string, unknown> | undefined) {
@@ -59,9 +59,9 @@ function generateUiSchema(schema: Record<string, unknown> | undefined) {
             const property = properties[key];
             const uiProperty: Record<string, unknown> = {};
 
-            // Use custom SkillsField for skills
-            if (key === "skills") {
-                uiProperty["ui:field"] = "SkillsField";
+            // Use custom ToolsField for tools
+            if (key === "tools") {
+                uiProperty["ui:field"] = "ToolsField";
             }
 
             if (property["x-component"] === "category-select") {
@@ -103,30 +103,30 @@ export default function NewAgentPage() {
 
     const uiSchema = useMemo(() => generateUiSchema(schema), [schema]);
 
-    // Clean up skills data before submission:
-    // - Remove categories where enabled=false
-    // - Remove skill states that are 'disabled'
-    const cleanSkillsData = (data: Record<string, unknown>): Record<string, unknown> => {
-        const skills = data.skills as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
-        if (!skills) return data;
+    // Clean up tools data before submission:
+    // - Remove toolsets where enabled=false
+    // - Remove tool states that are 'disabled'
+    const cleanToolsData = (data: Record<string, unknown>): Record<string, unknown> => {
+        const tools = data.tools as Record<string, { enabled?: boolean; states?: Record<string, string> }> | undefined;
+        if (!tools) return data;
 
-        const cleanedSkills: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
-        for (const [categoryKey, categoryData] of Object.entries(skills)) {
-            // Skip categories that are explicitly disabled
+        const cleanedTools: Record<string, { enabled?: boolean; states?: Record<string, string> }> = {};
+        for (const [categoryKey, categoryData] of Object.entries(tools)) {
+            // Skip toolsets that are explicitly disabled
             if (categoryData.enabled === false) continue;
 
-            // Clean up states - only keep non-disabled skills
+            // Clean up states - only keep non-disabled tools
             const states = categoryData.states || {};
             const cleanedStates: Record<string, string> = {};
-            for (const [skillKey, skillValue] of Object.entries(states)) {
-                if (skillValue !== 'disabled') {
-                    cleanedStates[skillKey] = skillValue;
+            for (const [toolKey, toolValue] of Object.entries(states)) {
+                if (toolValue !== 'disabled') {
+                    cleanedStates[toolKey] = toolValue;
                 }
             }
 
-            // Only include category if it's enabled
+            // Only include toolset if it's enabled
             if (categoryData.enabled === true) {
-                cleanedSkills[categoryKey] = {
+                cleanedTools[categoryKey] = {
                     enabled: true,
                     states: Object.keys(cleanedStates).length > 0 ? cleanedStates : undefined,
                 };
@@ -135,7 +135,7 @@ export default function NewAgentPage() {
 
         return {
             ...data,
-            skills: Object.keys(cleanedSkills).length > 0 ? cleanedSkills : undefined,
+            tools: Object.keys(cleanedTools).length > 0 ? cleanedTools : undefined,
         };
     };
 
@@ -144,7 +144,7 @@ export default function NewAgentPage() {
         setIsSubmitting(true);
         setError(null);
         try {
-            const cleanedData = cleanSkillsData(formData);
+            const cleanedData = cleanToolsData(formData);
             const newAgent = await agentApi.create(cleanedData);
             toast({
                 title: "Agent created",

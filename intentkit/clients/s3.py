@@ -73,7 +73,7 @@ def get_cdn_url(relative_path: str) -> str:
     """
     Build a full CDN URL from a relative path.
 
-    This should be used by skills when they need to return an accessible URL
+    This should be used by tools when they need to return an accessible URL
     to the agent. The database should always store relative paths.
 
     Args:

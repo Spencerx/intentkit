@@ -4,7 +4,7 @@
 
 export type AuthorType =
   | "agent"
-  | "skill"
+  | "tool"
   | "thinking"
   | "system"
   | "trigger"
@@ -27,7 +27,7 @@ export interface ChatMessageAttachment {
   name?: string;
 }
 
-export interface ChatMessageSkillCall {
+export interface ChatMessageToolCall {
   id?: string;
   name: string;
   parameters: Record<string, unknown>;
@@ -55,7 +55,7 @@ export interface ChatMessage {
   author_type: AuthorType;
   thread_type: AuthorType;
   message: string;
-  skill_calls?: ChatMessageSkillCall[];
+  tool_calls?: ChatMessageToolCall[];
   thinking?: string | null;
   error_type?: string | null;
   time_cost?: number;
@@ -101,6 +101,6 @@ export interface UIMessage {
   thinking?: string | null;
   errorType?: string | null;
   isStreaming?: boolean;
-  skillCalls?: ChatMessageSkillCall[];
+  toolCalls?: ChatMessageToolCall[];
   attachments?: ChatMessageAttachment[];
 }

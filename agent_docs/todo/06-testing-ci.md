@@ -14,21 +14,21 @@ Test coverage gaps and CI pipeline improvements.
 
 ---
 
-## 6.2 ~90% of Skills Untested
+## 6.2 ~90% of Tools Untested
 
-**Location:** `tests/skills/` — only 5 test files for 45+ skill directories
-**Issue:** Tested: `create_post`, `pancakeswap`, `ui`, `update_memory`, `x402_safe_funding`. Untested: `cdp`, `erc20`, `erc721`, `twitter`, `slack`, `github`, `jupiter`, `lifi`, `morpho`, `superfluid`, `firecrawl`, `dune_analytics`, `enso`, `http`, and many more. These include DeFi skills that handle real funds.
-**Fix:** Prioritize tests for financial skills (DeFi, credit) and security-critical skills (HTTP, Slack).
+**Location:** `tests/tools/` — only 5 test files for 45+ tool directories
+**Issue:** Tested: `create_post`, `pancakeswap`, `ui`, `update_memory`, `x402_safe_funding`. Untested: `cdp`, `erc20`, `erc721`, `twitter`, `slack`, `github`, `jupiter`, `lifi`, `morpho`, `superfluid`, `firecrawl`, `dune_analytics`, `enso`, `http`, and many more. These include DeFi tools that handle real funds.
+**Fix:** Prioritize tests for financial tools (DeFi, credit) and security-critical tools (HTTP, Slack).
 
 > **User notes:**
 
 ---
 
-## 6.3 No Tests for System Skills, Manager, Middleware
+## 6.3 No Tests for System Tools, Manager, Middleware
 
-**Location:** `intentkit/core/system_skills/`, `intentkit/core/manager/`, `intentkit/core/middleware.py`, `intentkit/core/account_checking.py`, `intentkit/core/statistics.py`
+**Location:** `intentkit/core/system_tools/`, `intentkit/core/manager/`, `intentkit/core/middleware.py`, `intentkit/core/account_checking.py`, `intentkit/core/statistics.py`
 **Issue:** Core modules with zero dedicated test coverage.
-**Fix:** Add tests for middleware (credit check, trim messages) and system skills (call_agent).
+**Fix:** Add tests for middleware (credit check, trim messages) and system tools (call_agent).
 
 > **User notes:**
 
@@ -95,7 +95,7 @@ Test coverage gaps and CI pipeline improvements.
 
 ## 6.10 Multiple TODO/FIXME Comments Unaddressed
 
-**Location:** `skills/web_scraper/website_indexer.py:448`, `skills/web_scraper/scrape_and_index.py:156,256`, `skills/firecrawl/query.py:113`
+**Location:** `tools/web_scraper/website_indexer.py:448`, `tools/web_scraper/scrape_and_index.py:156,256`, `tools/firecrawl/query.py:113`
 **Issue:** Repeated "TODO: Fix config reference" across multiple files — systematic config reference problem.
 **Fix:** Investigate and resolve the underlying config reference issue.
 

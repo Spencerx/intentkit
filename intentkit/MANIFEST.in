@@ -5,7 +5,7 @@ recursive-include clients *.py
 recursive-include config *.py
 recursive-include core *.py
 recursive-include models *.py *.json
-recursive-include skills *.py *.toml *.md
+recursive-include tools *.py *.toml *.md
 recursive-include utils *.py
 recursive-exclude * __pycache__
 recursive-exclude * *.pyc

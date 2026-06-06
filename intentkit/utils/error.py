@@ -146,19 +146,21 @@ class AgentError(Exception):
         return f"AgentError(agent_id={self.agent_id}): {super().__str__()}"
 
 
-class SkillError(ToolException):
-    """Custom exception for skill-related errors."""
+class ToolError(ToolException):
+    """Custom exception for tool-related errors."""
 
     agent_id: str
-    skill_name: str
+    tool_name: str
 
-    def __init__(self, agent_id: str, skill_name: str, message: str | None = None):
+    def __init__(self, agent_id: str, tool_name: str, message: str | None = None):
         self.agent_id = agent_id
-        self.skill_name = skill_name
+        self.tool_name = tool_name
         if message is None:
-            message = f"Skill error occurred for agent_id: {agent_id}, skill_name: {skill_name}"
+            message = (
+                f"Tool error occurred for agent_id: {agent_id}, tool_name: {tool_name}"
+            )
         super().__init__(message)
 
     @override
     def __str__(self):
-        return f"SkillError(agent_id={self.agent_id}, skill_name={self.skill_name}): {super().__str__()}"
+        return f"ToolError(agent_id={self.agent_id}, tool_name={self.tool_name}): {super().__str__()}"

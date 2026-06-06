@@ -274,7 +274,7 @@ async def send_message(
         attachments=request.attachments,
         model=None,
         reply_to=None,
-        skill_calls=None,
+        tool_calls=None,
         input_tokens=0,
         output_tokens=0,
         time_cost=0.0,
@@ -411,9 +411,9 @@ async def retry_message(
         else:
             return [last_message]
 
-    if last_message.author_type == AuthorType.SKILL:
+    if last_message.author_type == AuthorType.TOOL:
         error_message_create = await ChatMessageCreate.from_system_message(
-            SystemMessageType.SKILL_INTERRUPTED,
+            SystemMessageType.TOOL_INTERRUPTED,
             agent_id=aid,
             chat_id=chat_id,
             user_id=user_id,
@@ -438,7 +438,7 @@ async def retry_message(
         attachments=last_message.attachments,
         model=None,
         reply_to=None,
-        skill_calls=None,
+        tool_calls=None,
         input_tokens=0,
         output_tokens=0,
         time_cost=0.0,
@@ -457,18 +457,18 @@ async def retry_message(
 
 
 @team_chat_router.get(
-    "/teams/{team_id}/agents/{aid}/skill/history",
+    "/teams/{team_id}/agents/{aid}/tool/history",
     tags=["Message"],
     response_model=list[ChatMessage],
-    operation_id="team_skill_history",
-    summary="Skill History (Team)",
+    operation_id="team_tool_history",
+    summary="Tool History (Team)",
 )
-async def get_skill_history(
+async def get_tool_history(
     aid: str = Path(..., description="Agent ID"),
     db: AsyncSession = Depends(get_db),
     auth: tuple[str, str] = Depends(verify_team_member),
 ) -> list[ChatMessage]:
-    """Get last 50 skill messages for a team agent."""
+    """Get last 50 tool messages for a team agent."""
     _user_id, team_id = auth
     await get_accessible_agent(aid, team_id)
 
@@ -478,7 +478,7 @@ async def get_skill_history(
         .join(TeamMemberTable, ChatTable.user_id == TeamMemberTable.user_id)
         .where(
             ChatMessageTable.agent_id == aid,
-            ChatMessageTable.author_type == AuthorType.SKILL,
+            ChatMessageTable.author_type == AuthorType.TOOL,
             TeamMemberTable.team_id == team_id,
         )
         .order_by(desc(ChatMessageTable.created_at))
