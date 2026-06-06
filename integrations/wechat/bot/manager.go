@@ -294,6 +294,25 @@ func (m *Manager) ensureTeamBotRunning(tc *store.TeamChannel) {
 	slog.Info("Started wechat bot for team channel", "team_id", tc.TeamID)
 }
 
+// getUpdatesErrLogThreshold is the number of consecutive GetUpdates failures
+// at or above which the failure is logged at Error level. A long-poll endpoint
+// routinely yields the odd transient EOF when the server (or an intermediate
+// proxy/LB) closes an idle keep-alive connection the client then reuses —
+// common in the first polls right after a restart. Those self-heal on the next
+// poll, so the first few failures log at Warn; only a sustained run (a real
+// outage, a bad token, or a network partition) escalates to Error.
+const getUpdatesErrLogThreshold = 3
+
+// getUpdatesErrLogLevel maps a consecutive-error count to the slog level used
+// for the "GetUpdates failed" line, so isolated transient failures don't read
+// as alarming Error noise.
+func getUpdatesErrLogLevel(consecutiveErrors int) slog.Level {
+	if consecutiveErrors >= getUpdatesErrLogThreshold {
+		return slog.LevelError
+	}
+	return slog.LevelWarn
+}
+
 func (m *Manager) pollLoop(ctx context.Context, entry *botEntry, teamID string) {
 	backoff := 2 * time.Second
 	const maxBackoff = 60 * time.Second
@@ -312,7 +331,7 @@ func (m *Manager) pollLoop(ctx context.Context, entry *botEntry, teamID string) 
 				return // context cancelled
 			}
 			consecutiveErrors++
-			slog.Error("GetUpdates failed",
+			slog.Log(ctx, getUpdatesErrLogLevel(consecutiveErrors), "GetUpdates failed",
 				"team_id", teamID,
 				"error", err,
 				"consecutive_errors", consecutiveErrors,
