@@ -19,7 +19,7 @@ dependencies = [
     "starlette>=0.47.1",
     "uvicorn>=0.34.0,<1.0.0",
     "httpx>=0.28.1",
-    "aiohttp>=3.11.16",
+    "aiohttp>=3.14.0",
     # Database
     "psycopg>=3.2.9",
     "psycopg-pool>=3.2.4",
@@ -93,14 +93,11 @@ Documentation = "https://github.com/crestalnetwork/intentkit/tree/main/docs"
 [dependency-groups]
 # App runtime dependencies (app/ folder needs these beyond intentkit)
 app = [
-    "aiogram>=3.17.0",
     "APScheduler>=3.11.0",
-    "discord.py>=2.3.2",
     "gunicorn>=23.0.0",
     "pydantic-settings>=2.8.1",
     "python-multipart>=0.0.20",
     "sentry-sdk[fastapi]>=2.20.0",
-    "telegramify-markdown>=0.5.0,<0.6.0",
     # PDF generation
     "weasyprint>=63.0",
     "markdown>=3.7",
