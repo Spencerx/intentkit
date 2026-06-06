@@ -1,7 +1,5 @@
-# Release v2.0.1
+# Release v2.0.2
 
 ## Improvements
 
-- Upgraded locked dependencies across the backend and the web frontend to their current upstream releases.
-- Resolved all outstanding security advisories reported for backend and frontend dependencies.
-- Removed unused legacy packages left over from the move to the standalone messaging adapters, reducing the install footprint.
+- Reduced noisy error alerts from the WeChat integration. Brief connection hiccups that recover on their own — common in the first moments after a restart — are no longer reported as errors; only sustained connection problems are escalated, making genuine issues easier to spot.
