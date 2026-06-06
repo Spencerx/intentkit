@@ -1,4 +1,4 @@
-from intentkit.core.manager.service import get_tools_hierarchical_text
+from intentkit.core.agent.tool_registry import get_tools_hierarchical_text
 
 
 def test_hierarchical_text_includes_individual_tools():

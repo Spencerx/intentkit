@@ -5,7 +5,7 @@ its system config (API keys, env vars, etc.). Individual tools inside a
 category may also expose ``available()`` on the instance for finer-grained
 gating (e.g. wallet/scope checks). These helpers wrap both layers so callers
 that build user-facing tool listings (``app/common/schema.py``,
-``intentkit/core/manager/service.py``) can drop everything that wouldn't
+``intentkit/core/agent/tool_registry.py``) can drop everything that wouldn't
 actually run.
 """
 

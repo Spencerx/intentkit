@@ -12,6 +12,7 @@ from intentkit.utils.error import IntentKitAPIError
 
 from .notifications import send_agent_notification
 from .queries import get_agent, get_agent_by_id_or_slug
+from .tool_registry import sanitize_tools, validate_tools
 from .wallet import process_agent_wallet
 
 logger = logging.getLogger(__name__)
@@ -117,8 +118,6 @@ async def override_agent(
                 update_data["autonomous"]
             )
         if "tools" in update_data and update_data["tools"]:
-            from intentkit.core.manager.service import sanitize_tools
-
             update_data["tools"] = sanitize_tools(update_data["tools"])
         for key, value in update_data.items():
             setattr(db_agent, key, value)
@@ -209,8 +208,6 @@ async def patch_agent(
                 update_data["autonomous"]
             )
         if "tools" in update_data and update_data["tools"]:
-            from intentkit.core.manager.service import sanitize_tools
-
             update_data["tools"] = sanitize_tools(update_data["tools"])
         for key, value in update_data.items():
             setattr(db_agent, key, value)
@@ -272,8 +269,6 @@ async def create_agent(agent: AgentCreate) -> tuple[Agent, AgentData]:
 
     # Validate tools configuration
     if agent.tools:
-        from intentkit.core.manager.service import validate_tools
-
         validate_tools(agent.tools)
 
     async with get_session() as db:

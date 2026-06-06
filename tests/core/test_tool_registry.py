@@ -1,6 +1,6 @@
 """Tests for get_valid_tools_registry utility."""
 
-from intentkit.core.manager.service import get_valid_tools_registry
+from intentkit.core.agent.tool_registry import get_valid_tools_registry
 
 
 def test_get_valid_tools_registry_returns_categories():

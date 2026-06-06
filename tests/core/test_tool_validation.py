@@ -1,6 +1,6 @@
 import pytest
 
-from intentkit.core.manager.service import sanitize_tools, validate_tools
+from intentkit.core.agent.tool_registry import sanitize_tools, validate_tools
 from intentkit.utils.error import IntentKitAPIError
 
 

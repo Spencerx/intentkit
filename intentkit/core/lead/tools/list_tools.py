@@ -33,7 +33,7 @@ class LeadListAvailableTools(LeadTool):
 
     @override
     async def _arun(self, **kwargs: Any) -> ListAvailableToolsOutput:
-        from intentkit.core.manager.service import get_tools_hierarchical_text
+        from intentkit.core.agent.tool_registry import get_tools_hierarchical_text
 
         tools_text = await asyncio.to_thread(get_tools_hierarchical_text)
         return ListAvailableToolsOutput(tools_text=tools_text)
