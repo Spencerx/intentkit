@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
+from functools import lru_cache
 from importlib import resources
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import jsonref
@@ -58,53 +61,82 @@ def _get_states_properties(tool_schema: dict[str, object]) -> dict[str, Any] | N
     return cast(dict[str, Any], state_props) if isinstance(state_props, dict) else None
 
 
+def _iter_tool_schemas(
+    *, require_available: bool = False
+) -> Iterator[tuple[str, ModuleType | None, dict[str, object]]]:
+    """Yield ``(category, module, schema)`` for each loadable tool schema.
+
+    Walks ``intentkit/tools/*/schema.json`` in sorted category order, loading
+    each schema and skipping (with a warning) any that fail to parse. When
+    ``require_available`` is True the toolset module is imported and categories
+    whose ``available()`` reports False are skipped; ``module`` is then the
+    imported toolset, and None otherwise.
+
+    Raises ``AttributeError``/``ModuleNotFoundError``/``ImportError`` if the
+    ``intentkit.tools`` package itself cannot be located — callers decide how to
+    surface that.
+    """
+    traversable = resources.files("intentkit.tools")
+    with resources.as_file(traversable) as tools_root:
+        for entry in sorted(tools_root.iterdir(), key=lambda p: p.name):
+            if not entry.is_dir():
+                continue
+
+            schema_path = entry / "schema.json"
+            if not schema_path.is_file():
+                continue
+
+            category = entry.name
+
+            module: ModuleType | None = None
+            if require_available:
+                module = import_toolset(category)
+                if module is None or not is_toolset_available(module):
+                    logger.info("Skipped toolset '%s': not available", category)
+                    continue
+
+            try:
+                tool_schema = _load_tool_schema(schema_path)
+            except (
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+                jsonref.JsonRefError,
+            ) as exc:
+                logger.warning("Failed to load schema for tool '%s': %s", category, exc)
+                continue
+
+            yield category, module, tool_schema
+
+
+@lru_cache(maxsize=1)
 def get_valid_tools_registry() -> dict[str, dict[str, str]]:
     """Load all tool schemas and return a registry of valid tools.
 
     Returns a nested dict mapping category name to a dict of tool names
     and their descriptions: ``{category: {tool_name: description}}``.
 
-    Broken or unreadable schemas are silently skipped.
+    Broken or unreadable schemas are silently skipped. The result is cached for
+    the process lifetime: tool schemas ship with the code and never change at
+    runtime, so this is recomputed only after a restart. Callers must treat the
+    returned dict as read-only.
     """
     registry: dict[str, dict[str, str]] = {}
     try:
-        traversable = resources.files("intentkit.tools")
-        with resources.as_file(traversable) as tools_root:
-            for entry in sorted(tools_root.iterdir(), key=lambda p: p.name):
-                if not entry.is_dir():
-                    continue
+        for category, _module, tool_schema in _iter_tool_schemas():
+            state_props = _get_states_properties(tool_schema)
+            if not state_props:
+                continue
 
-                schema_path = entry / "schema.json"
-                if not schema_path.is_file():
-                    continue
+            tools: dict[str, str] = {}
+            for tool_name, tool_def in state_props.items():
+                if isinstance(tool_def, dict):
+                    description = tool_def.get("description", "")
+                    if isinstance(description, str) and description:
+                        tools[tool_name] = description
 
-                try:
-                    tool_schema = _load_tool_schema(schema_path)
-                except (
-                    OSError,
-                    ValueError,
-                    json.JSONDecodeError,
-                    jsonref.JsonRefError,
-                ) as exc:
-                    logger.warning(
-                        "Failed to load schema for tool '%s': %s", entry.name, exc
-                    )
-                    continue
-
-                state_props = _get_states_properties(tool_schema)
-                if not state_props:
-                    continue
-
-                category_name = entry.name
-                tools: dict[str, str] = {}
-                for tool_name, tool_def in state_props.items():
-                    if isinstance(tool_def, dict):
-                        description = tool_def.get("description", "")
-                        if isinstance(description, str) and description:
-                            tools[tool_name] = description
-
-                if tools:
-                    registry[category_name] = tools
+            if tools:
+                registry[category] = tools
 
     except (AttributeError, ModuleNotFoundError, ImportError):
         logger.warning("intentkit tools package not found when building tools registry")
@@ -204,86 +236,53 @@ def sanitize_tools(tools: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def get_tools_hierarchical_text() -> str:
     """Extract tools organized by category and return as hierarchical text."""
+    # Group tools by category (x-tags)
+    categories: dict[str, list[Any]] = {}
     try:
-        traversable = resources.files("intentkit.tools")
-        with resources.as_file(traversable) as tools_root:
-            # Group tools by category (x-tags)
-            categories: dict[str, list[Any]] = {}
-            for entry in tools_root.iterdir():
-                if not entry.is_dir():
-                    continue
+        for category, module, tool_schema in _iter_tool_schemas(require_available=True):
+            if module is None:
+                # require_available=True guarantees a module; this also narrows
+                # the type for is_individual_tool_available below.
+                continue
 
-                schema_path = entry / "schema.json"
-                if not schema_path.is_file():
-                    continue
+            tool_title = tool_schema.get("title", category.replace("_", " ").title())
+            tool_description = tool_schema.get(
+                "description", "No description available"
+            )
+            tool_tags = cast(list[str], tool_schema.get("x-tags", ["Other"]))
 
-                category = entry.name
+            # Use the first tag as the primary group
+            primary_category = tool_tags[0] if tool_tags else "Other"
 
-                module = import_toolset(category)
-                if module is None or not is_toolset_available(module):
-                    logger.info(
-                        "Skipped toolset '%s' for hierarchical text: not available",
-                        category,
-                    )
-                    continue
-
-                try:
-                    tool_schema = _load_tool_schema(schema_path)
-                    tool_title = tool_schema.get(
-                        "title", category.replace("_", " ").title()
-                    )
-                    tool_description = tool_schema.get(
-                        "description", "No description available"
-                    )
-                    tool_tags = cast(list[str], tool_schema.get("x-tags", ["Other"]))
-
-                    # Use the first tag as the primary group
-                    primary_category = tool_tags[0] if tool_tags else "Other"
-
-                    individual_tools: list[dict[str, str]] = []
-                    states_props = _get_states_properties(tool_schema)
-                    if states_props:
-                        for ind_name, ind_def in states_props.items():
-                            if not is_individual_tool_available(
-                                module, category, ind_name
-                            ):
-                                continue
-                            ind_desc = (
-                                ind_def.get("description", "No description available")
-                                if isinstance(ind_def, dict)
-                                else "No description available"
-                            )
-                            individual_tools.append(
-                                {"name": ind_name, "description": ind_desc}
-                            )
-
-                    # Drop the category entirely if every tool was filtered;
-                    # surfacing an empty group would just be noise to the LLM.
-                    if states_props and not individual_tools:
+            individual_tools: list[dict[str, str]] = []
+            states_props = _get_states_properties(tool_schema)
+            if states_props:
+                for ind_name, ind_def in states_props.items():
+                    if not is_individual_tool_available(module, category, ind_name):
                         continue
-
-                    if primary_category not in categories:
-                        categories[primary_category] = []
-
-                    categories[primary_category].append(
-                        {
-                            "name": category,
-                            "title": tool_title,
-                            "description": tool_description,
-                            "individual_tools": individual_tools,
-                        }
+                    ind_desc = (
+                        ind_def.get("description", "No description available")
+                        if isinstance(ind_def, dict)
+                        else "No description available"
                     )
+                    individual_tools.append({"name": ind_name, "description": ind_desc})
 
-                except (
-                    OSError,
-                    ValueError,
-                    json.JSONDecodeError,
-                    jsonref.JsonRefError,
-                ) as exc:
-                    logger.warning(
-                        "Failed to load schema for tool '%s': %s", category, exc
-                    )
-                    continue
+            # Drop the category entirely if every tool was filtered;
+            # surfacing an empty group would just be noise to the LLM.
+            if states_props and not individual_tools:
+                continue
+
+            if primary_category not in categories:
+                categories[primary_category] = []
+
+            categories[primary_category].append(
+                {
+                    "name": category,
+                    "title": tool_title,
+                    "description": tool_description,
+                    "individual_tools": individual_tools,
+                }
+            )
     except (AttributeError, ModuleNotFoundError, ImportError):
         logger.warning("intentkit tools package not found when building tools text")
         return "No tools available"
