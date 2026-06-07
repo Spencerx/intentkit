@@ -1,5 +1,6 @@
-# Release v2.0.2
+# Release v2.0.3
 
 ## Improvements
 
-- Reduced noisy error alerts from the WeChat integration. Brief connection hiccups that recover on their own — common in the first moments after a restart — are no longer reported as errors; only sustained connection problems are escalated, making genuine issues easier to spot.
+- Removed a superseded internal agent-management component that had already been fully replaced by the team lead experience, trimming the codebase with no change to existing behavior.
+- Made agent creation and editing a little faster by reusing the cached catalog of available tools instead of rebuilding it on every request.
