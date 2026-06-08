@@ -10,10 +10,33 @@ from unittest.mock import patch
 import pytest
 
 from intentkit.models.llm_picker import (
+    list_available_model_ids,
+    pick_broadest_knowledge_model,
+    pick_chinese_writing_model,
     pick_default_model,
+    pick_fastest_model,
+    pick_finance_model,
+    pick_lite_model,
     pick_long_context_model,
+    pick_multimodal_model,
+    pick_search_model,
+    pick_smartest_model,
     pick_summarize_model,
+    pick_writing_model,
 )
+
+# Category pickers that always resolve to a model (fallback instead of raising).
+CATEGORY_PICKERS = [
+    pick_lite_model,
+    pick_smartest_model,
+    pick_fastest_model,
+    pick_multimodal_model,
+    pick_writing_model,
+    pick_chinese_writing_model,
+    pick_finance_model,
+    pick_search_model,
+    pick_broadest_knowledge_model,
+]
 
 
 @contextmanager
@@ -117,3 +140,42 @@ def test_pick_long_context_model_raises_when_none():
     with mock_llm_config():
         with pytest.raises(RuntimeError):
             pick_long_context_model()
+
+
+# ── category pickers (model-selection section) ───────────────────────
+
+
+@pytest.mark.parametrize("picker", CATEGORY_PICKERS)
+def test_category_picker_returns_model_when_provider_available(picker):
+    """Each category picker returns a non-empty string for a configured provider."""
+    with mock_llm_config(google_api_key="gk"):
+        result = picker()
+        assert isinstance(result, str) and len(result) > 0
+
+
+@pytest.mark.parametrize("picker", CATEGORY_PICKERS)
+def test_category_picker_falls_back_when_none(picker):
+    """Each category picker falls back (does not raise) when nothing configured."""
+    with mock_llm_config():
+        result = picker()
+        assert isinstance(result, str) and len(result) > 0
+
+
+def test_category_picker_different_providers_yield_different_models():
+    """A reasoning picker selects a provider-specific model."""
+    with mock_llm_config(google_api_key="gk"):
+        google_result = pick_smartest_model()
+    with mock_llm_config(deepseek_api_key="dk"):
+        deepseek_result = pick_smartest_model()
+    assert google_result != deepseek_result
+
+
+# ── list_available_model_ids ─────────────────────────────────────────
+
+
+def test_list_available_model_ids_returns_sorted_unique_strings():
+    """Returns a sorted list of unique model-id strings (possibly empty)."""
+    result = list_available_model_ids()
+    assert isinstance(result, list)
+    assert all(isinstance(mid, str) for mid in result)
+    assert result == sorted(set(result))

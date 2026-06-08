@@ -1,15 +1,66 @@
 """
 Logic for selecting the best available LLM model for various tasks.
+
+Each ``pick_*`` function defines a provider-spanning preference list and returns
+the first model whose provider is configured in this deployment. The lists are
+hand-ranked and meant to be tuned over time — the model catalogue itself lives
+in ``llm.csv``.
 """
 
 from intentkit.config.config import config
-from intentkit.models.llm import LLMProvider
+from intentkit.models.llm import AVAILABLE_MODELS, LLMProvider
+
+# Universal last-resort model id. Also used as the SQLAlchemy column default for
+# TemplateTable, so it must be a plausible model even when nothing is configured.
+_DEFAULT_FALLBACK_MODEL = "gpt-5.4-mini"
+
+
+def _first_configured(
+    order: list[tuple[str, LLMProvider]],
+    *,
+    lite_compatible: bool = False,
+    fallback: str | None = None,
+) -> str:
+    """Return the first model id whose provider is configured.
+
+    The configured OpenAI-/Anthropic-compatible models are appended as a last
+    resort (the ``*_lite`` variant when ``lite_compatible`` is set). If no
+    provider in the resulting list is configured, ``fallback`` is returned when
+    given, otherwise a ``RuntimeError`` is raised.
+    """
+    candidates = list(order)
+
+    # Append the configured OpenAI-/Anthropic-compatible models as a last
+    # resort (the *_lite variant when requested).
+    compatible = [
+        (
+            LLMProvider.OPENAI_COMPATIBLE,
+            config.openai_compatible_model_lite
+            if lite_compatible
+            else config.openai_compatible_model,
+        ),
+        (
+            LLMProvider.ANTHROPIC_COMPATIBLE,
+            config.anthropic_compatible_model_lite
+            if lite_compatible
+            else config.anthropic_compatible_model,
+        ),
+    ]
+    for provider, model_id in compatible:
+        if provider.is_configured and model_id:
+            candidates.append((model_id, provider))
+
+    for model_id, provider in candidates:
+        if provider.is_configured:
+            return model_id
+
+    if fallback is not None:
+        return fallback
+    raise RuntimeError("No model available: missing all required API keys")
 
 
 def pick_summarize_model() -> str:
-    """
-    Pick the best available summarize model based on configured API keys.
-    """
+    """Pick the best available summarize model based on configured API keys."""
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.1-flash-lite-preview", LLMProvider.GOOGLE),
         ("deepseek/deepseek-v4-flash", LLMProvider.OPENROUTER),
@@ -19,32 +70,14 @@ def pick_summarize_model() -> str:
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
-    if (
-        LLMProvider.OPENAI_COMPATIBLE.is_configured
-        and config.openai_compatible_model_lite
-    ):
-        order.append(
-            (config.openai_compatible_model_lite, LLMProvider.OPENAI_COMPATIBLE)
-        )
-    if (
-        LLMProvider.ANTHROPIC_COMPATIBLE.is_configured
-        and config.anthropic_compatible_model_lite
-    ):
-        order.append(
-            (config.anthropic_compatible_model_lite, LLMProvider.ANTHROPIC_COMPATIBLE),
-        )
-
-    for model_id, provider in order:
-        if provider.is_configured:
-            return model_id
-
-    raise RuntimeError("No summarize model available: missing all required API keys")
+    return _first_configured(order, lite_compatible=True)
 
 
 def pick_default_model() -> str:
-    """
-    Pick the best available default model for agents based on configured API keys.
-    Used as the default_factory for the agent model field.
+    """Pick the best available default model for agents.
+
+    Used as the ``default_factory`` for the agent model field, so it must never
+    crash — it falls back to a reasonable model when nothing is configured.
     """
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3-flash-preview", LLMProvider.GOOGLE),
@@ -55,23 +88,136 @@ def pick_default_model() -> str:
         ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
-    if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
-        order.append((config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
-    if (
-        LLMProvider.ANTHROPIC_COMPATIBLE.is_configured
-        and config.anthropic_compatible_model
-    ):
-        order.append(
-            (config.anthropic_compatible_model, LLMProvider.ANTHROPIC_COMPATIBLE)
-        )
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
 
-    for model_id, provider in order:
-        if provider.is_configured:
-            return model_id
 
-    # Fallback to a reasonable default rather than crashing, since this is
-    # also used as a SQLAlchemy column default for TemplateTable.
-    return "gpt-5.4-mini"
+def pick_lite_model() -> str:
+    """Pick the cheapest/fastest "lite" model — good enough for simple tasks."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("gemini-3.1-flash-lite-preview", LLMProvider.GOOGLE),
+        ("gpt-5.4-nano", LLMProvider.OPENAI),
+        ("z-ai/glm-4.7-flash", LLMProvider.OPENROUTER),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
+        ("grok-4.20-non-reasoning", LLMProvider.XAI),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(
+        order, lite_compatible=True, fallback=_DEFAULT_FALLBACK_MODEL
+    )
+
+
+def pick_smartest_model() -> str:
+    """Pick the highest-intelligence model for complex reasoning."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("anthropic/claude-opus-4.8", LLMProvider.OPENROUTER),
+        ("gemini-3.1-pro-preview-customtools", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("grok-4.3", LLMProvider.XAI),
+        ("deepseek-v4-pro", LLMProvider.DEEPSEEK),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5-pro", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_fastest_model() -> str:
+    """Pick the lowest-latency model for snappy, simple interactions."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("gemini-3-flash-preview", LLMProvider.GOOGLE),
+        ("gpt-5.4-nano", LLMProvider.OPENAI),
+        ("qwen/qwen3.6-flash", LLMProvider.OPENROUTER),
+        ("grok-4.20-non-reasoning", LLMProvider.XAI),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(
+        order, lite_compatible=True, fallback=_DEFAULT_FALLBACK_MODEL
+    )
+
+
+def pick_multimodal_model() -> str:
+    """Pick the best model that accepts image/audio/video input."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("gemini-3.5-flash", LLMProvider.GOOGLE),
+        ("google/gemini-3.5-flash", LLMProvider.OPENROUTER),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("grok-4.3", LLMProvider.XAI),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_writing_model() -> str:
+    """Pick the best model for high-quality general (English) writing."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("anthropic/claude-sonnet-4.6", LLMProvider.OPENROUTER),
+        ("gemini-3.1-pro-preview-customtools", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("deepseek-v4-pro", LLMProvider.DEEPSEEK),
+        ("grok-4.3", LLMProvider.XAI),
+        ("mimo-v2.5-pro", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_chinese_writing_model() -> str:
+    """Pick the best model for Chinese writing (Chinese-native models first)."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("qwen/qwen3.7-max", LLMProvider.OPENROUTER),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5-pro", LLMProvider.MIMO_PLAN),
+        ("deepseek-v4-pro", LLMProvider.DEEPSEEK),
+        ("gemini-3.1-pro-preview-customtools", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("grok-4.3", LLMProvider.XAI),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_finance_model() -> str:
+    """Pick the best model for financial/quantitative analysis."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("anthropic/claude-opus-4.8", LLMProvider.OPENROUTER),
+        ("deepseek-v4-pro", LLMProvider.DEEPSEEK),
+        ("gemini-3.1-pro-preview-customtools", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("grok-4.3", LLMProvider.XAI),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5-pro", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_search_model() -> str:
+    """Pick the best model for web/realtime search (native-search providers first)."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("grok-4.3", LLMProvider.XAI),
+        ("gemini-3-flash-preview", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("x-ai/grok-4.3", LLMProvider.OPENROUTER),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
+def pick_broadest_knowledge_model() -> str:
+    """Pick the model with the broadest world knowledge."""
+    order: list[tuple[str, LLMProvider]] = [
+        ("anthropic/claude-opus-4.8", LLMProvider.OPENROUTER),
+        ("gemini-3.1-pro-preview-customtools", LLMProvider.GOOGLE),
+        ("gpt-5.4", LLMProvider.OPENAI),
+        ("grok-4.3", LLMProvider.XAI),
+        ("deepseek-v4-pro", LLMProvider.DEEPSEEK),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("mimo-v2.5-pro", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
 
 
 def pick_tool_selector_model() -> str | None:
@@ -113,18 +259,13 @@ def pick_long_context_model() -> str:
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
-    if LLMProvider.OPENAI_COMPATIBLE.is_configured and config.openai_compatible_model:
-        order.append((config.openai_compatible_model, LLMProvider.OPENAI_COMPATIBLE))
-    if (
-        LLMProvider.ANTHROPIC_COMPATIBLE.is_configured
-        and config.anthropic_compatible_model
-    ):
-        order.append(
-            (config.anthropic_compatible_model, LLMProvider.ANTHROPIC_COMPATIBLE)
-        )
+    return _first_configured(order)
 
-    for model_id, provider in order:
-        if provider.is_configured:
-            return model_id
 
-    raise RuntimeError("No long-context model available: missing all required API keys")
+def list_available_model_ids() -> list[str]:
+    """Return the sorted, distinct model IDs available in this deployment.
+
+    Reflects the providers configured at process start (``AVAILABLE_MODELS``),
+    which is fixed for the lifetime of a deployment.
+    """
+    return sorted({model.id for model in AVAILABLE_MODELS.values()})

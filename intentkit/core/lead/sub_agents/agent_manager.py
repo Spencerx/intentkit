@@ -27,7 +27,19 @@ from intentkit.core.lead.tools.list_tools import lead_list_available_tools_tool
 from intentkit.core.lead.tools.llm import lead_get_available_llms_tool
 from intentkit.core.lead.tools.update_team_agent import update_team_agent_tool
 from intentkit.models.agent import Agent
-from intentkit.models.llm_picker import pick_default_model
+from intentkit.models.llm_picker import (
+    list_available_model_ids,
+    pick_broadest_knowledge_model,
+    pick_chinese_writing_model,
+    pick_default_model,
+    pick_fastest_model,
+    pick_finance_model,
+    pick_lite_model,
+    pick_multimodal_model,
+    pick_search_model,
+    pick_smartest_model,
+    pick_writing_model,
+)
 
 
 def get_agent_manager_tools() -> Sequence[BaseTool]:
@@ -47,6 +59,48 @@ def get_agent_manager_tools() -> Sequence[BaseTool]:
     ]
 
 
+def _model_selection_section() -> str:
+    """Build the dynamic "Model Selection" prompt section.
+
+    Resolves the deployment's recommended models and supported model IDs at
+    build time. The sub-agent is cached and the catalogue is fixed for the
+    lifetime of a deployment, so this runs once per cache build.
+    """
+    recommended = (
+        f"- Default workhorse: `{pick_default_model()}`\n"
+        f"- Lite (cheap & fast, simple tasks): `{pick_lite_model()}`\n"
+        f"- Smartest (complex reasoning): `{pick_smartest_model()}`\n"
+        f"- Fastest (lowest latency): `{pick_fastest_model()}`\n"
+        f"- Multimodal (image/audio/video input): `{pick_multimodal_model()}`\n"
+        f"- Best writing: `{pick_writing_model()}`\n"
+        f"- Best Chinese writing: `{pick_chinese_writing_model()}`\n"
+        f"- Best finance/analysis: `{pick_finance_model()}`\n"
+        f"- Best search/realtime: `{pick_search_model()}`\n"
+        f"- Broadest knowledge: `{pick_broadest_knowledge_model()}`\n"
+    )
+
+    model_ids = list_available_model_ids()
+    supported = ", ".join(f"`{mid}`" for mid in model_ids) or (
+        "(call `lead_get_available_llms` to list them)"
+    )
+
+    return (
+        "### Model Selection\n\n"
+        "The system's model catalogue is dynamic — which models exist depends "
+        "on the providers configured in this deployment — but it is fixed and "
+        "predictable for the lifetime of a running deployment. The picks below "
+        "are already resolved to models available here; prefer them over "
+        "guessing, and match the model to the agent's purpose.\n\n"
+        "Recommended models by use case:\n"
+        f"{recommended}\n"
+        "Supported model IDs in this deployment:\n"
+        f"{supported}\n\n"
+        "If the user names a specific model, map it to the closest ID in the "
+        "list above. Call `lead_get_available_llms` only when you need detailed "
+        "specs (pricing, context length, capabilities).\n\n"
+    )
+
+
 def build_agent_manager(team_id: str) -> Agent:
     """Build an in-memory Agent Manager sub-agent."""
     now = datetime.now(timezone.utc)
@@ -58,13 +112,13 @@ def build_agent_manager(team_id: str) -> Agent:
         "### Agent Creation\n\n"
         "Guide user through:\n"
         "1. Name, slug, and purpose\n"
-        "2. Model — `lead_get_available_llms` for options. "
-        "High intelligence for complex reasoning, high speed for simple tasks.\n"
+        "2. Model — pick by purpose using the Model Selection section below.\n"
         "3. Tools — ALWAYS call `lead_list_available_tools` first to see all "
         "available categories and individual tools. Pick only the tools the "
         "agent needs based on its purpose. Keep under 20.\n"
         "4. Additional settings as needed\n\n"
-        "### Tool Configuration (IMPORTANT)\n\n"
+        + _model_selection_section()
+        + "### Tool Configuration (IMPORTANT)\n\n"
         "You MUST call `lead_list_available_tools` before configuring tools. "
         "Only use tool names from that list.\n\n"
         "Format:\n"
