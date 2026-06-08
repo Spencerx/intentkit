@@ -104,19 +104,6 @@ def _safe_url_fetcher(url: str, timeout: int = 10, ssl_context: Any = None) -> A
     return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
 
 
-def _resolve_image_url(url: str | None, cdn_base: str | None) -> str:
-    """Resolve a potentially relative image URL to an absolute URL."""
-    if not url:
-        return ""
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-    if cdn_base:
-        base = cdn_base.rstrip("/")
-        rel = url.lstrip("/")
-        return f"{base}/{rel}"
-    return url
-
-
 def _render_template(template: str, **kwargs: object) -> str:
     """Simple template rendering with {{ var }}, {% if %}, {% for %} support."""
     result = template
@@ -156,8 +143,6 @@ def _generate_pdf(
     agent_name: str,
     created_at: datetime,
     tags: list[str] | None = None,
-    cover: str | None = None,
-    cdn_base: str | None = None,
 ) -> bytes:
     """Convert post content to a styled PDF. Runs synchronously (CPU-bound)."""
     import markdown as md
@@ -170,7 +155,6 @@ def _generate_pdf(
     )
 
     date_str = created_at.strftime("%B %d, %Y")
-    resolved_cover = _resolve_image_url(cover, cdn_base)
 
     full_html = _render_template(
         _POST_TEMPLATE,
@@ -179,7 +163,6 @@ def _generate_pdf(
         agent_name=agent_name,
         date=date_str,
         tags=tags or [],
-        cover=resolved_cover,
     )
 
     result = HTML(string=full_html, url_fetcher=_safe_url_fetcher).write_pdf()
@@ -194,8 +177,6 @@ async def generate_post_pdf(
     agent_name: str,
     created_at: datetime,
     tags: list[str] | None = None,
-    cover: str | None = None,
-    cdn_base: str | None = None,
 ) -> bytes:
     """Convert post content to a styled PDF asynchronously.
 
@@ -209,20 +190,17 @@ async def generate_post_pdf(
         agent_name,
         created_at,
         tags,
-        cover,
-        cdn_base,
     )
 
 
 async def post_pdf_response(
     post: Any,
     filename: str | None = None,
-    cdn_base: str | None = None,
 ) -> Response:
     """Generate a PDF from a post record and return it as a download Response.
 
     Accepts any object with title, markdown, agent_name, created_at, tags,
-    cover, slug, and id attributes (e.g., AgentPostTable).
+    slug, and id attributes (e.g., AgentPostTable).
     """
     pdf_bytes = await generate_post_pdf(
         title=post.title,
@@ -230,8 +208,6 @@ async def post_pdf_response(
         agent_name=post.agent_name,
         created_at=post.created_at,
         tags=post.tags,
-        cover=post.cover,
-        cdn_base=cdn_base,
     )
     fname = filename or f"{post.slug or post.id}.pdf"
     return Response(

@@ -5,7 +5,6 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from intentkit.config.config import config
 from intentkit.config.db import get_db
 from intentkit.core.team.subscription import (
     get_subscriptions,
@@ -197,7 +196,7 @@ async def get_post_pdf(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return await post_pdf_response(post, cdn_base=config.aws_s3_cdn_url)
+    return await post_pdf_response(post)
 
 
 @content_router.get(
@@ -221,9 +220,7 @@ async def get_post_pdf_by_slug(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return await post_pdf_response(
-        post, filename=f"{slug}.pdf", cdn_base=config.aws_s3_cdn_url
-    )
+    return await post_pdf_response(post, filename=f"{slug}.pdf")
 
 
 # ---------------------------------------------------------------------------

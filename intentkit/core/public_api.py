@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Path, Query, Response
 from sqlalchemy import select
 
-from intentkit.config.config import config
 from intentkit.config.db import get_session
 from intentkit.core.agent_post import get_agent_post
 from intentkit.core.share_link import (
@@ -121,6 +120,6 @@ def create_public_router() -> APIRouter:
         post = await get_agent_post(link.target_id)
         if post is None:
             raise IntentKitAPIError(404, "NotFound", "Post not found")
-        return await post_pdf_response(post, cdn_base=config.aws_s3_cdn_url)
+        return await post_pdf_response(post)
 
     return router

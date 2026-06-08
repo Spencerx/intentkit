@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 from intentkit.utils.pdf import (
     _BLOCKED_RESOURCE,  # pyright: ignore[reportPrivateUsage]
+    _POST_TEMPLATE,  # pyright: ignore[reportPrivateUsage]
+    _render_template,  # pyright: ignore[reportPrivateUsage]
     _safe_url_fetcher,  # pyright: ignore[reportPrivateUsage]
 )
 
@@ -66,3 +68,27 @@ def test_allows_public_host():
 
     assert result is sentinel
     fetch_mock.assert_called_once()
+
+
+def test_rendered_post_html_has_no_cover():
+    """The exported PDF must not render a post cover image.
+
+    Covers are list-only; even if a stray ``cover`` value is passed through, the
+    template should ignore it and emit no cover ``<img>``.
+    """
+    html = _render_template(
+        _POST_TEMPLATE,
+        title="Hello World",
+        content="<p>Body content</p>",
+        agent_name="Agent",
+        date="January 01, 2026",
+        tags=["alpha"],
+        cover="https://cdn.example.com/cover.png",
+    )
+
+    assert "post-cover" not in html
+    assert "cover.png" not in html
+    # The rest of the post still renders.
+    assert "Hello World" in html
+    assert "<p>Body content</p>" in html
+    assert "alpha" in html

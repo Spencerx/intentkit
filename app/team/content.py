@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 
-from intentkit.config.config import config
 from intentkit.config.db import get_session
 from intentkit.core.team.feed import query_activity_feed, query_post_feed
 from intentkit.core.team.subscription import (
@@ -184,4 +183,4 @@ async def get_post_pdf(
             )
 
     await get_accessible_agent(post.agent_id, team_id)
-    return await post_pdf_response(post, cdn_base=config.aws_s3_cdn_url)
+    return await post_pdf_response(post)
