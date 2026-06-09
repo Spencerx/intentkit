@@ -20,6 +20,7 @@ from intentkit.core.system_tools.call_agent import (
     get_start_message_attachments,
     render_attachments_awareness,
 )
+from intentkit.models.agent.core import AgentVisibility
 from intentkit.models.chat import (
     AuthorType,
     ChatMessage,
@@ -149,16 +150,33 @@ class LeadCallAgent(LeadTool):
         message: str,
         attachments: list[ChatMessageAttachment] | None,
     ) -> tuple[str, list[ChatMessageAttachment]]:
-        """Call a database agent, scoped to the same team."""
+        """Call a database agent: the team's own agents or public agents it follows."""
         from intentkit.core.agent import get_agent_by_id_or_slug
         from intentkit.core.engine import execute_agent
+        from intentkit.core.lead.service import is_agent_followed
 
         resolved_agent = await get_agent_by_id_or_slug(agent_id)
         if not resolved_agent:
             raise ToolException(f"Agent '{agent_id}' not found")
 
+        if resolved_agent.archived_at is not None:
+            raise ToolException(f"Agent '{agent_id}' is archived")
+
+        # Own-team agents are always delegable. Cross-team delegation is allowed
+        # only for public agents this team explicitly follows (lead_follow_agent),
+        # so follow/unfollow is authoritative for what the lead can call.
         if resolved_agent.team_id != context.team_id:
-            raise ToolException(f"Agent '{agent_id}' does not belong to this team")
+            is_public = (resolved_agent.visibility or 0) >= AgentVisibility.PUBLIC
+            is_followed = (
+                is_public
+                and context.team_id is not None
+                and await is_agent_followed(context.team_id, resolved_agent.id)
+            )
+            if not is_followed:
+                raise ToolException(
+                    f"Agent '{agent_id}' is not accessible to this team. "
+                    "Use lead_follow_agent to follow it first."
+                )
 
         chat_message = self._build_chat_message(
             context, resolved_agent.id, context.team_id, message, attachments

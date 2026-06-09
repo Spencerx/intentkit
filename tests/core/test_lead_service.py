@@ -126,6 +126,102 @@ async def test_get_team_agents_empty():
 
 
 # ---------------------------------------------------------------------------
+# list_public_agents
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_public_agents_returns_agents():
+    cm, db = _mock_session()
+
+    row1 = _mock_agent_row(agent_id="p1", team_id="other", name="Public 1")
+    row2 = _mock_agent_row(agent_id="p2", team_id="other", name="Public 2")
+
+    mock_scalars_result = MagicMock()
+    mock_scalars_result.__iter__ = MagicMock(return_value=iter([row1, row2]))
+    db.scalars = AsyncMock(return_value=mock_scalars_result)
+
+    with (
+        patch(f"{MODULE}.get_session", return_value=cm),
+        patch(f"{MODULE}.Agent") as MockAgent,
+    ):
+        a1, a2 = MagicMock(), MagicMock()
+        MockAgent.model_validate = MagicMock(side_effect=[a1, a2])
+
+        from intentkit.core.lead.service import list_public_agents
+
+        result = await list_public_agents()
+
+    assert result == [a1, a2]
+    db.scalars.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_list_public_agents_with_search():
+    cm, db = _mock_session()
+
+    mock_scalars_result = MagicMock()
+    mock_scalars_result.__iter__ = MagicMock(return_value=iter([]))
+    db.scalars = AsyncMock(return_value=mock_scalars_result)
+
+    with patch(f"{MODULE}.get_session", return_value=cm):
+        from intentkit.core.lead.service import list_public_agents
+
+        result = await list_public_agents(search="finance", limit=5)
+
+    assert result == []
+    db.scalars.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# get_followed_agent_ids
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_followed_agent_ids():
+    cm, db = _mock_session()
+    db.scalars = AsyncMock(return_value=["a1", "a2", "a1"])
+
+    with patch(f"{MODULE}.get_session", return_value=cm):
+        from intentkit.core.lead.service import get_followed_agent_ids
+
+        result = await get_followed_agent_ids("team-1")
+
+    assert result == {"a1", "a2"}
+
+
+# ---------------------------------------------------------------------------
+# get_followed_external_agents
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_followed_external_agents():
+    cm, db = _mock_session()
+
+    row = _mock_agent_row(agent_id="ext-1", team_id="other-team", name="External")
+
+    mock_scalars_result = MagicMock()
+    mock_scalars_result.__iter__ = MagicMock(return_value=iter([row]))
+    db.scalars = AsyncMock(return_value=mock_scalars_result)
+
+    with (
+        patch(f"{MODULE}.get_session", return_value=cm),
+        patch(f"{MODULE}.Agent") as MockAgent,
+    ):
+        agent = MagicMock()
+        MockAgent.model_validate = MagicMock(return_value=agent)
+
+        from intentkit.core.lead.service import get_followed_external_agents
+
+        result = await get_followed_external_agents("team-1")
+
+    assert result == [agent]
+    MockAgent.model_validate.assert_called_once_with(row)
+
+
+# ---------------------------------------------------------------------------
 # get_team_with_members
 # ---------------------------------------------------------------------------
 

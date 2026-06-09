@@ -20,6 +20,10 @@ from intentkit.core.lead.tools.edit_autonomous_task import (
     LeadEditAutonomousTask,
     lead_edit_autonomous_task_tool,
 )
+from intentkit.core.lead.tools.follow_agent import (
+    LeadFollowAgent,
+    lead_follow_agent_tool,
+)
 from intentkit.core.lead.tools.get_post import (
     LeadGetPost,
     lead_get_post_tool,
@@ -40,6 +44,10 @@ from intentkit.core.lead.tools.list_autonomous_tasks import (
     LeadListAutonomousTasks,
     lead_list_autonomous_tasks_tool,
 )
+from intentkit.core.lead.tools.list_public_agents import (
+    LeadListPublicAgents,
+    lead_list_public_agents_tool,
+)
 from intentkit.core.lead.tools.list_team_agents import (
     ListTeamAgents,
     list_team_agents_tool,
@@ -59,6 +67,10 @@ from intentkit.core.lead.tools.recent_team_activities import (
 from intentkit.core.lead.tools.recent_team_posts import (
     LeadRecentTeamPosts,
     lead_recent_team_posts_tool,
+)
+from intentkit.core.lead.tools.unfollow_agent import (
+    LeadUnfollowAgent,
+    lead_unfollow_agent_tool,
 )
 from intentkit.core.lead.tools.update_self import (
     LeadUpdateSelf,
@@ -92,6 +104,8 @@ __all__ = [
     "lead_delete_autonomous_task_tool",
     "LeadEditAutonomousTask",
     "lead_edit_autonomous_task_tool",
+    "LeadFollowAgent",
+    "lead_follow_agent_tool",
     "LeadGetAvailableLLMs",
     "lead_get_available_llms_tool",
     "LeadGetPost",
@@ -102,10 +116,14 @@ __all__ = [
     "lead_list_autonomous_tasks_tool",
     "LeadListAvailableTools",
     "lead_list_available_tools_tool",
+    "LeadListPublicAgents",
+    "lead_list_public_agents_tool",
     "LeadRecentTeamActivities",
     "lead_recent_team_activities_tool",
     "LeadRecentTeamPosts",
     "lead_recent_team_posts_tool",
+    "LeadUnfollowAgent",
+    "lead_unfollow_agent_tool",
     "LeadUpdateSelf",
     "lead_update_self_tool",
     "LeadUpdateSelfMemory",
