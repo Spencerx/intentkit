@@ -12,6 +12,7 @@ import {
   X,
   Activity,
   FileText,
+  ListTodo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ interface ExtraNavLink {
 
 interface ChatSidebarProps {
   agentId: string;
-  activeTab?: "chat" | "activities" | "posts";
+  activeTab?: "chat" | "activities" | "posts" | "tasks";
   threads: ChatThread[];
   currentThreadId: string | null;
   isNewThread: boolean;
@@ -226,6 +227,18 @@ export function ChatSidebar({
       {!hideNavLinks && (
         <>
           <div className="px-3 pb-3 space-y-1">
+            <Link
+              href={`/agent/${agentId}/tasks`}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                activeTab === "tasks"
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <ListTodo className="h-4 w-4" />
+              Tasks
+            </Link>
             {enableActivity && (
               <Link
                 href={`/agent/${agentId}/activities`}

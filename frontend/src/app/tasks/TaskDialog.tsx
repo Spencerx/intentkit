@@ -18,6 +18,8 @@ interface TaskDialogProps {
   onOpenChange: (open: boolean) => void;
   task?: AutonomousTask | null;
   onSave: (task: Partial<AutonomousTask>) => Promise<void>;
+  // Pre-fill the target agent when creating a new task (e.g. from an agent page).
+  defaultTargetAgentId?: string;
 }
 
 export function TaskDialog({
@@ -25,6 +27,7 @@ export function TaskDialog({
   onOpenChange,
   task,
   onSave,
+  defaultTargetAgentId,
 }: TaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<AutonomousTask>>({
@@ -56,10 +59,10 @@ export function TaskDialog({
         prompt: "",
         enabled: true,
         has_memory: false,
-        target_agent_id: "",
+        target_agent_id: defaultTargetAgentId || "",
       });
     }
-  }, [task, open]);
+  }, [task, open, defaultTargetAgentId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
