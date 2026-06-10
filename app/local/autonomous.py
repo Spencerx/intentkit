@@ -14,7 +14,7 @@ from intentkit.models.autonomous import (
 )
 
 from app.common.autonomous import AutonomousResponse
-from app.local.lead import LEAD_TEAM_ID
+from app.local.lead import LEAD_TEAM_ID, LEAD_USER_ID
 
 autonomous_router = APIRouter()
 
@@ -46,7 +46,9 @@ async def add_autonomous(
     ),
 ) -> AutonomousResponse:
     """Add a new autonomous task to the team."""
-    added_task = await add_autonomous_task(LEAD_TEAM_ID, task_request)
+    added_task = await add_autonomous_task(
+        LEAD_TEAM_ID, task_request, created_by=LEAD_USER_ID
+    )
     return AutonomousResponse.from_model(added_task)
 
 

@@ -26,6 +26,7 @@ def _fake_row(**overrides):
         id="task-1",
         team_id="team-1",
         target_agent_id=None,
+        created_by=None,
         name=None,
         description=None,
         cron="*/5 * * * *",
@@ -67,7 +68,21 @@ async def test_add_task_belongs_to_team():
         assert result.status == AutonomousTaskStatus.WAITING
         assert result.id
         session.add.assert_called_once()
+        # The created row carries the caller's id (here: none).
+        assert session.add.call_args.args[0].created_by is None
         session.commit.assert_called_once()
+    finally:
+        patcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_add_task_records_creator():
+    patcher, session = _patch_session()
+    try:
+        req = AutonomousCreateRequest(cron="*/5 * * * *", prompt="do work")
+        result = await add_autonomous_task("team-1", req, created_by="user-42")
+        assert result.created_by == "user-42"
+        assert session.add.call_args.args[0].created_by == "user-42"
     finally:
         patcher.stop()
 
@@ -157,6 +172,22 @@ async def test_update_task_applies_partial_change():
         assert result.prompt == "new"
         assert row.prompt == "new"
         session.commit.assert_called_once()
+    finally:
+        patcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_unpins_target_agent():
+    patcher, session = _patch_session()
+    try:
+        row = _fake_row(team_id="team-1", target_agent_id="agent-x")
+        session.get = AsyncMock(return_value=row)
+        # Explicit None must clear the pinned agent (un-pin → lead-orchestrated).
+        result = await update_autonomous_task(
+            "team-1", "task-1", AutonomousUpdateRequest(target_agent_id=None)
+        )
+        assert row.target_agent_id is None
+        assert result.target_agent_id is None
     finally:
         patcher.stop()
 

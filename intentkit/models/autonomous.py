@@ -216,6 +216,13 @@ class AutonomousTask(BaseModel):
             ),
         ),
     ] = None
+    created_by: Annotated[
+        str | None,
+        PydanticField(
+            default=None,
+            description="User ID of the team member who created the task.",
+        ),
+    ] = None
     name: Annotated[
         str | None,
         PydanticField(
@@ -344,6 +351,11 @@ class AutonomousTaskTable(Base):
         String,
         nullable=True,
         comment="Optional agent to run directly; null means lead-orchestrated",
+    )
+    created_by: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment="User ID of the team member who created the task",
     )
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -80,7 +80,9 @@ class LeadAddAutonomousTask(LeadTool):
             has_memory=has_memory,
             target_agent_id=target_agent_id,
         )
-        created_task = await add_autonomous_task(context.team_id, task_request)
+        created_task = await add_autonomous_task(
+            context.team_id, task_request, created_by=context.user_id
+        )
         return AddAutonomousTaskOutput(task=created_task)
 
 

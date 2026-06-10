@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from intentkit.models.autonomous import AutonomousTask, AutonomousTaskStatus
 
 from app.local.autonomous import autonomous_router
-from app.local.lead import LEAD_TEAM_ID
+from app.local.lead import LEAD_TEAM_ID, LEAD_USER_ID
 
 
 # Create a test app with the autonomous router
@@ -66,8 +66,9 @@ async def test_list_autonomous(client, monkeypatch):
 async def test_add_autonomous(client, mock_task, monkeypatch):
     import app.local.autonomous as autonomous_module
 
-    async def mock_add_autonomous_task(team_id, task_request):
+    async def mock_add_autonomous_task(team_id, task_request, created_by=None):
         assert team_id == LEAD_TEAM_ID
+        assert created_by == LEAD_USER_ID
         return mock_task
 
     monkeypatch.setattr(

@@ -28,7 +28,14 @@ class EditAutonomousTaskInput(BaseModel):
     )
     target_agent_id: str | None = Field(
         default=None,
-        description="Optional team agent to run the task on directly.",
+        description="Pin the task to run directly on this team agent.",
+    )
+    clear_target_agent: bool = Field(
+        default=False,
+        description=(
+            "Set true to un-pin the target agent so the task runs via the team "
+            "lead instead. Ignored when target_agent_id is also provided."
+        ),
     )
 
 
@@ -61,6 +68,7 @@ class LeadEditAutonomousTask(LeadTool):
         enabled: bool | None = None,
         has_memory: bool | None = None,
         target_agent_id: str | None = None,
+        clear_target_agent: bool = False,
         **kwargs: Any,
     ) -> EditAutonomousTaskOutput:
         context = self.get_context()
@@ -77,7 +85,13 @@ class LeadEditAutonomousTask(LeadTool):
             "has_memory": has_memory,
             "target_agent_id": target_agent_id,
         }
-        provided = {key: value for key, value in candidates.items() if value is not None}
+        provided = {
+            key: value for key, value in candidates.items() if value is not None
+        }
+        # Explicit un-pin: send target_agent_id=None (None can't be expressed via
+        # the "drop None" filter above, so it needs a dedicated flag).
+        if clear_target_agent and target_agent_id is None:
+            provided["target_agent_id"] = None
         task_update = AutonomousUpdateRequest(**provided)
         updated_task = await update_autonomous_task(
             context.team_id, task_id, task_update

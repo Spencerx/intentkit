@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import AfterValidator, BaseModel
 
 from intentkit.core.engine import execute_agent, stream_agent
-from intentkit.core.lead.engine import stream_lead
+from intentkit.core.lead.engine import execute_lead, stream_lead
 from intentkit.core.lead.service import verify_team_membership
 from intentkit.core.team.channel import set_push_channel, set_push_channel_if_empty
 from intentkit.core.team.wechat_session_notice import (
@@ -89,6 +89,27 @@ async def stream(
 ) -> StreamingResponse:
     """Stream agent execution results in real-time using Server-Sent Events."""
     return _sse_response(stream_agent(message))
+
+
+class LeadMessageExecuteRequest(BaseModel):
+    """Request body for executing the team lead with a pre-built message."""
+
+    team_id: str
+    user_id: str
+    message: ChatMessageCreate
+
+
+# ⚠️ INTERNAL USE ONLY - This endpoint bypasses authentication for internal microservice calls
+@core_router.post("/execute-lead", response_model=list[ChatMessage])
+async def execute_lead_message(
+    request: LeadMessageExecuteRequest = Body(...),
+) -> list[ChatMessage]:
+    """Execute the team lead with a pre-built message and return all results.
+
+    Used by the autonomous scheduler so lead orchestration runs in the core
+    service rather than in the scheduler process.
+    """
+    return await execute_lead(request.team_id, request.user_id, request.message)
 
 
 class LeadExecuteRequest(BaseModel):

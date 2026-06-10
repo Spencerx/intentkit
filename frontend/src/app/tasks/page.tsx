@@ -237,6 +237,14 @@ export default function AllTasksPage() {
                         "Team lead decides"
                       )}
                     </div>
+                    {task.created_by && task.created_by !== "system" && (
+                      <div>
+                        <span className="font-semibold text-muted-foreground">
+                          Created by:{" "}
+                        </span>
+                        <span className="font-mono">{task.created_by}</span>
+                      </div>
+                    )}
                   </div>
                   {task.prompt && (
                     <div className="mt-4">

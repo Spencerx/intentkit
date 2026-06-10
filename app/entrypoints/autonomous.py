@@ -5,8 +5,7 @@ from epyxid import XID
 from intentkit.core.agent import get_agent
 from intentkit.core.agent_activity import create_agent_activity
 from intentkit.core.chat import clear_thread_memory
-from intentkit.core.client import execute_agent
-from intentkit.core.lead import execute_lead
+from intentkit.core.client import execute_agent, execute_lead
 from intentkit.models.agent_activity import AgentActivityCreate
 from intentkit.models.chat import AuthorType, ChatMessage, ChatMessageCreate
 

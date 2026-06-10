@@ -1011,6 +1011,7 @@ export interface AutonomousTask {
   id: string;
   team_id?: string;
   target_agent_id?: string | null;
+  created_by?: string | null;
   name?: string;
   description?: string;
   cron?: string;

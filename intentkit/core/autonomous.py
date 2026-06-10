@@ -49,6 +49,7 @@ def _to_row(task: AutonomousTask) -> AutonomousTaskTable:
         id=task.id,
         team_id=task.team_id,
         target_agent_id=task.target_agent_id,
+        created_by=task.created_by,
         name=task.name,
         description=task.description,
         cron=task.cron,
@@ -81,9 +82,15 @@ async def get_autonomous_task(team_id: str, task_id: str) -> AutonomousTask:
 
 
 async def add_autonomous_task(
-    team_id: str, task_request: AutonomousCreateRequest
+    team_id: str,
+    task_request: AutonomousCreateRequest,
+    created_by: str | None = None,
 ) -> AutonomousTask:
-    """Create a new autonomous task for a team."""
+    """Create a new autonomous task for a team.
+
+    ``created_by`` is the user the task is attributed to (the authenticated
+    caller); it is never taken from the request body.
+    """
     validate_cron_schedule(task_request.cron)
 
     async with get_session() as session:
@@ -94,6 +101,7 @@ async def add_autonomous_task(
             id=str(XID()),
             team_id=team_id,
             target_agent_id=task_request.target_agent_id,
+            created_by=created_by,
             cron=task_request.cron,
             prompt=task_request.prompt,
             name=task_request.name,

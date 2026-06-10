@@ -52,8 +52,8 @@ async def add_autonomous(
     auth: tuple[str, str] = Depends(verify_team_member),
 ) -> AutonomousResponse:
     """Add a new autonomous task to a team."""
-    _user_id, team_id = auth
-    added_task = await add_autonomous_task(team_id, task_request)
+    user_id, team_id = auth
+    added_task = await add_autonomous_task(team_id, task_request, created_by=user_id)
     return AutonomousResponse.from_model(added_task)
 
 
