@@ -2,6 +2,7 @@
 
 from intentkit.core.lead.cache import invalidate_lead_cache
 from intentkit.core.lead.engine import (
+    execute_lead,
     get_lead_agent,
     stream_lead,
 )
@@ -13,6 +14,7 @@ from intentkit.core.lead.service import (
 )
 
 __all__ = [
+    "execute_lead",
     "get_lead_agent",
     "invalidate_lead_cache",
     "stream_lead",

@@ -265,32 +265,6 @@ class AgentResponse(Agent):
         for field in privacy_fields:
             data.pop(field, None)
 
-        # Filter autonomous list to only keep safe fields
-        if "autonomous" in data and data["autonomous"]:
-            filtered_autonomous = []
-            for item in data["autonomous"]:
-                if isinstance(item, dict):
-                    # Only keep safe fields: id, name, description, enabled
-                    filtered_item = {
-                        key: item[key]
-                        for key in ["id", "name", "description", "enabled"]
-                        if key in item
-                    }
-                    filtered_autonomous.append(filtered_item)
-                else:
-                    # Handle AgentAutonomous objects
-                    item_dict = (
-                        item.model_dump() if hasattr(item, "model_dump") else dict(item)
-                    )
-                    # Only keep safe fields: id, name, description, enabled
-                    filtered_item = {
-                        key: item_dict[key]
-                        for key in ["id", "name", "description", "enabled"]
-                        if key in item_dict
-                    }
-                    filtered_autonomous.append(filtered_item)
-            data["autonomous"] = filtered_autonomous
-
         # Convert examples to AgentExample instances if they're dictionaries
         if "examples" in data and data["examples"]:
             converted_examples = []

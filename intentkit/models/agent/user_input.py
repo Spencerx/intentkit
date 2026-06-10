@@ -3,14 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, ClassVar
 
-from cron_validator import CronValidator
 from epyxid import XID
 from pydantic import ConfigDict, field_validator
 from pydantic import Field as PydanticField
 
-from intentkit.models.agent.autonomous import AgentAutonomous
 from intentkit.models.agent.core import AgentCore, AgentVisibility
-from intentkit.utils.error import IntentKitAPIError
 
 
 class AgentUserInput(AgentCore):
@@ -49,14 +46,6 @@ class AgentUserInput(AgentCore):
             default=None,
             description="Weekly spending limit in USDC when wallet_provider is safe. This limits how much USDC the agent can spend per week.",
             ge=0.0,
-        ),
-    ] = None
-    # autonomous mode
-    autonomous: Annotated[
-        list[AgentAutonomous] | None,
-        PydanticField(
-            default=None,
-            description=("Autonomous agent configurations."),
         ),
     ] = None
     # if telegram_entrypoint_enabled, the telegram_entrypoint_enabled will be enabled, telegram_config will be checked
@@ -195,106 +184,6 @@ class AgentUpdate(AgentUserInput):
                 "Level 1 and 2 headings (# and ##) are not allowed. Please use level 3+ headings (###, ####, etc.) instead."
             )
         return v
-
-    def validate_autonomous_schedule(self) -> None:
-        """Validate the schedule settings for autonomous configurations.
-
-        This validation ensures:
-        1. Only one scheduling method (minutes or cron) is set per autonomous config
-        2. The minimum interval is 5 minutes for both types of schedules
-        """
-        if not self.autonomous:
-            return
-
-        for autonomous_config in self.autonomous:
-            # Check that exactly one scheduling method is provided
-            if not autonomous_config.minutes and not autonomous_config.cron:
-                raise IntentKitAPIError(
-                    status_code=400,
-                    key="InvalidAutonomousConfig",
-                    message="either minutes or cron must have a value",
-                )
-
-            if autonomous_config.minutes and autonomous_config.cron:
-                raise IntentKitAPIError(
-                    status_code=400,
-                    key="InvalidAutonomousConfig",
-                    message="only one of minutes or cron can be set",
-                )
-
-            # Validate minimum interval of 5 minutes
-            if autonomous_config.minutes and autonomous_config.minutes < 5:
-                raise IntentKitAPIError(
-                    status_code=400,
-                    key="InvalidAutonomousInterval",
-                    message="The shortest execution interval is 5 minutes",
-                )
-
-            # Validate cron expression to ensure interval is at least 5 minutes
-            if autonomous_config.cron:
-                # First validate the cron expression format using cron-validator
-
-                try:
-                    _ = CronValidator.parse(autonomous_config.cron)
-                except ValueError:
-                    raise IntentKitAPIError(
-                        status_code=400,
-                        key="InvalidCronExpression",
-                        message=f"Invalid cron expression format: {autonomous_config.cron}",
-                    )
-
-                parts = autonomous_config.cron.split()
-                if len(parts) < 5:
-                    raise IntentKitAPIError(
-                        status_code=400,
-                        key="InvalidCronExpression",
-                        message="Invalid cron expression format",
-                    )
-
-                minute, hour, *_ = parts[:5]
-
-                # Check if minutes or hours have too frequent intervals
-                if "*" in minute and "*" in hour:
-                    # If both minute and hour are wildcards, it would run every minute
-                    raise IntentKitAPIError(
-                        status_code=400,
-                        key="InvalidAutonomousInterval",
-                        message="The shortest execution interval is 5 minutes",
-                    )
-
-                if "/" in minute:
-                    # Check step value in minute field (e.g., */15)
-                    step = int(minute.split("/")[1])
-                    if step < 5 and hour == "*":
-                        raise IntentKitAPIError(
-                            status_code=400,
-                            key="InvalidAutonomousInterval",
-                            message="The shortest execution interval is 5 minutes",
-                        )
-
-                # Check for comma-separated values or ranges that might result in multiple executions per hour
-                if ("," in minute or "-" in minute) and hour == "*":
-                    raise IntentKitAPIError(
-                        status_code=400,
-                        key="InvalidAutonomousInterval",
-                        message="The shortest execution interval is 5 minutes",
-                    )
-
-    @staticmethod
-    def normalize_autonomous_statuses(
-        tasks: list[AgentAutonomous] | list[dict[str, Any]] | None,
-    ) -> list[dict[str, Any]] | None:
-        if not tasks:
-            return None
-        normalized: list[dict[str, Any]] = []
-        for task in tasks:
-            model = (
-                task
-                if isinstance(task, AgentAutonomous)
-                else AgentAutonomous.model_validate(task)
-            )
-            normalized.append(model.normalize_status_defaults().model_dump())
-        return normalized
 
 
 class AgentCreate(AgentUpdate):

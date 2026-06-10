@@ -70,6 +70,20 @@ async def stream_lead(
         yield chat_message
 
 
+async def execute_lead(
+    team_id: str, user_id: str, message: ChatMessageCreate
+) -> list[ChatMessage]:
+    """Run the team lead non-streaming and return all response messages.
+
+    Thin wrapper over :func:`stream_lead` for background callers (e.g. the
+    autonomous scheduler) that need the full result rather than a stream.
+    """
+    resp: list[ChatMessage] = []
+    async for chat_message in stream_lead(team_id, user_id, message):
+        resp.append(chat_message)
+    return resp
+
+
 def _build_followed_agents_section(agents: list[Agent]) -> str:
     """Build the dynamic "Followed Agents" prompt section.
 
@@ -108,8 +122,8 @@ async def _build_lead_agent(team_id: str) -> Agent:
     prompt = (
         "### Sub-Agents\n\n"
         "Use `lead_call_agent` to delegate:\n\n"
-        "- `agent-manager`: Manage team agents — create, configure, update, "
-        "and schedule autonomous (cron) tasks on them.\n"
+        "- `agent-manager`: Manage team agents — create, configure, and update them.\n"
+        "- `task-manager`: Schedule and manage the team's autonomous (cron) tasks.\n"
         "- `self-updater`: Update your own name, avatar, personality, or memory.\n"
         "- `content-manager`: Read team activities and posts.\n"
         "- `user-manager`: Update the current user's profile (name, timezone, language).\n\n"

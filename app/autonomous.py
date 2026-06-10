@@ -26,17 +26,20 @@ from intentkit.config.redis import (
     init_redis,
     send_heartbeat,
 )
-from intentkit.core.agent import get_agent
 from intentkit.core.autonomous import update_autonomous_task_status
-from intentkit.models.agent import Agent, AgentAutonomousStatus, AgentTable
+from intentkit.models.autonomous import AutonomousTaskStatus, AutonomousTaskTable
+from intentkit.models.team import Team, TeamTable
 from intentkit.utils.alert import cleanup_alert, send_alert
+from intentkit.utils.error import IntentKitAPIError
 
 from app.entrypoints.autonomous import run_autonomous_task
 
 logger = logging.getLogger(__name__)
 
-# Global dictionary to store task_id and last updated time
-autonomous_tasks_updated_at: dict[str, datetime] = {}
+# Cache of each job's scheduling-relevant config signature, so the periodic sync
+# only re-adds a job when its config actually changes. Keying on updated_at would
+# re-add every job on each run, because runtime status writes bump updated_at.
+autonomous_tasks_signature: dict[str, str] = {}
 
 # Global scheduler instance
 jobstores = {
@@ -69,13 +72,13 @@ if config.sentry_dsn:
 
 
 def _resolve_autonomous_ids_from_job(job: Job | None) -> tuple[str, str] | None:
-    """Extract agent_id and autonomous_id from a scheduler job.
+    """Extract team_id and task_id from a scheduler job.
 
     Args:
         job: The APScheduler job instance, or None if job not found.
 
     Returns:
-        A tuple of (agent_id, autonomous_id) if valid, None otherwise.
+        A tuple of (team_id, task_id) if valid, None otherwise.
     """
     if job is None:
         return None
@@ -84,20 +87,20 @@ def _resolve_autonomous_ids_from_job(job: Job | None) -> tuple[str, str] | None:
     args = job.args or ()
     if len(args) < 3:
         return None
-    agent_id = args[0]
-    autonomous_id = args[2]
-    if not isinstance(agent_id, str) or not isinstance(autonomous_id, str):
+    team_id = args[0]
+    task_id = args[2]
+    if not isinstance(team_id, str) or not isinstance(task_id, str):
         return None
-    return agent_id, autonomous_id
+    return team_id, task_id
 
 
 async def update_autonomous_status(
-    job_id: str, status: AgentAutonomousStatus | None
+    job_id: str, status: AutonomousTaskStatus | None
 ) -> None:
     """Update the status and next_run_time of an autonomous task in the database.
 
     Args:
-        job_id: The APScheduler job ID (format: "{agent_id}-{autonomous_id}").
+        job_id: The APScheduler job ID (format: "{team_id}-{task_id}").
         status: The new status to set, or None to clear.
 
     Note:
@@ -109,32 +112,20 @@ async def update_autonomous_status(
     resolved = _resolve_autonomous_ids_from_job(job)
     if not resolved:
         return
-    agent_id, autonomous_id = resolved
-    agent = await get_agent(agent_id)
-    if agent is None:
-        return
-
-    tasks = agent.autonomous or []
-    target = next((task for task in tasks if task.id == autonomous_id), None)
-    if target is None:
-        return
-
+    team_id, task_id = resolved
     next_run_time = job.next_run_time if job else None
 
-    if target.enabled:
-        status_value = status
-        next_run_time_value = next_run_time
-    else:
-        status_value = None
-        next_run_time_value = None
-
-    _ = await update_autonomous_task_status(
-        agent.id, autonomous_id, status_value, next_run_time_value
-    )
+    # update_autonomous_task_status clears runtime state for disabled tasks, so
+    # we just forward the event status and let it normalize.
+    try:
+        _ = await update_autonomous_task_status(team_id, task_id, status, next_run_time)
+    except IntentKitAPIError:
+        # Task was deleted between the event firing and this update; ignore.
+        return
 
 
 async def update_autonomous_status_safe(
-    job_id: str, status: AgentAutonomousStatus | None
+    job_id: str, status: AutonomousTaskStatus | None
 ) -> None:
     """Wrapper around update_autonomous_status with error handling.
 
@@ -155,11 +146,11 @@ def _handle_autonomous_event(
         event: The APScheduler event (submission, execution, or error).
     """
     if event.code == EVENT_JOB_SUBMITTED:
-        status = AgentAutonomousStatus.RUNNING
+        status = AutonomousTaskStatus.RUNNING
     elif event.code == EVENT_JOB_EXECUTED:
-        status = AgentAutonomousStatus.WAITING
+        status = AutonomousTaskStatus.WAITING
     elif event.code == EVENT_JOB_ERROR:
-        status = AgentAutonomousStatus.ERROR
+        status = AutonomousTaskStatus.ERROR
     else:
         return
 
@@ -183,93 +174,95 @@ async def send_autonomous_heartbeat():
 
 async def schedule_agent_autonomous_tasks():
     """
-    Find all agents with autonomous tasks and schedule them.
+    Find all team autonomous tasks and schedule them.
     This function is called periodically to update the scheduler with new or modified tasks.
     """
-    logger.info("Checking for agent autonomous tasks...")
+    logger.info("Checking for team autonomous tasks...")
 
     # List of jobs to schedule, will delete jobs not in this list
     planned_jobs = [HEAD_JOB_ID, "autonomous_heartbeat"]
 
     async with get_session() as db:
-        # Get all agents with autonomous configuration
-        query = (
-            select(AgentTable)
-            .where(AgentTable.autonomous.is_not(None))
-            .where(AgentTable.archived_at.is_(None))
+        # Get all autonomous tasks whose owning team still exists.
+        query = select(AutonomousTaskTable).join(
+            TeamTable, TeamTable.id == AutonomousTaskTable.team_id
         )
-        agents = await db.scalars(query)
+        tasks = await db.scalars(query)
+        task_rows = list(tasks)
 
-        for item in agents:
-            agent = Agent.model_validate(item)
-            if not agent.autonomous or len(agent.autonomous) == 0:
-                continue
+    # Cache team owners to avoid repeated lookups within a single sweep.
+    owners: dict[str, str | None] = {}
 
-            for autonomous in agent.autonomous:
-                if not autonomous.enabled:
-                    if (
-                        autonomous.status is not None
-                        or autonomous.next_run_time is not None
-                    ):
-                        _ = await update_autonomous_task_status(
-                            agent.id,
-                            autonomous.id,
-                            None,
-                            None,
-                        )
-                    continue
-
-                # Create a unique task ID for this autonomous task
-                task_id = f"{agent.id}-{autonomous.id}"
-                planned_jobs.append(task_id)
-
-                # Check if task exists and needs updating
-                updated_at = agent.deployed_at or agent.updated_at
-                if (
-                    task_id in autonomous_tasks_updated_at
-                    and autonomous_tasks_updated_at[task_id] >= updated_at
-                ):
-                    # Task exists and agent hasn't been updated, skip
-                    continue
-
-                try:
-                    # Schedule new job using cron (minutes field is deprecated)
-                    # Default has_memory to True if not set (backward compatibility)
-                    task_has_memory = (
-                        autonomous.has_memory
-                        if autonomous.has_memory is not None
-                        else True
-                    )
-                    if autonomous.cron:
-                        logger.info(
-                            f"Scheduling cron task {task_id} with cron: {autonomous.cron}"
-                        )
-                        _ = scheduler.add_job(
-                            run_autonomous_task,
-                            CronTrigger.from_crontab(autonomous.cron, timezone="UTC"),
-                            id=task_id,
-                            args=[
-                                agent.id,
-                                agent.owner,
-                                autonomous.id,
-                                autonomous.prompt,
-                                task_has_memory,
-                            ],
-                            replace_existing=True,
-                        )
-                    else:
-                        logger.error(
-                            f"Invalid autonomous configuration for task {task_id}: cron is required (minutes field is deprecated)"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to schedule autonomous task [{agent.id}] {task_id}: {e}"
-                    )
-
-                # Update the last updated time
-                autonomous_tasks_updated_at[task_id] = (
-                    agent.deployed_at or agent.updated_at
+    for task in task_rows:
+        if not task.enabled:
+            if task.status is not None or task.next_run_time is not None:
+                _ = await update_autonomous_task_status(
+                    task.team_id,
+                    task.id,
+                    None,
+                    None,
                 )
+            continue
+
+        # Create a unique job ID for this autonomous task
+        job_id = f"{task.team_id}-{task.id}"
+
+        # Only re-add the job when its scheduling-relevant config changed.
+        # (Runtime status/next_run_time writes bump updated_at but must NOT
+        # trigger a re-add, which would churn the scheduler/Redis every run.)
+        signature = "|".join(
+            str(v)
+            for v in (
+                task.cron,
+                task.prompt,
+                task.enabled,
+                task.has_memory,
+                task.target_agent_id,
+            )
+        )
+        if autonomous_tasks_signature.get(job_id) == signature:
+            # Unchanged config: keep the existing job.
+            planned_jobs.append(job_id)
+            continue
+
+        if task.team_id not in owners:
+            owners[task.team_id] = await Team.get_owner(task.team_id)
+        owner = owners[task.team_id]
+        if not owner:
+            # No owner to run as: don't keep the job (let the cleanup remove it).
+            logger.warning(
+                "Team %s has no owner; skipping task %s", task.team_id, task.id
+            )
+            continue
+
+        planned_jobs.append(job_id)
+
+        try:
+            if task.cron:
+                logger.info(f"Scheduling cron task {job_id} with cron: {task.cron}")
+                _ = scheduler.add_job(
+                    run_autonomous_task,
+                    CronTrigger.from_crontab(task.cron, timezone="UTC"),
+                    id=job_id,
+                    args=[
+                        task.team_id,
+                        owner,
+                        task.id,
+                        task.prompt,
+                        task.has_memory,
+                        task.target_agent_id,
+                    ],
+                    replace_existing=True,
+                )
+            else:
+                logger.error(
+                    f"Invalid autonomous configuration for task {job_id}: cron is required"
+                )
+        except Exception as e:
+            logger.error(f"Failed to schedule autonomous task {job_id}: {e}")
+
+        # Remember the config signature we just scheduled.
+        autonomous_tasks_signature[job_id] = signature
 
     # Delete jobs not in the list
     logger.debug("Current jobs: %s", planned_jobs)

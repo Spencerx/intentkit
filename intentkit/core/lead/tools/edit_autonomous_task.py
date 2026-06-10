@@ -1,4 +1,4 @@
-"""Tool to edit an autonomous task on a team agent."""
+"""Tool to edit a team autonomous task."""
 
 from __future__ import annotations
 
@@ -8,16 +8,13 @@ from langchain_core.tools import ArgsSchema
 from pydantic import BaseModel, Field
 
 from intentkit.core.autonomous import update_autonomous_task
-from intentkit.core.lead.service import verify_agent_in_team
 from intentkit.core.lead.tools.base import LeadTool
-from intentkit.models.agent import AgentAutonomous
-from intentkit.models.agent.autonomous import AutonomousUpdateRequest
+from intentkit.models.autonomous import AutonomousTask, AutonomousUpdateRequest
 
 
 class EditAutonomousTaskInput(BaseModel):
     """Input model for edit_autonomous_task tool."""
 
-    agent_id: str = Field(description="The ID of the agent owning the task")
     task_id: str = Field(
         description="The unique identifier of the autonomous task to edit"
     )
@@ -29,30 +26,33 @@ class EditAutonomousTaskInput(BaseModel):
     has_memory: bool | None = Field(
         default=None, description="Whether to retain memory between runs"
     )
+    target_agent_id: str | None = Field(
+        default=None,
+        description="Optional team agent to run the task on directly.",
+    )
 
 
 class EditAutonomousTaskOutput(BaseModel):
     """Output model for edit_autonomous_task tool."""
 
-    task: AgentAutonomous = Field(
+    task: AutonomousTask = Field(
         description="The updated autonomous task configuration"
     )
 
 
 class LeadEditAutonomousTask(LeadTool):
-    """Tool to edit an existing autonomous task for a team agent."""
+    """Tool to edit an existing team autonomous task."""
 
     name: str = "lead_edit_autonomous_task"
     description: str = (
-        "Edit an existing autonomous task configuration for a team agent. "
-        "Only provided fields will be updated; omitted fields will keep their current values."
+        "Edit an existing team autonomous task. Only provided fields are "
+        "updated; omitted fields keep their current values."
     )
     args_schema: ArgsSchema | None = EditAutonomousTaskInput
 
     @override
     async def _arun(
         self,
-        agent_id: str,
         task_id: str,
         name: str | None = None,
         description: str | None = None,
@@ -60,21 +60,28 @@ class LeadEditAutonomousTask(LeadTool):
         prompt: str | None = None,
         enabled: bool | None = None,
         has_memory: bool | None = None,
+        target_agent_id: str | None = None,
         **kwargs: Any,
     ) -> EditAutonomousTaskOutput:
         context = self.get_context()
         assert context.team_id is not None
-        await verify_agent_in_team(agent_id, context.team_id)
 
-        task_update = AutonomousUpdateRequest(
-            name=name,
-            description=description,
-            cron=cron,
-            prompt=prompt,
-            enabled=enabled,
-            has_memory=has_memory,
+        # Only forward fields the caller actually provided so unset fields keep
+        # their current values.
+        candidates: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "cron": cron,
+            "prompt": prompt,
+            "enabled": enabled,
+            "has_memory": has_memory,
+            "target_agent_id": target_agent_id,
+        }
+        provided = {key: value for key, value in candidates.items() if value is not None}
+        task_update = AutonomousUpdateRequest(**provided)
+        updated_task = await update_autonomous_task(
+            context.team_id, task_id, task_update
         )
-        updated_task = await update_autonomous_task(agent_id, task_id, task_update)
         return EditAutonomousTaskOutput(task=updated_task)
 
 

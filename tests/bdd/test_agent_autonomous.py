@@ -1,27 +1,25 @@
 """
-BDD Tests: Agent Autonomous Task Management
+BDD Tests: Team Autonomous Task Management
 
 Feature: Autonomous Task Lifecycle
-As an IntentKit operator, I want to manage autonomous tasks on agents
-so that agents can execute scheduled actions independently.
+As an IntentKit operator, I want to manage autonomous tasks on a team
+so that the team can execute scheduled actions independently.
 """
 
 from datetime import datetime, timezone
 
 import pytest
 
-from intentkit.core.agent import create_agent
 from intentkit.core.autonomous import (
     add_autonomous_task,
     delete_autonomous_task,
-    list_autonomous_tasks,
+    list_team_autonomous_tasks,
     update_autonomous_task,
     update_autonomous_task_status,
 )
-from intentkit.models.agent import AgentCreate
-from intentkit.models.agent.autonomous import (
-    AgentAutonomousStatus,
+from intentkit.models.autonomous import (
     AutonomousCreateRequest,
+    AutonomousTaskStatus,
     AutonomousUpdateRequest,
 )
 from intentkit.utils.error import IntentKitAPIError
@@ -31,329 +29,136 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 @pytest.mark.bdd
-async def test_add_autonomous_task_to_agent():
+async def test_add_autonomous_task_to_team():
     """
-    Scenario: Add an Autonomous Task to an Agent
+    Scenario: Add an Autonomous Task to a Team
 
-    Given a deployed agent with `id=auto-agent-1`
+    Given a team `id=auto-team-1`
     When I call `add_autonomous_task` with a cron schedule and prompt
-    Then a task is persisted with correct fields
-    And the task has an auto-generated `id`
-    And the task `status` is `waiting` because it is enabled
+    Then a task is persisted with correct fields owned by the team
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-1",
-        name="Autonomous Agent 1",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
-    # When
     task_request = AutonomousCreateRequest(
-        name="Hourly Check",
-        description="Check status every hour",
-        cron="0 * * * *",
-        prompt="Check the system status and report.",
+        name="Daily Report",
+        description="Generate a daily report",
+        cron="0 9 * * *",
+        prompt="Generate the daily report",
         enabled=True,
-        has_memory=True,
+        has_memory=False,
     )
-    task = await add_autonomous_task("auto-agent-1", task_request)
+    task = await add_autonomous_task("auto-team-1", task_request)
 
-    # Then
-    assert task.id is not None
-    assert len(task.id) > 0
-    assert task.name == "Hourly Check"
-    assert task.description == "Check status every hour"
-    assert task.cron == "0 * * * *"
-    assert task.prompt == "Check the system status and report."
-    assert task.enabled is True
-    assert task.has_memory is True
-    assert task.status == AgentAutonomousStatus.WAITING
+    assert task.id
+    assert task.team_id == "auto-team-1"
+    assert task.cron == "0 9 * * *"
+    assert task.prompt == "Generate the daily report"
+    assert task.status == AutonomousTaskStatus.WAITING
 
 
 @pytest.mark.bdd
 async def test_list_autonomous_tasks():
     """
-    Scenario: List Autonomous Tasks for an Agent
-
-    Given a deployed agent with `id=auto-agent-2` that has two autonomous tasks
-    When I call `list_autonomous_tasks`
-    Then both tasks are returned
+    Scenario: List a Team's Autonomous Tasks
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-2",
-        name="Autonomous Agent 2",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
+    task1 = AutonomousCreateRequest(cron="0 9 * * *", prompt="One")
+    task2 = AutonomousCreateRequest(cron="0 10 * * *", prompt="Two")
+    await add_autonomous_task("auto-team-2", task1)
+    await add_autonomous_task("auto-team-2", task2)
 
-    task1 = AutonomousCreateRequest(
-        name="Task Alpha",
-        cron="*/5 * * * *",
-        prompt="Do alpha work",
-        enabled=True,
-    )
-    task2 = AutonomousCreateRequest(
-        name="Task Beta",
-        cron="*/10 * * * *",
-        prompt="Do beta work",
-        enabled=False,
-    )
-    await add_autonomous_task("auto-agent-2", task1)
-    await add_autonomous_task("auto-agent-2", task2)
-
-    # When
-    tasks = await list_autonomous_tasks("auto-agent-2")
-
-    # Then
+    tasks = await list_team_autonomous_tasks("auto-team-2")
     assert len(tasks) == 2
-    names = {t.name for t in tasks}
-    assert names == {"Task Alpha", "Task Beta"}
 
 
 @pytest.mark.bdd
 async def test_update_autonomous_task_partial():
     """
-    Scenario: Update Autonomous Task with Partial Fields
+    Scenario: Partially Update an Autonomous Task
 
-    Given a deployed agent with an autonomous task
     When I call `update_autonomous_task` with only `name` updated
-    Then the task's `name` is updated
-    And other fields remain unchanged
+    Then only that field changes and the rest are preserved
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-3",
-        name="Autonomous Agent 3",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
     created = await add_autonomous_task(
-        "auto-agent-3",
-        AutonomousCreateRequest(
-            name="Original Name",
-            description="Original Description",
-            cron="*/15 * * * *",
-            prompt="Original prompt",
-            enabled=True,
-            has_memory=True,
-        ),
+        "auto-team-3",
+        AutonomousCreateRequest(name="Old", cron="0 9 * * *", prompt="keep me"),
     )
 
-    # When
-    update = AutonomousUpdateRequest(name="Updated Name")
-    updated = await update_autonomous_task("auto-agent-3", created.id, update)
+    update = AutonomousUpdateRequest(name="New")
+    updated = await update_autonomous_task("auto-team-3", created.id, update)
 
-    # Then
-    assert updated.name == "Updated Name"
-    assert updated.description == "Original Description"
-    assert updated.cron == "*/15 * * * *"
-    assert updated.prompt == "Original prompt"
-    assert updated.enabled is True
-    assert updated.has_memory is True
+    assert updated.name == "New"
+    assert updated.prompt == "keep me"
+    assert updated.cron == "0 9 * * *"
 
 
 @pytest.mark.bdd
 async def test_delete_autonomous_task():
     """
     Scenario: Delete an Autonomous Task
-
-    Given a deployed agent with one autonomous task
-    When I call `delete_autonomous_task` with the task's ID
-    Then the task is removed
-    And `list_autonomous_tasks` returns an empty list
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-4",
-        name="Autonomous Agent 4",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
     created = await add_autonomous_task(
-        "auto-agent-4",
-        AutonomousCreateRequest(
-            name="Deletable Task",
-            cron="*/5 * * * *",
-            prompt="To be deleted",
-        ),
+        "auto-team-4",
+        AutonomousCreateRequest(cron="0 9 * * *", prompt="bye"),
     )
 
-    # When
-    await delete_autonomous_task("auto-agent-4", created.id)
+    await delete_autonomous_task("auto-team-4", created.id)
 
-    # Then
-    tasks = await list_autonomous_tasks("auto-agent-4")
-    assert len(tasks) == 0
+    tasks = await list_team_autonomous_tasks("auto-team-4")
+    assert all(t.id != created.id for t in tasks)
 
 
 @pytest.mark.bdd
-async def test_add_task_to_nonexistent_agent_fails():
+async def test_add_task_with_invalid_target_agent_fails():
     """
-    Scenario: Add Task to Non-Existent Agent Fails
-
-    Given no agent with `id=no-such-agent`
-    When I call `add_autonomous_task` with `agent_id=no-such-agent`
-    Then an `IntentKitAPIError` with `status_code=404` is raised
+    Scenario: Adding a Task Targeting an Unknown Agent Fails
     """
     task_request = AutonomousCreateRequest(
-        cron="*/5 * * * *",
-        prompt="This should fail",
+        cron="0 9 * * *",
+        prompt="x",
+        target_agent_id="no-such-agent",
     )
-
-    with pytest.raises(IntentKitAPIError) as exc_info:
-        await add_autonomous_task("no-such-agent", task_request)
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.key == "AgentNotFound"
+    with pytest.raises(IntentKitAPIError):
+        await add_autonomous_task("auto-team-5", task_request)
 
 
 @pytest.mark.bdd
 async def test_delete_nonexistent_task_fails():
     """
-    Scenario: Delete Non-Existent Task Fails
-
-    Given a deployed agent with `id=auto-agent-5` and no tasks
-    When I call `delete_autonomous_task` with a non-existent task_id
-    Then an `IntentKitAPIError` with `status_code=404` and `key=TaskNotFound` is raised
+    Scenario: Deleting a Nonexistent Task Fails
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-5",
-        name="Autonomous Agent 5",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
-    # When/Then
-    with pytest.raises(IntentKitAPIError) as exc_info:
-        await delete_autonomous_task("auto-agent-5", "nonexistent-task")
-
-    assert exc_info.value.status_code == 404
-    assert exc_info.value.key == "TaskNotFound"
-
-
-@pytest.mark.bdd
-async def test_operations_on_archived_agent_fail():
-    """
-    Scenario: Autonomous Operations on Archived Agent Fail
-
-    Given a deployed agent that has been archived
-    When I call `list_autonomous_tasks` or `add_autonomous_task`
-    Then an `IntentKitAPIError` with `status_code=400` and `key=AgentNotDeployed` is raised
-    """
-    from sqlalchemy import update
-
-    from intentkit.config.db import get_session
-    from intentkit.models.agent.db import AgentTable
-
-    # Given: create agent then archive it directly in DB
-    agent_data = AgentCreate(
-        id="auto-agent-archived",
-        name="Archived Agent",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
-    async with get_session() as session:
-        await session.execute(
-            update(AgentTable)
-            .where(AgentTable.id == "auto-agent-archived")
-            .values(archived_at=datetime.now(timezone.utc))
-        )
-        await session.commit()
-
-    # When/Then: list
-    with pytest.raises(IntentKitAPIError) as exc_info:
-        await list_autonomous_tasks("auto-agent-archived")
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.key == "AgentNotDeployed"
-
-    # When/Then: add
-    with pytest.raises(IntentKitAPIError) as exc_info:
-        await add_autonomous_task(
-            "auto-agent-archived",
-            AutonomousCreateRequest(cron="*/5 * * * *", prompt="fail"),
-        )
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.key == "AgentNotDeployed"
+    with pytest.raises(IntentKitAPIError):
+        await delete_autonomous_task("auto-team-6", "no-such-task")
 
 
 @pytest.mark.bdd
 async def test_update_autonomous_task_status():
     """
-    Scenario: Update Autonomous Task Status
+    Scenario: Update a Task's Runtime Status
 
-    Given a deployed agent with an enabled autonomous task
     When I call `update_autonomous_task_status` with `status=running` and a `next_run_time`
-    Then the task's status and next_run_time are updated
+    Then the task reflects the new runtime state
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-6",
-        name="Status Agent",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
     created = await add_autonomous_task(
-        "auto-agent-6",
-        AutonomousCreateRequest(
-            name="Status Task",
-            cron="0 * * * *",
-            prompt="Check status",
-            enabled=True,
-        ),
+        "auto-team-7",
+        AutonomousCreateRequest(cron="0 9 * * *", prompt="x"),
     )
-    assert created.status == AgentAutonomousStatus.WAITING
 
-    # When
-    next_run = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+    next_run = datetime(2030, 1, 1, tzinfo=timezone.utc)
     updated = await update_autonomous_task_status(
-        "auto-agent-6",
-        created.id,
-        AgentAutonomousStatus.RUNNING,
-        next_run,
+        "auto-team-7", created.id, AutonomousTaskStatus.RUNNING, next_run
     )
 
-    # Then
-    assert updated.status == AgentAutonomousStatus.RUNNING
+    assert updated.status == AutonomousTaskStatus.RUNNING
     assert updated.next_run_time == next_run
 
 
 @pytest.mark.bdd
 async def test_disabled_task_has_no_status():
     """
-    Scenario: Disabled Task Has No Status
-
-    Given a deployed agent
-    When I add an autonomous task with `enabled=False`
-    Then the task's `status` is `None`
-    And `next_run_time` is `None`
+    Scenario: A Disabled Task Has No Runtime Status
     """
-    # Given
-    agent_data = AgentCreate(
-        id="auto-agent-7",
-        name="Disabled Agent",
-        model="gpt-4o-mini",
-    )
-    await create_agent(agent_data)
-
-    # When
     task = await add_autonomous_task(
-        "auto-agent-7",
-        AutonomousCreateRequest(
-            name="Disabled Task",
-            cron="*/5 * * * *",
-            prompt="This is disabled",
-            enabled=False,
-        ),
+        "auto-team-8",
+        AutonomousCreateRequest(cron="0 9 * * *", prompt="x", enabled=False),
     )
 
-    # Then
+    assert task.enabled is False
     assert task.status is None
-    assert task.next_run_time is None

@@ -1,4 +1,4 @@
-"""Tool to delete an autonomous task from a team agent."""
+"""Tool to delete a team autonomous task."""
 
 from __future__ import annotations
 
@@ -8,14 +8,12 @@ from langchain_core.tools import ArgsSchema
 from pydantic import BaseModel, Field
 
 from intentkit.core.autonomous import delete_autonomous_task
-from intentkit.core.lead.service import verify_agent_in_team
 from intentkit.core.lead.tools.base import LeadTool
 
 
 class DeleteAutonomousTaskInput(BaseModel):
     """Input model for delete_autonomous_task tool."""
 
-    agent_id: str = Field(description="The ID of the agent owning the task")
     task_id: str = Field(
         description="The unique identifier of the autonomous task to delete"
     )
@@ -31,26 +29,24 @@ class DeleteAutonomousTaskOutput(BaseModel):
 
 
 class LeadDeleteAutonomousTask(LeadTool):
-    """Tool to delete an autonomous task from a team agent."""
+    """Tool to delete a team autonomous task."""
 
     name: str = "lead_delete_autonomous_task"
     description: str = (
-        "Delete an autonomous task configuration from a team agent. "
-        "Requires the agent_id and task_id to identify which task to remove."
+        "Delete a team autonomous task. Requires the task_id to identify which "
+        "task to remove."
     )
     args_schema: ArgsSchema | None = DeleteAutonomousTaskInput
 
     @override
     async def _arun(
         self,
-        agent_id: str,
         task_id: str,
         **kwargs: Any,
     ) -> DeleteAutonomousTaskOutput:
         context = self.get_context()
         assert context.team_id is not None
-        await verify_agent_in_team(agent_id, context.team_id)
-        await delete_autonomous_task(agent_id, task_id)
+        await delete_autonomous_task(context.team_id, task_id)
         return DeleteAutonomousTaskOutput(
             success=True, message=f"Successfully deleted autonomous task {task_id}"
         )

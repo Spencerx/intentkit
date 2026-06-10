@@ -1,24 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildChatThreadPath,
-  buildTaskLogsPath,
-  getAutonomousChatId,
-} from "./autonomousChat";
+import { buildChatThreadPath } from "./autonomousChat";
 import { isUserAuthoredMessage } from "../types/chat";
 import { cacheAgentAvatar, getCachedAgentAvatar } from "./utils";
 
 describe("autonomous chat helpers", () => {
-  it("builds autonomous chat id from task id", () => {
-    expect(getAutonomousChatId("task-123")).toBe("autonomous-task-123");
-  });
-
-  it("builds logs path from agent and task id", () => {
-    expect(buildTaskLogsPath("agent-1", "task-1")).toBe(
-      "/agent/agent-1/tasks/task-1/logs",
-    );
-  });
-
   it("builds chat path without thread id", () => {
     expect(buildChatThreadPath("agent-1", null)).toBe("/agent/agent-1");
   });

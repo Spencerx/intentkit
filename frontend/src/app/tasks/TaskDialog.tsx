@@ -34,6 +34,7 @@ export function TaskDialog({
     prompt: "",
     enabled: true,
     has_memory: false,
+    target_agent_id: "",
   });
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export function TaskDialog({
         prompt: task.prompt || "",
         enabled: task.enabled,
         has_memory: task.has_memory,
+        target_agent_id: task.target_agent_id || "",
       });
     } else {
       setFormData({
@@ -54,6 +56,7 @@ export function TaskDialog({
         prompt: "",
         enabled: true,
         has_memory: false,
+        target_agent_id: "",
       });
     }
   }, [task, open]);
@@ -62,7 +65,14 @@ export function TaskDialog({
     e.preventDefault();
     setLoading(true);
     try {
-      await onSave(formData);
+      // Normalize an empty target agent to null (lead-orchestrated).
+      const payload: Partial<AutonomousTask> = {
+        ...formData,
+        target_agent_id: formData.target_agent_id?.trim()
+          ? formData.target_agent_id
+          : null,
+      };
+      await onSave(payload);
       onOpenChange(false);
     } catch (error) {
       console.error("Failed to save task:", error);
@@ -80,7 +90,7 @@ export function TaskDialog({
               {task ? "Edit Autonomous Task" : "New Autonomous Task"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Configure the schedule and prompt for this autonomous agent task.
+              Configure the schedule and prompt for this autonomous team task.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -131,6 +141,25 @@ export function TaskDialog({
               </div>
               <p className="text-[0.8rem] text-muted-foreground">
                 Format: Minute Hour Day Month DayOfWeek (e.g., &quot;0 0 * * *&quot; for daily at midnight)
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <label htmlFor="target_agent_id" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Target Agent (optional)
+              </label>
+              <Input
+                id="target_agent_id"
+                value={formData.target_agent_id || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, target_agent_id: e.target.value })
+                }
+                placeholder="Leave empty to let the team lead decide"
+                className="font-mono"
+              />
+              <p className="text-[0.8rem] text-muted-foreground">
+                When set, the task runs directly on that agent. Otherwise the
+                team lead reads the prompt and delegates.
               </p>
             </div>
 

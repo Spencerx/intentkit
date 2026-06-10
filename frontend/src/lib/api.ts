@@ -1009,10 +1009,11 @@ export const publicApi = {
  */
 export interface AutonomousTask {
   id: string;
+  team_id?: string;
+  target_agent_id?: string | null;
   name?: string;
   description?: string;
   cron?: string;
-  minutes?: number;
   prompt: string;
   enabled: boolean;
   has_memory: boolean;
@@ -1021,34 +1022,17 @@ export interface AutonomousTask {
   chat_id: string;
 }
 
-export interface AgentTasksGroup {
-  agent_id: string;
-  agent_slug: string | null;
-  agent_name: string | null;
-  agent_image: string | null;
-  tasks: AutonomousTask[];
-}
-
 /**
  * Autonomous API functions
- * Based on app/local/autonomous.py
+ * Based on app/local/autonomous.py — tasks belong to the team.
  */
 export const autonomousApi = {
-  async listAllTasks(): Promise<AgentTasksGroup[]> {
-    const response = await fetch(`${API_BASE}/autonomous`);
-    if (!response.ok) {
-      throw new Error(
-        `Failed to list all autonomous tasks: ${response.statusText}`,
-      );
-    }
-    return response.json();
-  },
   /**
-   * List all autonomous tasks for an agent
-   * GET /agents/{agentId}/autonomous
+   * List the team's autonomous tasks
+   * GET /autonomous
    */
-  async listTasks(agentId: string): Promise<AutonomousTask[]> {
-    const response = await fetch(`${API_BASE}/agents/${agentId}/autonomous`);
+  async listTasks(): Promise<AutonomousTask[]> {
+    const response = await fetch(`${API_BASE}/autonomous`);
     if (!response.ok) {
       throw new Error(
         `Failed to list autonomous tasks: ${response.statusText}`,
@@ -1059,13 +1043,12 @@ export const autonomousApi = {
 
   /**
    * Create a new autonomous task
-   * POST /agents/{agentId}/autonomous
+   * POST /autonomous
    */
   async createTask(
-    agentId: string,
     data: Omit<AutonomousTask, "id" | "chat_id">,
   ): Promise<AutonomousTask> {
-    const response = await fetch(`${API_BASE}/agents/${agentId}/autonomous`, {
+    const response = await fetch(`${API_BASE}/autonomous`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1084,23 +1067,19 @@ export const autonomousApi = {
 
   /**
    * Update an autonomous task
-   * PATCH /agents/{agentId}/autonomous/{taskId}
+   * PATCH /autonomous/{taskId}
    */
   async updateTask(
-    agentId: string,
     taskId: string,
     data: Partial<AutonomousTask>,
   ): Promise<AutonomousTask> {
-    const response = await fetch(
-      `${API_BASE}/agents/${agentId}/autonomous/${taskId}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
+    const response = await fetch(`${API_BASE}/autonomous/${taskId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify(data),
+    });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(
@@ -1113,15 +1092,12 @@ export const autonomousApi = {
 
   /**
    * Delete an autonomous task
-   * DELETE /agents/{agentId}/autonomous/{taskId}
+   * DELETE /autonomous/{taskId}
    */
-  async deleteTask(agentId: string, taskId: string): Promise<void> {
-    const response = await fetch(
-      `${API_BASE}/agents/${agentId}/autonomous/${taskId}`,
-      {
-        method: "DELETE",
-      },
-    );
+  async deleteTask(taskId: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/autonomous/${taskId}`, {
+      method: "DELETE",
+    });
     if (!response.ok) {
       throw new Error(
         `Failed to delete autonomous task: ${response.statusText}`,

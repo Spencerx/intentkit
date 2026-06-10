@@ -1,254 +1,190 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 from epyxid import XID
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_session
-from intentkit.models.agent.autonomous import (
-    AgentAutonomous,
-    AgentAutonomousStatus,
-    AgentTasksGroup,
-    AutonomousCreateRequest,
-    AutonomousUpdateRequest,
-)
 from intentkit.models.agent.db import AgentTable
+from intentkit.models.autonomous import (
+    AutonomousCreateRequest,
+    AutonomousTask,
+    AutonomousTaskStatus,
+    AutonomousTaskTable,
+    AutonomousUpdateRequest,
+    validate_cron_schedule,
+)
 from intentkit.utils.error import IntentKitAPIError
 
 
-def _deserialize_autonomous(
-    autonomous_data: list[Any] | None,
-) -> list[AgentAutonomous]:
-    if not autonomous_data:
-        return []
-
-    deserialized: list[AgentAutonomous] = []
-    for entry in autonomous_data:
-        if isinstance(entry, AgentAutonomous):
-            deserialized.append(entry)
-        else:
-            deserialized.append(AgentAutonomous.model_validate(entry))
-    return deserialized
-
-
-def _serialize_autonomous(tasks: list[AgentAutonomous]) -> list[dict[str, Any]]:
-    return [task.model_dump(mode="json") for task in tasks]
-
-
-def _autonomous_not_allowed_error() -> IntentKitAPIError:
-    return IntentKitAPIError(
-        400,
-        "AgentNotDeployed",
-        "Only deployed agents can call this feature.",
-    )
-
-
-def _agent_not_found_error(agent_id: str) -> IntentKitAPIError:
+def _task_not_found_error(task_id: str) -> IntentKitAPIError:
     return IntentKitAPIError(
         404,
-        "AgentNotFound",
-        f"Agent with ID {agent_id} not found.",
+        "TaskNotFound",
+        f"Autonomous task with ID {task_id} not found.",
     )
 
 
-async def list_autonomous_tasks(agent_id: str) -> list[AgentAutonomous]:
+def _invalid_target_agent_error(agent_id: str) -> IntentKitAPIError:
+    return IntentKitAPIError(
+        400,
+        "InvalidTargetAgent",
+        f"Target agent {agent_id} is not an active agent of this team.",
+    )
+
+
+async def _validate_target_agent(
+    session: AsyncSession, team_id: str, agent_id: str
+) -> None:
+    """Ensure the target agent exists, belongs to the team, and is not archived."""
+    agent = await session.get(AgentTable, agent_id)
+    if agent is None or agent.team_id != team_id or agent.archived_at is not None:
+        raise _invalid_target_agent_error(agent_id)
+
+
+def _to_row(task: AutonomousTask) -> AutonomousTaskTable:
+    return AutonomousTaskTable(
+        id=task.id,
+        team_id=task.team_id,
+        target_agent_id=task.target_agent_id,
+        name=task.name,
+        description=task.description,
+        cron=task.cron,
+        prompt=task.prompt,
+        enabled=task.enabled,
+        has_memory=task.has_memory,
+        status=task.status.value if task.status else None,
+        next_run_time=task.next_run_time,
+    )
+
+
+async def list_team_autonomous_tasks(team_id: str) -> list[AutonomousTask]:
+    """List all autonomous tasks owned by a team, oldest first."""
     async with get_session() as session:
-        # Check if agent exists and get its autonomous storage and archived status
-        result = await session.execute(
-            select(AgentTable.autonomous, AgentTable.archived_at).where(
-                AgentTable.id == agent_id
-            )
+        rows = await session.scalars(
+            select(AutonomousTaskTable)
+            .where(AutonomousTaskTable.team_id == team_id)
+            .order_by(AutonomousTaskTable.created_at)
         )
-        row = result.first()
+        return [AutonomousTask.model_validate(row) for row in rows]
 
-        if row is None:
-            raise _agent_not_found_error(agent_id)
 
-        autonomous_data, archived_at = row
-
-        if archived_at is not None:
-            raise _autonomous_not_allowed_error()
-
-        return _deserialize_autonomous(autonomous_data)
+async def get_autonomous_task(team_id: str, task_id: str) -> AutonomousTask:
+    """Get a single autonomous task, verifying it belongs to the team."""
+    async with get_session() as session:
+        row = await session.get(AutonomousTaskTable, task_id)
+        if row is None or row.team_id != team_id:
+            raise _task_not_found_error(task_id)
+        return AutonomousTask.model_validate(row)
 
 
 async def add_autonomous_task(
-    agent_id: str, task_request: AutonomousCreateRequest
-) -> AgentAutonomous:
-    async with get_session() as session:
-        db_agent = await session.get(AgentTable, agent_id)
-        if db_agent is None:
-            raise _agent_not_found_error(agent_id)
-        if db_agent.archived_at is not None:
-            raise _autonomous_not_allowed_error()
+    team_id: str, task_request: AutonomousCreateRequest
+) -> AutonomousTask:
+    """Create a new autonomous task for a team."""
+    validate_cron_schedule(task_request.cron)
 
-        # Create new task model from request
-        task = AgentAutonomous(
+    async with get_session() as session:
+        if task_request.target_agent_id:
+            await _validate_target_agent(session, team_id, task_request.target_agent_id)
+
+        task = AutonomousTask(
             id=str(XID()),
+            team_id=team_id,
+            target_agent_id=task_request.target_agent_id,
             cron=task_request.cron,
             prompt=task_request.prompt,
             name=task_request.name,
             description=task_request.description,
             enabled=task_request.enabled,
             has_memory=task_request.has_memory,
-        )
+        ).normalize_status_defaults()
 
-        current_tasks = _deserialize_autonomous(db_agent.autonomous)
-        normalized_task = task.normalize_status_defaults()
-        current_tasks.append(normalized_task)
-
-        db_agent.autonomous = _serialize_autonomous(current_tasks)
+        row = _to_row(task)
+        session.add(row)
         await session.commit()
-
-    return normalized_task
-
-
-async def delete_autonomous_task(agent_id: str, task_id: str) -> None:
-    async with get_session() as session:
-        db_agent = await session.get(AgentTable, agent_id)
-        if db_agent is None:
-            raise _agent_not_found_error(agent_id)
-        if db_agent.archived_at is not None:
-            raise _autonomous_not_allowed_error()
-
-        current_tasks = _deserialize_autonomous(db_agent.autonomous)
-
-        updated_tasks = [task for task in current_tasks if task.id != task_id]
-        if len(updated_tasks) == len(current_tasks):
-            raise IntentKitAPIError(
-                404,
-                "TaskNotFound",
-                f"Autonomous task with ID {task_id} not found.",
-            )
-
-        db_agent.autonomous = _serialize_autonomous(updated_tasks)
-        await session.commit()
+        # Reload so server-generated created_at/updated_at are returned (and to
+        # avoid touching expired attributes after commit).
+        await session.refresh(row)
+        return AutonomousTask.model_validate(row)
 
 
 async def update_autonomous_task(
-    agent_id: str, task_id: str, task_update: AutonomousUpdateRequest
-) -> AgentAutonomous:
+    team_id: str, task_id: str, task_update: AutonomousUpdateRequest
+) -> AutonomousTask:
+    """Update fields of an existing autonomous task."""
+    update_data = task_update.model_dump(exclude_unset=True)
+
+    if update_data.get("cron") is not None:
+        validate_cron_schedule(update_data["cron"])
+
     async with get_session() as session:
-        db_agent = await session.get(AgentTable, agent_id)
-        if db_agent is None:
-            raise _agent_not_found_error(agent_id)
-        if db_agent.archived_at is not None:
-            raise _autonomous_not_allowed_error()
+        row = await session.get(AutonomousTaskTable, task_id)
+        if row is None or row.team_id != team_id:
+            raise _task_not_found_error(task_id)
 
-        current_tasks = _deserialize_autonomous(db_agent.autonomous)
-
-        updated_task: AgentAutonomous | None = None
-        rewritten_tasks: list[AgentAutonomous] = []
-        for task in current_tasks:
-            if task.id == task_id:
-                # Update only fields that are set in the request
-                update_data = task_update.model_dump(exclude_unset=True)
-                task_dict = task.model_dump()
-                task_dict.update(update_data)
-
-                updated_task = AgentAutonomous.model_validate(
-                    task_dict
-                ).normalize_status_defaults()
-                rewritten_tasks.append(updated_task)
-            else:
-                rewritten_tasks.append(task)
-
-        if updated_task is None:
-            raise IntentKitAPIError(
-                404,
-                "TaskNotFound",
-                f"Autonomous task with ID {task_id} not found.",
+        if update_data.get("target_agent_id"):
+            await _validate_target_agent(
+                session, team_id, update_data["target_agent_id"]
             )
 
-        db_agent.autonomous = _serialize_autonomous(rewritten_tasks)
-        await session.commit()
+        merged = (
+            AutonomousTask.model_validate(row)
+            .model_copy(update=update_data)
+            .normalize_status_defaults()
+        )
 
-    return updated_task
+        row.target_agent_id = merged.target_agent_id
+        row.name = merged.name
+        row.description = merged.description
+        row.cron = merged.cron
+        row.prompt = merged.prompt
+        row.enabled = merged.enabled
+        row.has_memory = merged.has_memory
+        row.status = merged.status.value if merged.status else None
+        row.next_run_time = merged.next_run_time
+
+        await session.commit()
+        await session.refresh(row)
+        return AutonomousTask.model_validate(row)
+
+
+async def delete_autonomous_task(team_id: str, task_id: str) -> None:
+    """Delete an autonomous task owned by the team."""
+    async with get_session() as session:
+        row = await session.get(AutonomousTaskTable, task_id)
+        if row is None or row.team_id != team_id:
+            raise _task_not_found_error(task_id)
+        await session.delete(row)
+        await session.commit()
 
 
 async def update_autonomous_task_status(
-    agent_id: str,
+    team_id: str,
     task_id: str,
-    status: AgentAutonomousStatus | None,
+    status: AutonomousTaskStatus | None,
     next_run_time: datetime | None,
-) -> AgentAutonomous:
-    async with get_session() as session:
-        db_agent = await session.get(AgentTable, agent_id)
-        if db_agent is None:
-            raise _agent_not_found_error(agent_id)
-        if db_agent.archived_at is not None:
-            raise _autonomous_not_allowed_error()
+) -> AutonomousTask:
+    """Update only the runtime status/next_run_time of a task (single-row write).
 
-        current_tasks = _deserialize_autonomous(db_agent.autonomous)
-
-        updated_task: AgentAutonomous | None = None
-        rewritten_tasks: list[AgentAutonomous] = []
-        for task in current_tasks:
-            if task.id == task_id:
-                updated_task = task.model_copy(
-                    update={"status": status, "next_run_time": next_run_time}
-                )
-                rewritten_tasks.append(updated_task)
-            else:
-                rewritten_tasks.append(task)
-
-        if updated_task is None:
-            raise IntentKitAPIError(
-                404,
-                "TaskNotFound",
-                f"Autonomous task with ID {task_id} not found.",
-            )
-
-        db_agent.autonomous = _serialize_autonomous(rewritten_tasks)
-        await session.commit()
-
-    return updated_task
-
-
-async def list_all_autonomous_tasks(
-    team_id: str | None = None,
-) -> list[AgentTasksGroup]:
-    """List all autonomous tasks across all agents, grouped by agent.
-
-    Args:
-        team_id: If provided, only return tasks for agents in this team.
-                 If None, return tasks for all agents (local mode).
+    A disabled task always has its runtime state cleared, regardless of the
+    requested status, so callers don't need to special-case it.
     """
     async with get_session() as session:
-        query = select(
-            AgentTable.id,
-            AgentTable.slug,
-            AgentTable.name,
-            AgentTable.picture,
-            AgentTable.autonomous,
-        ).where(
-            AgentTable.archived_at.is_(None),
-            AgentTable.autonomous.isnot(None),
-        )
+        row = await session.get(AutonomousTaskTable, task_id)
+        if row is None or row.team_id != team_id:
+            raise _task_not_found_error(task_id)
 
-        if team_id is not None:
-            query = query.where(AgentTable.team_id == team_id)
+        if not row.enabled:
+            status = None
+            next_run_time = None
 
-        query = query.order_by(AgentTable.name)
-        result = await session.execute(query)
-        rows = result.all()
-
-    groups: list[AgentTasksGroup] = []
-    for row in rows:
-        agent_id, slug, name, picture, autonomous_data = row
-        tasks = _deserialize_autonomous(autonomous_data)
-        if not tasks:
-            continue
-        groups.append(
-            AgentTasksGroup(
-                agent_id=agent_id,
-                agent_slug=slug,
-                agent_name=name,
-                agent_image=picture,
-                tasks=tasks,
-            )
-        )
-
-    return groups
+        row.status = status.value if status else None
+        row.next_run_time = next_run_time
+        # Snapshot before commit: expire_on_commit would expire row attributes,
+        # and re-reading them after commit triggers an async lazy-load error.
+        result = AutonomousTask.model_validate(row)
+        await session.commit()
+        return result

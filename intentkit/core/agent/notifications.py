@@ -11,24 +11,6 @@ def send_agent_notification(agent: Agent, agent_data: AgentData, message: str) -
         agent_data: The agent data to update
         message: The notification message
     """
-    autonomous_formatted = ""
-    if agent.autonomous:
-        enabled_autonomous = [auto for auto in agent.autonomous if auto.enabled]
-        if enabled_autonomous:
-            autonomous_items = []
-            for auto in enabled_autonomous:
-                schedule = (
-                    f"cron: {auto.cron}" if auto.cron else f"minutes: {auto.minutes}"
-                )
-                autonomous_items.append(
-                    f"• {auto.id}: {auto.name or 'Unnamed'} ({schedule})"
-                )
-            autonomous_formatted = "\n".join(autonomous_items)
-        else:
-            autonomous_formatted = "No enabled autonomous configurations"
-    else:
-        autonomous_formatted = "None"
-
     tools_formatted = ""
     if agent.tools:
         enabled_categories = []
@@ -92,10 +74,6 @@ def send_agent_notification(agent: Agent, agent_data: AgentData, message: str) -
                     {
                         "title": "Wallet Address",
                         "value": agent_data.evm_wallet_address,
-                    },
-                    {
-                        "title": "Autonomous",
-                        "value": autonomous_formatted,
                     },
                     {
                         "title": "Tools",

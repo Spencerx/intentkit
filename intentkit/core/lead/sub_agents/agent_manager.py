@@ -1,4 +1,4 @@
-"""Agent Manager sub-agent: agent CRUD plus autonomous tasks scheduled on those agents."""
+"""Agent Manager sub-agent: team agent CRUD and configuration."""
 
 from __future__ import annotations
 
@@ -7,21 +7,9 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import BaseTool
 
-from intentkit.core.lead.tools.add_autonomous_task import (
-    lead_add_autonomous_task_tool,
-)
 from intentkit.core.lead.tools.create_team_agent import create_team_agent_tool
-from intentkit.core.lead.tools.delete_autonomous_task import (
-    lead_delete_autonomous_task_tool,
-)
-from intentkit.core.lead.tools.edit_autonomous_task import (
-    lead_edit_autonomous_task_tool,
-)
 from intentkit.core.lead.tools.get_team_agent import get_team_agent_tool
 from intentkit.core.lead.tools.get_team_info import get_team_info_tool
-from intentkit.core.lead.tools.list_autonomous_tasks import (
-    lead_list_autonomous_tasks_tool,
-)
 from intentkit.core.lead.tools.list_team_agents import list_team_agents_tool
 from intentkit.core.lead.tools.list_tools import lead_list_available_tools_tool
 from intentkit.core.lead.tools.llm import lead_get_available_llms_tool
@@ -52,10 +40,6 @@ def get_agent_manager_tools() -> Sequence[BaseTool]:
         update_team_agent_tool,
         lead_get_available_llms_tool,
         lead_list_available_tools_tool,
-        lead_list_autonomous_tasks_tool,
-        lead_add_autonomous_task_tool,
-        lead_edit_autonomous_task_tool,
-        lead_delete_autonomous_task_tool,
     ]
 
 
@@ -155,28 +139,9 @@ def build_agent_manager(team_id: str) -> Agent:
         "specialised scraping/extraction needs and only belong in `tools` "
         "when the agent really needs them.\n\n"
         "### Autonomous Tasks\n\n"
-        "Tasks belong to an agent and run on a cron schedule. Use these tools:\n"
-        "- `lead_list_autonomous_tasks` — list tasks on an agent (call before "
-        "edit/delete to discover task IDs).\n"
-        "- `lead_add_autonomous_task` — schedule a new task.\n"
-        "- `lead_edit_autonomous_task` — update fields on an existing task.\n"
-        "- `lead_delete_autonomous_task` — remove a task.\n\n"
-        "Workflow:\n"
-        "1. If the user did not name an agent, call `lead_list_team_agents`.\n"
-        "2. Call `lead_list_autonomous_tasks` to see existing tasks before "
-        "adding/editing/deleting.\n"
-        "3. Apply the change.\n\n"
-        "Cron expressions (5 fields: min hour day month weekday):\n"
-        "- `*/5 * * * *` — every 5 min\n"
-        "- `0 */2 * * *` — every 2 hours\n"
-        "- `0 9 * * *` — daily 9:00 UTC\n"
-        "- `0 9 * * 1-5` — weekdays 9:00 UTC\n\n"
-        "Conditional tasks: for condition-based work, schedule a polling "
-        "task (e.g. every 5 min). Unless the user wants it to run forever, "
-        "tell the task to delete itself once the condition is met.\n\n"
-        "Tips:\n"
-        "- Set `has_memory=True` only when the task needs context between runs.\n"
-        "- Prefer disabling (`enabled=False`) over deleting for temporary pauses.\n\n"
+        "Autonomous (cron) tasks are managed by the separate `task-manager` "
+        "sub-agent, not here. If the user asks to schedule recurring work, tell "
+        "the lead to route the request to `task-manager`.\n\n"
         "### Agent Fields Reference\n\n"
         "- `name`: Display name (max 50 chars)\n"
         "- `purpose`, `personality`, `principles`: Agent character\n"
@@ -200,10 +165,7 @@ def build_agent_manager(team_id: str) -> Agent:
         "owner": "system",
         "team_id": team_id,
         "name": "Agent Manager",
-        "purpose": (
-            "Create, configure, and update team agents, including the "
-            "autonomous tasks scheduled on those agents."
-        ),
+        "purpose": ("Create, configure, and update team agents."),
         "principles": (
             "1. Speak to users in their language, but use English in agent and task configuration.\n"
             "2. All changes are directly deployed (no draft flow).\n"

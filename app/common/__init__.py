@@ -1,4 +1,4 @@
-from app.common.autonomous import AllTasksAgentGroup, AutonomousResponse
+from app.common.autonomous import AutonomousResponse
 from app.common.chat import (
     ChatMessagesResponse,
     ChatUpdateRequest,
@@ -14,7 +14,6 @@ from app.common.metadata import metadata_router
 from app.common.schema import schema_router
 
 __all__ = [
-    "AllTasksAgentGroup",
     "AutonomousResponse",
     "ChatMessagesResponse",
     "ChatUpdateRequest",

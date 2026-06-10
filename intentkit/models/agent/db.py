@@ -148,11 +148,6 @@ class AgentUserInputColumns:
     )
 
     # Additional fields from AgentUserInput
-    autonomous: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSONB(),
-        nullable=True,
-        comment="Autonomous agent configurations",
-    )
     telegram_entrypoint_enabled: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,

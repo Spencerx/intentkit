@@ -1,358 +1,219 @@
+"""Unit tests for the team-scoped autonomous core service."""
+
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from intentkit.models.agent.autonomous import (
-    AgentAutonomous,
-    AgentAutonomousStatus,
-    AutonomousCreateRequest,
-    AutonomousUpdateRequest,
-    minutes_to_cron,
+from intentkit.core.autonomous import (
+    add_autonomous_task,
+    delete_autonomous_task,
+    list_team_autonomous_tasks,
+    update_autonomous_task,
+    update_autonomous_task_status,
 )
+from intentkit.models.autonomous import (
+    AutonomousCreateRequest,
+    AutonomousTaskStatus,
+    AutonomousUpdateRequest,
+)
+from intentkit.utils.error import IntentKitAPIError
 
 
-@pytest.mark.asyncio
-async def test_add_autonomous_task():
-    """Test adding an autonomous task using the core function."""
-    from intentkit.core.autonomous import add_autonomous_task
-
-    agent_id = "test-agent-id"
-    task_request = AutonomousCreateRequest(
-        name="Test Task",
-        description="A test task",
-        cron="*/5 * * * *",
-        prompt="Do something",
-        enabled=True,
-        has_memory=True,
-    )
-
-    # Mock the database session
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        # Mock agent exists and is not archived
-        mock_db_agent = MagicMock()
-        mock_db_agent.archived_at = None
-        mock_db_agent.autonomous = None  # No existing tasks
-        mock_session.get = AsyncMock(return_value=mock_db_agent)
-        mock_session.commit = AsyncMock()
-
-        result = await add_autonomous_task(agent_id, task_request)
-
-        # Verify the result
-        assert result.name == "Test Task"
-        assert result.description == "A test task"
-        assert result.cron == "*/5 * * * *"
-        assert result.prompt == "Do something"
-        assert result.enabled is True
-        assert result.has_memory is True
-        assert result.minutes is None  # minutes should not be set
-        assert (
-            result.status is not None and result.status.value == "waiting"
-        )  # Default status for enabled task
-        assert result.id is not None  # ID should be auto-generated
-
-        # Verify DB was updated
-        mock_session.commit.assert_called_once()
-        assert mock_db_agent.autonomous is not None
-
-
-@pytest.mark.asyncio
-async def test_update_autonomous_task():
-    """Test updating an autonomous task using the core function."""
-    from intentkit.core.autonomous import update_autonomous_task
-
-    agent_id = "test-agent-id"
-    task_id = "test-task-id"
-
-    existing_task = AgentAutonomous(
-        id=task_id,
-        name="Original Task",
-        description="Original description",
-        cron="*/10 * * * *",
-        prompt="Original prompt",
-        enabled=True,
-        has_memory=True,
-        status=AgentAutonomousStatus.WAITING,
-    )
-
-    update_request = AutonomousUpdateRequest(
-        name="Updated Task",
-        enabled=False,
-    )
-
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db_agent = MagicMock()
-        mock_db_agent.archived_at = None
-        mock_db_agent.autonomous = [existing_task.model_dump()]
-        mock_session.get = AsyncMock(return_value=mock_db_agent)
-        mock_session.commit = AsyncMock()
-
-        result = await update_autonomous_task(agent_id, task_id, update_request)
-
-        # Verify updated fields
-        assert result.name == "Updated Task"
-        assert result.enabled is False
-        assert result.status is None  # Should be cleared when disabled
-
-        # Verify unchanged fields
-        assert result.cron == "*/10 * * * *"
-        assert result.prompt == "Original prompt"
-        assert result.description == "Original description"
-        assert result.has_memory is True
-
-        mock_session.commit.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_delete_autonomous_task():
-    """Test deleting an autonomous task using the core function."""
-    from intentkit.core.autonomous import delete_autonomous_task
-
-    agent_id = "test-agent-id"
-    task_id = "test-task-id"
-
-    existing_task = AgentAutonomous(
-        id=task_id,
-        name="Task to Delete",
-        cron="*/5 * * * *",
-        prompt="Delete me",
-        enabled=False,
-    )
-
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db_agent = MagicMock()
-        mock_db_agent.archived_at = None
-        mock_db_agent.autonomous = [existing_task.model_dump()]
-        mock_session.get = AsyncMock(return_value=mock_db_agent)
-        mock_session.commit = AsyncMock()
-
-        await delete_autonomous_task(agent_id, task_id)
-
-        # Verify task was removed
-        assert mock_db_agent.autonomous == []
-        mock_session.commit.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_list_autonomous_tasks():
-    """Test listing autonomous tasks using the core function."""
-    from intentkit.core.autonomous import list_autonomous_tasks
-
-    agent_id = "test-agent-id"
-
-    task1 = AgentAutonomous(
+def _fake_row(**overrides):
+    base = dict(
         id="task-1",
-        name="Task 1",
+        team_id="team-1",
+        target_agent_id=None,
+        name=None,
+        description=None,
         cron="*/5 * * * *",
-        prompt="First task",
+        prompt="p",
         enabled=True,
-        status=AgentAutonomousStatus.WAITING,
+        has_memory=False,
+        status="waiting",
+        next_run_time=None,
+        created_at=None,
+        updated_at=None,
     )
-    task2 = AgentAutonomous(
-        id="task-2",
-        name="Task 2",
-        cron="0 * * * *",
-        prompt="Second task",
-        enabled=False,
-    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
 
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        # Mock the execute result for list_autonomous_tasks which uses session.execute
-        mock_result = MagicMock()
-        mock_result.first.return_value = (
-            [task1.model_dump(), task2.model_dump()],  # autonomous data
-            None,  # archived_at
+def _patch_session():
+    """Return (patcher, mock_session) wiring get_session as an async context manager."""
+    patcher = patch("intentkit.core.autonomous.get_session")
+    mock_get_session = patcher.start()
+    mock_session = MagicMock()
+    mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
+    mock_session.add = MagicMock()
+    mock_session.delete = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.refresh = AsyncMock()
+    return patcher, mock_session
+
+
+@pytest.mark.asyncio
+async def test_add_task_belongs_to_team():
+    patcher, session = _patch_session()
+    try:
+        req = AutonomousCreateRequest(cron="*/5 * * * *", prompt="do work")
+        result = await add_autonomous_task("team-1", req)
+
+        assert result.team_id == "team-1"
+        assert result.target_agent_id is None
+        assert result.status == AutonomousTaskStatus.WAITING
+        assert result.id
+        session.add.assert_called_once()
+        session.commit.assert_called_once()
+    finally:
+        patcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_add_task_rejects_invalid_cron():
+    # Validation happens before any DB work.
+    with pytest.raises(IntentKitAPIError):
+        await add_autonomous_task(
+            "team-1", AutonomousCreateRequest(cron="* * * * *", prompt="p")
         )
-        mock_session.execute = AsyncMock(return_value=mock_result)
-
-        result = await list_autonomous_tasks(agent_id)
-
-        assert len(result) == 2
-        assert result[0].id == "task-1"
-        assert result[0].name == "Task 1"
-        assert result[1].id == "task-2"
-        assert result[1].name == "Task 2"
-
-
-def test_autonomous_create_request_no_minutes_field():
-    """Verify that AutonomousCreateRequest does not have a minutes field."""
-    # This ensures the minutes field is properly deprecated
-    req = AutonomousCreateRequest(
-        cron="* * * * *",
-        prompt="foo",
-    )
-
-    # minutes should not be in the model fields
-    assert "minutes" not in AutonomousCreateRequest.model_fields
-
-    # Verify default values
-    assert req.enabled is True
-    assert req.has_memory is False
-    assert req.name is None
-    assert req.description is None
-
-
-def test_autonomous_update_request_no_minutes_field():
-    """Verify that AutonomousUpdateRequest does not have a minutes field."""
-    req = AutonomousUpdateRequest(
-        name="Updated",
-    )
-
-    # minutes should not be in the model fields
-    assert "minutes" not in AutonomousUpdateRequest.model_fields
-
-    # All fields should be optional (None by default)
-    assert req.name == "Updated"
-    assert req.cron is None
-    assert req.prompt is None
-    assert req.enabled is None
-    assert req.has_memory is None
 
 
 @pytest.mark.asyncio
-async def test_add_autonomous_task_agent_not_found():
-    """Test that adding task to non-existent agent raises error."""
-    from intentkit.core.autonomous import add_autonomous_task
-    from intentkit.utils.error import IntentKitAPIError
-
-    agent_id = "non-existent-agent"
-    task_request = AutonomousCreateRequest(
-        cron="*/5 * * * *",
-        prompt="Do something",
-    )
-
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        # Agent not found
-        mock_session.get = AsyncMock(return_value=None)
-
-        with pytest.raises(IntentKitAPIError) as exc_info:
-            await add_autonomous_task(agent_id, task_request)
-
-        assert exc_info.value.status_code == 404
+async def test_add_task_rejects_target_agent_not_in_team():
+    patcher, session = _patch_session()
+    try:
+        # Agent lookup returns None -> not in team.
+        session.get = AsyncMock(return_value=None)
+        with pytest.raises(IntentKitAPIError):
+            await add_autonomous_task(
+                "team-1",
+                AutonomousCreateRequest(
+                    cron="*/5 * * * *", prompt="p", target_agent_id="agent-x"
+                ),
+            )
+    finally:
+        patcher.stop()
 
 
 @pytest.mark.asyncio
-async def test_delete_autonomous_task_not_found():
-    """Test that deleting non-existent task raises error."""
-    from intentkit.core.autonomous import delete_autonomous_task
-    from intentkit.utils.error import IntentKitAPIError
-
-    agent_id = "test-agent-id"
-    task_id = "non-existent-task"
-
-    with patch("intentkit.core.autonomous.get_session") as mock_get_session:
-        mock_session = MagicMock()
-        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        mock_db_agent = MagicMock()
-        mock_db_agent.archived_at = None
-        mock_db_agent.autonomous = []  # No tasks
-        mock_session.get = AsyncMock(return_value=mock_db_agent)
-
-        with pytest.raises(IntentKitAPIError) as exc_info:
-            await delete_autonomous_task(agent_id, task_id)
-
-        assert exc_info.value.status_code == 404
+async def test_add_task_accepts_target_agent_in_team():
+    patcher, session = _patch_session()
+    try:
+        session.get = AsyncMock(
+            return_value=SimpleNamespace(
+                id="agent-x", team_id="team-1", archived_at=None
+            )
+        )
+        result = await add_autonomous_task(
+            "team-1",
+            AutonomousCreateRequest(
+                cron="*/5 * * * *", prompt="p", target_agent_id="agent-x"
+            ),
+        )
+        assert result.target_agent_id == "agent-x"
+        session.add.assert_called_once()
+    finally:
+        patcher.stop()
 
 
-# Tests for minutes to cron conversion
+@pytest.mark.asyncio
+async def test_update_task_not_found_raises():
+    patcher, session = _patch_session()
+    try:
+        session.get = AsyncMock(return_value=None)
+        with pytest.raises(IntentKitAPIError):
+            await update_autonomous_task(
+                "team-1", "task-1", AutonomousUpdateRequest(prompt="new")
+            )
+    finally:
+        patcher.stop()
 
 
-def test_minutes_to_cron_basic():
-    """Test basic minutes to cron conversion."""
-    assert minutes_to_cron(5) == "*/5 * * * *"
-    assert minutes_to_cron(10) == "*/10 * * * *"
-    assert minutes_to_cron(15) == "*/15 * * * *"
-    assert minutes_to_cron(30) == "*/30 * * * *"
+@pytest.mark.asyncio
+async def test_update_task_rejects_foreign_team():
+    patcher, session = _patch_session()
+    try:
+        session.get = AsyncMock(return_value=_fake_row(team_id="other-team"))
+        with pytest.raises(IntentKitAPIError):
+            await update_autonomous_task(
+                "team-1", "task-1", AutonomousUpdateRequest(prompt="new")
+            )
+    finally:
+        patcher.stop()
 
 
-def test_minutes_to_cron_hourly():
-    """Test hourly conversion for >= 60 minutes."""
-    assert minutes_to_cron(60) == "0 */1 * * *"
-    assert minutes_to_cron(120) == "0 */2 * * *"
-    assert minutes_to_cron(180) == "0 */3 * * *"
+@pytest.mark.asyncio
+async def test_update_task_applies_partial_change():
+    patcher, session = _patch_session()
+    try:
+        row = _fake_row(team_id="team-1", prompt="old")
+        session.get = AsyncMock(return_value=row)
+        result = await update_autonomous_task(
+            "team-1", "task-1", AutonomousUpdateRequest(prompt="new")
+        )
+        assert result.prompt == "new"
+        assert row.prompt == "new"
+        session.commit.assert_called_once()
+    finally:
+        patcher.stop()
 
 
-def test_minutes_to_cron_daily():
-    """Test daily conversion for >= 24 hours."""
-    assert minutes_to_cron(1440) == "0 0 * * *"  # 24 hours
-    assert minutes_to_cron(2880) == "0 0 * * *"  # 48 hours
+@pytest.mark.asyncio
+async def test_delete_task():
+    patcher, session = _patch_session()
+    try:
+        row = _fake_row(team_id="team-1")
+        session.get = AsyncMock(return_value=row)
+        await delete_autonomous_task("team-1", "task-1")
+        session.delete.assert_awaited_once_with(row)
+        session.commit.assert_called_once()
+    finally:
+        patcher.stop()
 
 
-def test_minutes_to_cron_invalid():
-    """Test invalid minutes defaults to 5."""
-    assert minutes_to_cron(0) == "*/5 * * * *"
-    assert minutes_to_cron(-1) == "*/5 * * * *"
+@pytest.mark.asyncio
+async def test_update_status_single_row():
+    patcher, session = _patch_session()
+    try:
+        row = _fake_row(team_id="team-1")
+        session.get = AsyncMock(return_value=row)
+        ts = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        result = await update_autonomous_task_status(
+            "team-1", "task-1", AutonomousTaskStatus.RUNNING, ts
+        )
+        assert row.status == "running"
+        assert row.next_run_time == ts
+        assert result.status == AutonomousTaskStatus.RUNNING
+        session.commit.assert_called_once()
+    finally:
+        patcher.stop()
 
 
-def test_normalize_converts_minutes_to_cron():
-    """Test that normalize_status_defaults converts minutes to cron."""
-    task = AgentAutonomous(
-        id="test-task",
-        minutes=10,
-        cron=None,
-        prompt="Test prompt",
-        enabled=True,
-    )
-
-    normalized = task.normalize_status_defaults()
-
-    assert normalized.cron == "*/10 * * * *"
-    assert normalized.minutes is None  # Should be cleared
-    assert normalized.status is not None and normalized.status.value == "waiting"
+@pytest.mark.asyncio
+async def test_list_team_tasks_maps_rows():
+    patcher, session = _patch_session()
+    try:
+        session.scalars = AsyncMock(return_value=[_fake_row(id="a"), _fake_row(id="b")])
+        tasks = await list_team_autonomous_tasks("team-1")
+        assert [t.id for t in tasks] == ["a", "b"]
+    finally:
+        patcher.stop()
 
 
-def test_normalize_preserves_cron_if_set():
-    """Test that normalize_status_defaults does not override existing cron."""
-    task = AgentAutonomous(
-        id="test-task",
-        minutes=10,  # This should be ignored
-        cron="0 */2 * * *",  # Existing cron
-        prompt="Test prompt",
-        enabled=True,
-    )
-
-    normalized = task.normalize_status_defaults()
-
-    # cron should be preserved, not converted from minutes
-    assert normalized.cron == "0 */2 * * *"
-    # minutes should remain (cron was already set)
-    assert normalized.minutes == 10
-    assert normalized.status is not None and normalized.status.value == "waiting"
-
-
-def test_normalize_clears_status_when_disabled():
-    """Test that normalize_status_defaults clears status when disabled."""
-    task = AgentAutonomous(
-        id="test-task",
-        minutes=15,
-        prompt="Test prompt",
-        enabled=False,
-        status=AgentAutonomousStatus.WAITING,
-    )
-
-    normalized = task.normalize_status_defaults()
-
-    assert normalized.cron == "*/15 * * * *"
-    assert normalized.minutes is None
-    assert normalized.status is None  # Cleared because disabled
+@pytest.mark.asyncio
+async def test_update_status_clears_when_disabled():
+    patcher, session = _patch_session()
+    try:
+        row = _fake_row(team_id="team-1", enabled=False)
+        session.get = AsyncMock(return_value=row)
+        result = await update_autonomous_task_status(
+            "team-1", "task-1", AutonomousTaskStatus.RUNNING, None
+        )
+        # Disabled tasks always have runtime state cleared.
+        assert row.status is None
+        assert result.status is None
+    finally:
+        patcher.stop()

@@ -2,9 +2,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from intentkit.models.agent import Agent, AgentAutonomous, AgentAutonomousStatus
+from intentkit.models.autonomous import AutonomousTask, AutonomousTaskStatus
 
 from app.local.autonomous import autonomous_router
+from app.local.lead import LEAD_TEAM_ID
 
 
 # Create a test app with the autonomous router
@@ -20,52 +21,40 @@ def client():
 
 
 @pytest.fixture
-def mock_agent():
-    agent = Agent.model_construct(
-        id="test-agent",
-        owner="user",
-        autonomous=[
-            AgentAutonomous(
-                id="task-1",
-                name="Task 1",
-                cron="0 * * * *",
-                prompt="Do something",
-                enabled=True,
-                status=AgentAutonomousStatus.WAITING,
-                minutes=None,
-                next_run_time=None,
-            )
-        ],
-    )
-    return agent
-
-
-@pytest.fixture
 def mock_task():
-    return AgentAutonomous(
+    return AutonomousTask(
         id="new-task-id",
+        team_id=LEAD_TEAM_ID,
         name="New Task",
         cron="*/5 * * * *",
         prompt="New prompt",
         enabled=True,
-        status=AgentAutonomousStatus.WAITING,
-        minutes=None,
+        status=AutonomousTaskStatus.WAITING,
         next_run_time=None,
     )
 
 
 @pytest.mark.asyncio
-async def test_list_autonomous(client, mock_agent, monkeypatch):
+async def test_list_autonomous(client, monkeypatch):
     import app.local.autonomous as autonomous_module
 
-    async def mock_get_agent(agent_id):
-        if agent_id == "test-agent":
-            return mock_agent
-        return None
+    async def mock_list(team_id):
+        assert team_id == LEAD_TEAM_ID
+        return [
+            AutonomousTask(
+                id="task-1",
+                team_id=LEAD_TEAM_ID,
+                name="Task 1",
+                cron="0 * * * *",
+                prompt="Do something",
+                enabled=True,
+                status=AutonomousTaskStatus.WAITING,
+            )
+        ]
 
-    monkeypatch.setattr(autonomous_module, "get_agent", mock_get_agent)
+    monkeypatch.setattr(autonomous_module, "list_team_autonomous_tasks", mock_list)
 
-    response = client.get("/agents/test-agent/autonomous")
+    response = client.get("/autonomous")
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
@@ -77,8 +66,8 @@ async def test_list_autonomous(client, mock_agent, monkeypatch):
 async def test_add_autonomous(client, mock_task, monkeypatch):
     import app.local.autonomous as autonomous_module
 
-    async def mock_add_autonomous_task(agent_id, task_request):
-        # Simulate adding the task and returning the created task
+    async def mock_add_autonomous_task(team_id, task_request):
+        assert team_id == LEAD_TEAM_ID
         return mock_task
 
     monkeypatch.setattr(
@@ -90,9 +79,10 @@ async def test_add_autonomous(client, mock_task, monkeypatch):
         "cron": "*/5 * * * *",
         "prompt": "New prompt",
         "enabled": True,
+        "target_agent_id": "agent-x",
     }
 
-    response = client.post("/agents/test-agent/autonomous", json=payload)
+    response = client.post("/autonomous", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "New Task"
@@ -104,18 +94,19 @@ async def test_add_autonomous(client, mock_task, monkeypatch):
 async def test_update_autonomous(client, monkeypatch):
     import app.local.autonomous as autonomous_module
 
-    updated_task = AgentAutonomous(
+    updated_task = AutonomousTask(
         id="task-1",
+        team_id=LEAD_TEAM_ID,
         name="Updated Task",
         cron="0 * * * *",
         prompt="Do something",
         enabled=False,
         status=None,
-        minutes=None,
         next_run_time=None,
     )
 
-    async def mock_update_autonomous_task(agent_id, task_id, task_update):
+    async def mock_update_autonomous_task(team_id, task_id, task_update):
+        assert team_id == LEAD_TEAM_ID
         return updated_task
 
     monkeypatch.setattr(
@@ -124,7 +115,7 @@ async def test_update_autonomous(client, monkeypatch):
 
     payload = {"name": "Updated Task", "enabled": False}
 
-    response = client.patch("/agents/test-agent/autonomous/task-1", json=payload)
+    response = client.patch("/autonomous/task-1", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "task-1"
@@ -136,68 +127,45 @@ async def test_update_autonomous(client, monkeypatch):
 async def test_delete_autonomous(client, monkeypatch):
     import app.local.autonomous as autonomous_module
 
-    async def mock_delete_autonomous_task(agent_id, task_id):
-        # Simulate successful deletion
-        pass
+    async def mock_delete_autonomous_task(team_id, task_id):
+        assert team_id == LEAD_TEAM_ID
 
     monkeypatch.setattr(
         autonomous_module, "delete_autonomous_task", mock_delete_autonomous_task
     )
 
-    response = client.delete("/agents/test-agent/autonomous/task-1")
+    response = client.delete("/autonomous/task-1")
     assert response.status_code == 204
 
 
 @pytest.mark.asyncio
-async def testupdate_autonomous_status_uses_core_update(monkeypatch):
+async def test_update_autonomous_status_uses_core_update(monkeypatch):
     import app.autonomous as autonomous_module
 
     called = {"value": False}
 
     async def mock_update_autonomous_task_status(
-        agent_id, task_id, status, next_run_time
+        team_id, task_id, status, next_run_time
     ):
         called["value"] = True
 
-    async def mock_get_agent(agent_id):
-        return Agent.model_construct(
-            id=agent_id,
-            owner="user",
-            autonomous=[
-                AgentAutonomous(
-                    id="task-1",
-                    cron="*/5 * * * *",
-                    prompt="Do something",
-                    enabled=True,
-                    status=AgentAutonomousStatus.WAITING,
-                    minutes=None,
-                    next_run_time=None,
-                )
-            ],
-        )
-
     class MockJob:
         def __init__(self):
-            self.id = "agent-1-task-1"
-            self.args = ["agent-1", "user", "task-1", "prompt", True]
+            self.id = "team-1-task-1"
+            self.args = ["team-1", "user", "task-1", "prompt", True, None]
             self.next_run_time = None
 
     monkeypatch.setattr(
         autonomous_module,
         "update_autonomous_task_status",
         mock_update_autonomous_task_status,
-        raising=False,
     )
-    monkeypatch.setattr(autonomous_module, "get_agent", mock_get_agent)
     monkeypatch.setattr(
         autonomous_module.scheduler, "get_job", lambda _job_id: MockJob()
     )
 
-    try:
-        await autonomous_module.update_autonomous_status(
-            "agent-1-task-1", AgentAutonomousStatus.RUNNING
-        )
-    except AttributeError as exc:
-        pytest.fail(f"unexpected attribute error: {exc}")
+    await autonomous_module.update_autonomous_status(
+        "team-1-task-1", AutonomousTaskStatus.RUNNING
+    )
 
     assert called["value"] is True

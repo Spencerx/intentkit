@@ -82,10 +82,6 @@ async def override_agent(
     if owner and owner != existing_agent.owner:
         raise IntentKitAPIError(403, "Forbidden", "forbidden")
 
-    # Validate autonomous schedule settings if present
-    if "autonomous" in agent.model_dump(exclude_unset=True):
-        agent.validate_autonomous_schedule()
-
     # Validate sub-agents if present
     if agent.sub_agents:
         await _validate_sub_agents(agent.sub_agents)
@@ -113,10 +109,6 @@ async def override_agent(
 
         # update
         update_data = agent.model_dump()
-        if "autonomous" in update_data:
-            update_data["autonomous"] = agent.normalize_autonomous_statuses(
-                update_data["autonomous"]
-            )
         if "tools" in update_data and update_data["tools"]:
             update_data["tools"] = sanitize_tools(update_data["tools"])
         for key, value in update_data.items():
@@ -170,10 +162,6 @@ async def patch_agent(
     if owner and owner != existing_agent.owner:
         raise IntentKitAPIError(403, "Forbidden", "forbidden")
 
-    # Validate autonomous schedule settings if present
-    if "autonomous" in agent.model_dump(exclude_unset=True):
-        agent.validate_autonomous_schedule()
-
     # Validate sub-agents if present in update
     update_fields = agent.model_dump(exclude_unset=True)
     if "sub_agents" in update_fields and update_fields["sub_agents"]:
@@ -203,10 +191,6 @@ async def patch_agent(
 
         # update
         update_data = update_fields
-        if "autonomous" in update_data:
-            update_data["autonomous"] = agent.normalize_autonomous_statuses(
-                update_data["autonomous"]
-            )
         if "tools" in update_data and update_data["tools"]:
             update_data["tools"] = sanitize_tools(update_data["tools"])
         for key, value in update_data.items():
@@ -259,10 +243,6 @@ async def create_agent(agent: AgentCreate) -> tuple[Agent, AgentData]:
                     message="Agent with this upstream ID already exists",
                 )
 
-    # Validate autonomous schedule settings if present
-    if agent.autonomous:
-        agent.validate_autonomous_schedule()
-
     # Validate sub-agents if present
     if agent.sub_agents:
         await _validate_sub_agents(agent.sub_agents)
@@ -278,10 +258,6 @@ async def create_agent(agent: AgentCreate) -> tuple[Agent, AgentData]:
                 await _validate_slug_unique(agent.slug, None, db)
 
             create_data = agent.model_dump()
-            if "autonomous" in create_data:
-                create_data["autonomous"] = agent.normalize_autonomous_statuses(
-                    create_data["autonomous"]
-                )
             db_agent = AgentTable(**create_data)
             db_agent.version = agent.hash()
             db_agent.deployed_at = func.now()

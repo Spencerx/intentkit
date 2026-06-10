@@ -195,7 +195,7 @@ class Agent(AgentCreate, AgentPublicInfo):
                     )
                     yaml_lines.append(yaml_value.rstrip())
             elif isinstance(value, list) and value and hasattr(value[0], "model_dump"):
-                # Handle list of Pydantic models (e.g., list[AgentAutonomous])
+                # Handle list of Pydantic models
                 yaml_lines.append(f"{field_name}:")
                 # Convert each Pydantic model to dict
                 model_dicts = [

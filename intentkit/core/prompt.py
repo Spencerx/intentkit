@@ -285,17 +285,20 @@ def build_agent_prompt(
 # ============================================================================
 
 
-def _build_autonomous_task_prompt(agent: Agent, context: AgentContext) -> str:
+async def _build_autonomous_task_prompt(agent: Agent, context: AgentContext) -> str:
     """Build prompt for autonomous task entrypoint."""
+    from intentkit.core.autonomous import get_autonomous_task
+    from intentkit.utils.error import IntentKitAPIError
+
     task_id = context.chat_id.removeprefix("autonomous-")
 
-    # Find the autonomous task by task_id
+    # Look up the team-owned autonomous task by id.
     autonomous_task = None
-    if agent.autonomous:
-        for task in agent.autonomous:
-            if task.id == task_id:
-                autonomous_task = task
-                break
+    if agent.team_id:
+        try:
+            autonomous_task = await get_autonomous_task(agent.team_id, task_id)
+        except IntentKitAPIError:
+            autonomous_task = None
 
     if not autonomous_task:
         # Fallback if task not found
@@ -381,7 +384,7 @@ async def build_entrypoint_prompt(agent: Agent, context: AgentContext) -> str | 
                 entrypoint_prompt, agent.wechat_entrypoint_prompt
             )
     elif entrypoint == AuthorType.TRIGGER.value:
-        entrypoint_prompt = "\n\n" + _build_autonomous_task_prompt(agent, context)
+        entrypoint_prompt = "\n\n" + await _build_autonomous_task_prompt(agent, context)
 
     return entrypoint_prompt
 

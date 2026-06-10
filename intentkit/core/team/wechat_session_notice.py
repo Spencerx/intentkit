@@ -10,10 +10,9 @@ wechat by the existing sender path while the window is still open.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
-from intentkit.core.autonomous import list_autonomous_tasks
+from intentkit.core.autonomous import list_team_autonomous_tasks
 from intentkit.core.lead.service import get_team_agents
 
 logger = logging.getLogger(__name__)
@@ -25,8 +24,8 @@ WECHAT_SESSION_EXPIRING = "wechat_session_expiring"
 
 
 async def _build_team_status_block(team_id: str) -> str:
-    """Return a compact, human-readable summary of the team's agents and
-    their currently enabled autonomous tasks. Best-effort: failures are
+    """Return a compact, human-readable summary of the team's agents and the
+    team's currently enabled autonomous tasks. Best-effort: failures are
     swallowed and reflected as a placeholder line so the notice still goes
     out even if status collection breaks."""
     try:
@@ -37,37 +36,30 @@ async def _build_team_status_block(team_id: str) -> str:
         )
         return "（暂无法获取 agent 状态）"
 
-    if not agents:
-        return "团队当前没有部署任何 agent。"
-
-    # Fan out per-agent task lookups concurrently — sequential awaits would
-    # add one DB round-trip per agent on the user-facing latency path.
-    task_results = await asyncio.gather(
-        *(list_autonomous_tasks(a.id) for a in agents),
-        return_exceptions=True,
-    )
+    try:
+        tasks = await list_team_autonomous_tasks(team_id)
+    except Exception:
+        logger.warning(
+            "wechat session notice: failed to list autonomous tasks for team %s",
+            team_id,
+            exc_info=True,
+        )
+        tasks = []
 
     lines: list[str] = []
-    for agent, tasks_or_err in zip(agents, task_results):
-        if isinstance(tasks_or_err, BaseException):
-            logger.warning(
-                "wechat session notice: failed to list autonomous tasks for %s",
-                agent.id,
-                exc_info=tasks_or_err,
-            )
-            tasks = []
-        else:
-            tasks = tasks_or_err
+    if agents:
+        lines.append("团队 agent：" + "、".join(a.name or a.id for a in agents))
+    else:
+        lines.append("团队当前没有部署任何 agent。")
 
-        enabled_tasks = [t for t in tasks if t.enabled]
-        if enabled_tasks:
-            task_summaries = [f"{t.name}（cron={t.cron}）" for t in enabled_tasks]
-            lines.append(
-                f"- {agent.name}: 进行中的自动任务 {len(enabled_tasks)} 个 — "
-                + "；".join(task_summaries)
-            )
-        else:
-            lines.append(f"- {agent.name}: 暂无启用中的自动任务。")
+    enabled_tasks = [t for t in tasks if t.enabled]
+    if enabled_tasks:
+        task_summaries = [f"{t.name or t.id}（cron={t.cron}）" for t in enabled_tasks]
+        lines.append(
+            f"进行中的自动任务 {len(enabled_tasks)} 个 — " + "；".join(task_summaries)
+        )
+    else:
+        lines.append("暂无启用中的自动任务。")
 
     return "\n".join(lines)
 

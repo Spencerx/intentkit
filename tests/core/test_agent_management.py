@@ -48,7 +48,6 @@ def _make_agent_update(**overrides):
     dump = {
         "slug": "my-slug",
         "sub_agents": None,
-        "autonomous": None,
     }
     dump.update(overrides)
     agent.model_dump = MagicMock(return_value=dict(dump))
@@ -61,9 +60,6 @@ def _make_agent_update(**overrides):
     agent.hash = MagicMock(return_value="abc123")
     agent.slug = dump.get("slug")
     agent.sub_agents = dump.get("sub_agents")
-    agent.autonomous = dump.get("autonomous")
-    agent.validate_autonomous_schedule = MagicMock()
-    agent.normalize_autonomous_statuses = MagicMock(side_effect=lambda x: x)
     return agent
 
 
@@ -330,7 +326,6 @@ class TestCreateAgent:
         agent_create = _make_agent_create(owner="owner-1")
         agent_create.upstream_id = None
         agent_create.sub_agents = None
-        agent_create.autonomous = None
         agent_create.slug = None
 
         with patch(f"{MODULE}.AgentTable") as mock_table:
@@ -359,7 +354,6 @@ class TestCreateAgent:
         agent_create = _make_agent_create(owner="owner-1")
         agent_create.upstream_id = None
         agent_create.sub_agents = None
-        agent_create.autonomous = None
         agent_create.slug = None
 
         with (

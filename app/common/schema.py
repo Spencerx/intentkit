@@ -69,7 +69,6 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     This function applies additional adaptations:
     - Filters out toolsets where available() returns False
     - Simplifies tool schemas to only keep enabled and states fields
-    - Removes autonomous configuration
     - Removes telegram-related fields
 
     Updates the model property in the schema based on LLMModelInfo.get results.
@@ -84,19 +83,10 @@ async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     schema = await Agent.get_json_schema(db)
     properties = schema.get("properties", {})
 
-    # Remove autonomous field
-    properties.pop("autonomous", None)
-
     # Remove telegram-related fields
     properties.pop("telegram_entrypoint_enabled", None)
     properties.pop("telegram_entrypoint_prompt", None)
     properties.pop("telegram_config", None)
-
-    # Remove autonomous group from x-groups
-    if "x-groups" in schema:
-        schema["x-groups"] = [
-            group for group in schema["x-groups"] if group.get("id") != "autonomous"
-        ]
 
     # Filter and simplify tools
     tools_property = properties.get("tools", {})
