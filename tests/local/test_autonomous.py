@@ -1,8 +1,17 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from intentkit.models.autonomous import AutonomousTask, AutonomousTaskStatus
+from intentkit.models.autonomous import (
+    AutonomousExecution,
+    AutonomousExecutionTrigger,
+    AutonomousTask,
+    AutonomousTaskStatus,
+)
+from intentkit.models.chat import AuthorType, ChatMessage
+from intentkit.utils.error import IntentKitAPIError, intentkit_api_error_handler
 
 from app.local.autonomous import autonomous_router
 from app.local.lead import LEAD_TEAM_ID, LEAD_USER_ID
@@ -12,6 +21,7 @@ from app.local.lead import LEAD_TEAM_ID, LEAD_USER_ID
 def create_test_app():
     app = FastAPI()
     app.include_router(autonomous_router)
+    _ = app.exception_handler(IntentKitAPIError)(intentkit_api_error_handler)
     return app
 
 
@@ -137,6 +147,145 @@ async def test_delete_autonomous(client, monkeypatch):
 
     response = client.delete("/autonomous/task-1")
     assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_get_autonomous(client, mock_task, monkeypatch):
+    import app.local.autonomous as autonomous_module
+
+    async def mock_get(team_id, task_id):
+        assert team_id == LEAD_TEAM_ID
+        assert task_id == "new-task-id"
+        return mock_task
+
+    monkeypatch.setattr(autonomous_module, "get_autonomous_task", mock_get)
+
+    response = client.get("/autonomous/new-task-id")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == "new-task-id"
+    assert data["chat_id"] == "autonomous-new-task-id"
+
+
+def _mock_execution(**overrides):
+    base = dict(
+        id="exec-1",
+        task_id="task-1",
+        team_id=LEAD_TEAM_ID,
+        agent_id="agent-x",
+        target_agent_id="agent-x",
+        chat_id="autonomous-task-1",
+        message_id="msg-1",
+        started_at=datetime.now(UTC),
+    )
+    base.update(overrides)
+    return AutonomousExecution.model_validate(base)
+
+
+@pytest.mark.asyncio
+async def test_execute_autonomous_runs_in_background(client, mock_task, monkeypatch):
+    import app.local.autonomous as autonomous_module
+
+    async def mock_get(team_id, task_id):
+        return mock_task
+
+    async def mock_fresh_running(task_id):
+        return None
+
+    run_calls = {}
+
+    async def mock_run(**kwargs):
+        run_calls.update(kwargs)
+
+    monkeypatch.setattr(autonomous_module, "get_autonomous_task", mock_get)
+    monkeypatch.setattr(
+        autonomous_module, "get_fresh_running_execution", mock_fresh_running
+    )
+    monkeypatch.setattr(autonomous_module, "run_autonomous_task", mock_run)
+
+    response = client.post("/autonomous/new-task-id/execute")
+    assert response.status_code == 202
+    # TestClient runs background tasks before returning.
+    assert run_calls["task_id"] == "new-task-id"
+    assert run_calls["trigger"] == AutonomousExecutionTrigger.MANUAL
+    assert run_calls["triggered_by"] == LEAD_USER_ID
+    assert run_calls["owner_user_id"] == LEAD_USER_ID
+
+
+@pytest.mark.asyncio
+async def test_execute_autonomous_conflicts_while_running(
+    client, mock_task, monkeypatch
+):
+    import app.local.autonomous as autonomous_module
+
+    async def mock_get(team_id, task_id):
+        return mock_task
+
+    async def mock_fresh_running(task_id):
+        return _mock_execution()
+
+    monkeypatch.setattr(autonomous_module, "get_autonomous_task", mock_get)
+    monkeypatch.setattr(
+        autonomous_module, "get_fresh_running_execution", mock_fresh_running
+    )
+
+    response = client.post("/autonomous/new-task-id/execute")
+    assert response.status_code == 409
+    assert response.json()["error"] == "AutonomousTaskRunning"
+
+
+@pytest.mark.asyncio
+async def test_list_executions(client, monkeypatch):
+    import app.local.autonomous as autonomous_module
+
+    async def mock_list(team_id, task_id, *, cursor=None, limit=20):
+        assert team_id == LEAD_TEAM_ID
+        assert task_id == "task-1"
+        return [_mock_execution()], True, "exec-1"
+
+    monkeypatch.setattr(autonomous_module, "list_autonomous_executions", mock_list)
+
+    response = client.get("/autonomous/task-1/executions")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["data"]) == 1
+    assert data["data"][0]["id"] == "exec-1"
+    assert data["data"][0]["status"] == "running"
+    assert data["has_more"] is True
+    assert data["next_cursor"] == "exec-1"
+
+
+@pytest.mark.asyncio
+async def test_get_execution_messages(client, monkeypatch):
+    import app.local.autonomous as autonomous_module
+
+    log = [
+        ChatMessage(
+            id="msg-1",
+            agent_id="agent-x",
+            chat_id="autonomous-task-1",
+            user_id="user-1",
+            author_id="autonomous",
+            author_type=AuthorType.TRIGGER,
+            reply_to="msg-1",
+            message="do work",
+            created_at=datetime.now(UTC),
+        )
+    ]
+
+    async def mock_messages(team_id, task_id, execution_id):
+        assert (team_id, task_id, execution_id) == (LEAD_TEAM_ID, "task-1", "exec-1")
+        return log
+
+    monkeypatch.setattr(
+        autonomous_module, "get_autonomous_execution_messages", mock_messages
+    )
+
+    response = client.get("/autonomous/task-1/executions/exec-1/messages")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "msg-1"
 
 
 @pytest.mark.asyncio

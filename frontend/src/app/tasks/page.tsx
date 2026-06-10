@@ -1,8 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Pencil, MoreHorizontal, Trash, Power, Plus } from "lucide-react";
+import {
+  Bot,
+  History,
+  Pencil,
+  MoreHorizontal,
+  Trash,
+  Power,
+  Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import cronstrue from "cronstrue";
@@ -142,7 +151,12 @@ export default function AllTasksPage() {
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
                       <CardTitle className="text-lg">
-                        {task.name || "Untitled Task"}
+                        <Link
+                          href={`/tasks/${task.id}`}
+                          className="hover:underline"
+                        >
+                          {task.name || "Untitled Task"}
+                        </Link>
                       </CardTitle>
                       <CardDescription>
                         {task.description || "No description provided"}
@@ -168,6 +182,12 @@ export default function AllTasksPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/tasks/${task.id}`}>
+                              <History className="mr-2 h-4 w-4" />
+                              View Runs
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
                               setActionTask({ task, type: "toggle" })

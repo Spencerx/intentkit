@@ -1,6 +1,6 @@
-from pydantic import Field
+from pydantic import BaseModel, Field
 
-from intentkit.models.autonomous import AutonomousTask
+from intentkit.models.autonomous import AutonomousExecution, AutonomousTask
 
 
 class AutonomousResponse(AutonomousTask):
@@ -16,3 +16,18 @@ class AutonomousResponse(AutonomousTask):
         data = model.model_dump()
         data["chat_id"] = f"autonomous-{model.id}"
         return cls.model_validate(data)
+
+
+class AutonomousExecutionsResponse(BaseModel):
+    """Cursor-paginated list of autonomous task executions."""
+
+    data: list[AutonomousExecution] = Field(
+        description="Executions, newest first",
+    )
+    has_more: bool = Field(
+        description="Whether more executions exist beyond this page",
+    )
+    next_cursor: str | None = Field(
+        default=None,
+        description="Cursor for the next page (an execution id)",
+    )

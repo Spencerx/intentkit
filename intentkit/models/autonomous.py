@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Annotated, Any, ClassVar
 
@@ -9,7 +10,17 @@ from cron_validator import CronValidator
 from epyxid import XID
 from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 from pydantic import Field as PydanticField
-from sqlalchemy import Boolean, DateTime, Index, String, func, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from intentkit.config.base import Base
@@ -22,6 +33,21 @@ class AutonomousTaskStatus(str, Enum):
     WAITING = "waiting"
     RUNNING = "running"
     ERROR = "error"
+
+
+class AutonomousExecutionStatus(str, Enum):
+    """Status of a single autonomous task execution."""
+
+    RUNNING = "running"
+    SUCCESS = "success"
+    ERROR = "error"
+
+
+class AutonomousExecutionTrigger(str, Enum):
+    """How an autonomous execution was triggered."""
+
+    CRON = "cron"
+    MANUAL = "manual"
 
 
 def minutes_to_cron(minutes: int) -> str:
@@ -401,4 +427,221 @@ class AutonomousTaskTable(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class AutonomousExecution(BaseModel):
+    """One run of an autonomous task.
+
+    Records runtime metadata for a single execution. The execution's log is the
+    group of chat messages produced by the run: the trigger message (whose
+    ``reply_to`` points to itself) and every output message replying to it, all
+    within ``chat_id``.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+    id: Annotated[
+        str,
+        PydanticField(
+            description="Unique identifier for the execution",
+            default_factory=lambda: str(XID()),
+        ),
+    ]
+    task_id: Annotated[
+        str,
+        PydanticField(description="Autonomous task this execution belongs to"),
+    ]
+    team_id: Annotated[
+        str,
+        PydanticField(description="Team that owns the task"),
+    ]
+    agent_id: Annotated[
+        str,
+        PydanticField(
+            description=(
+                "Effective executor: the target agent, or the synthetic team "
+                "lead id when lead-orchestrated."
+            ),
+        ),
+    ]
+    target_agent_id: Annotated[
+        str | None,
+        PydanticField(
+            default=None,
+            description="Task target agent at run time; null means lead-orchestrated",
+        ),
+    ] = None
+    chat_id: Annotated[
+        str,
+        PydanticField(description="Chat thread the run's messages live in"),
+    ]
+    message_id: Annotated[
+        str,
+        PydanticField(
+            description=(
+                "Trigger chat message id; the run's log is the messages whose "
+                "reply_to equals this id."
+            ),
+        ),
+    ]
+    trigger: Annotated[
+        AutonomousExecutionTrigger,
+        PydanticField(
+            default=AutonomousExecutionTrigger.CRON,
+            description="How the execution was triggered",
+        ),
+    ] = AutonomousExecutionTrigger.CRON
+    triggered_by: Annotated[
+        str | None,
+        PydanticField(
+            default=None,
+            description="User who triggered a manual run; null for cron runs",
+        ),
+    ] = None
+    status: Annotated[
+        AutonomousExecutionStatus,
+        PydanticField(
+            default=AutonomousExecutionStatus.RUNNING,
+            description="Execution status",
+        ),
+    ] = AutonomousExecutionStatus.RUNNING
+    error: Annotated[
+        str | None,
+        PydanticField(default=None, description="Error detail when status is error"),
+    ] = None
+    result: Annotated[
+        str | None,
+        PydanticField(
+            default=None,
+            description="Truncated final agent reply, for list display",
+        ),
+    ] = None
+    input_tokens: Annotated[
+        int,
+        PydanticField(default=0, description="Total input tokens over the run"),
+    ] = 0
+    output_tokens: Annotated[
+        int,
+        PydanticField(default=0, description="Total output tokens over the run"),
+    ] = 0
+    cached_input_tokens: Annotated[
+        int,
+        PydanticField(default=0, description="Total cached input tokens over the run"),
+    ] = 0
+    credit_cost: Annotated[
+        Decimal | None,
+        PydanticField(
+            default=None,
+            description="Total credit cost of the run (LLM plus tool calls)",
+        ),
+    ] = None
+    message_count: Annotated[
+        int,
+        PydanticField(default=0, description="Number of output messages produced"),
+    ] = 0
+    cold_start_cost: Annotated[
+        float,
+        PydanticField(default=0.0, description="Executor cold start time in seconds"),
+    ] = 0.0
+    started_at: Annotated[
+        datetime | None,
+        PydanticField(default=None, description="When the run started"),
+    ] = None
+    finished_at: Annotated[
+        datetime | None,
+        PydanticField(default=None, description="When the run finished"),
+    ] = None
+
+
+class AutonomousExecutionTable(Base):
+    """Database table for autonomous task executions."""
+
+    __tablename__: str = "autonomous_executions"
+    __table_args__: Any = (
+        Index("ix_autonomous_executions_task_id_id", "task_id", "id"),
+        # At most one running execution per task; makes claiming the run slot
+        # race-free (concurrent claims collide on insert).
+        Index(
+            "uq_autonomous_executions_task_running",
+            "task_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(20),
+        primary_key=True,
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        comment="Autonomous task this execution belongs to",
+    )
+    team_id: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        comment="Team that owns the task",
+    )
+    agent_id: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        comment="Effective executor: target agent or synthetic team lead id",
+    )
+    target_agent_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment="Task target agent at run time; null means lead-orchestrated",
+    )
+    chat_id: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        comment="Chat thread the run's messages live in",
+    )
+    message_id: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        comment="Trigger chat message id; log messages reply_to this id",
+    )
+    trigger: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default=AutonomousExecutionTrigger.CRON.value,
+        comment="How the execution was triggered: cron/manual",
+    )
+    triggered_by: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment="User who triggered a manual run",
+    )
+    status: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        default=AutonomousExecutionStatus.RUNNING.value,
+        comment="Execution status: running/success/error",
+    )
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    result: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        comment="Truncated final agent reply",
+    )
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    credit_cost: Mapped[Decimal | None] = mapped_column(
+        Numeric(22, 4),
+        nullable=True,
+    )
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    cold_start_cost: Mapped[float] = mapped_column(Float, default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )

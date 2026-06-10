@@ -1,22 +1,32 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from epyxid import XID
-from sqlalchemy import select
+from sqlalchemy import delete, desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_session
 from intentkit.models.agent.db import AgentTable
 from intentkit.models.autonomous import (
     AutonomousCreateRequest,
+    AutonomousExecution,
+    AutonomousExecutionStatus,
+    AutonomousExecutionTable,
     AutonomousTask,
     AutonomousTaskStatus,
     AutonomousTaskTable,
     AutonomousUpdateRequest,
     validate_cron_schedule,
 )
+from intentkit.models.chat import ChatMessage, ChatMessageTable
 from intentkit.utils.error import IntentKitAPIError
+
+# A running execution older than this is considered orphaned by a crashed
+# process and gets marked as interrupted; a younger one blocks new runs.
+EXECUTION_STALE_MINUTES = 30
 
 
 def _task_not_found_error(task_id: str) -> IntentKitAPIError:
@@ -24,6 +34,14 @@ def _task_not_found_error(task_id: str) -> IntentKitAPIError:
         404,
         "TaskNotFound",
         f"Autonomous task with ID {task_id} not found.",
+    )
+
+
+def _execution_not_found_error(execution_id: str) -> IntentKitAPIError:
+    return IntentKitAPIError(
+        404,
+        "ExecutionNotFound",
+        f"Autonomous execution with ID {execution_id} not found.",
     )
 
 
@@ -160,11 +178,16 @@ async def update_autonomous_task(
 
 
 async def delete_autonomous_task(team_id: str, task_id: str) -> None:
-    """Delete an autonomous task owned by the team."""
+    """Delete an autonomous task owned by the team, with its execution history."""
     async with get_session() as session:
         row = await session.get(AutonomousTaskTable, task_id)
         if row is None or row.team_id != team_id:
             raise _task_not_found_error(task_id)
+        _ = await session.execute(
+            delete(AutonomousExecutionTable).where(
+                AutonomousExecutionTable.task_id == task_id
+            )
+        )
         await session.delete(row)
         await session.commit()
 
@@ -196,3 +219,199 @@ async def update_autonomous_task_status(
         result = AutonomousTask.model_validate(row)
         await session.commit()
         return result
+
+
+def _execution_to_row(execution: AutonomousExecution) -> AutonomousExecutionTable:
+    # started_at is intentionally omitted so the server default applies.
+    return AutonomousExecutionTable(
+        id=execution.id,
+        task_id=execution.task_id,
+        team_id=execution.team_id,
+        agent_id=execution.agent_id,
+        target_agent_id=execution.target_agent_id,
+        chat_id=execution.chat_id,
+        message_id=execution.message_id,
+        trigger=execution.trigger.value,
+        triggered_by=execution.triggered_by,
+        status=execution.status.value,
+        error=execution.error,
+        result=execution.result,
+        input_tokens=execution.input_tokens,
+        output_tokens=execution.output_tokens,
+        cached_input_tokens=execution.cached_input_tokens,
+        credit_cost=execution.credit_cost,
+        message_count=execution.message_count,
+        cold_start_cost=execution.cold_start_cost,
+        finished_at=execution.finished_at,
+    )
+
+
+async def claim_autonomous_execution(
+    execution: AutonomousExecution,
+) -> AutonomousExecution | None:
+    """Atomically claim a task's run slot by inserting its running execution.
+
+    Returns None when another run of the task is already in progress, in which
+    case the caller should skip this run. Running executions older than the
+    staleness window (orphaned by a crashed process) are marked interrupted in
+    the same transaction. The partial unique index on running executions makes
+    the claim race-free: concurrent claims collide on insert and the loser
+    gets None.
+    """
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(minutes=EXECUTION_STALE_MINUTES)
+    async with get_session() as session:
+        rows = list(
+            await session.scalars(
+                select(AutonomousExecutionTable).where(
+                    AutonomousExecutionTable.task_id == execution.task_id,
+                    AutonomousExecutionTable.status
+                    == AutonomousExecutionStatus.RUNNING.value,
+                )
+            )
+        )
+        if any(row.started_at and row.started_at > cutoff for row in rows):
+            return None
+        for row in rows:
+            row.status = AutonomousExecutionStatus.ERROR.value
+            row.error = "interrupted"
+            row.finished_at = now
+        if rows:
+            # Flush the interrupts first so the unique running slot is free
+            # before the new row is inserted (still one transaction).
+            await session.flush()
+
+        new_row = _execution_to_row(execution)
+        session.add(new_row)
+        try:
+            await session.commit()
+        except IntegrityError:
+            # Another run claimed the slot between our check and the insert.
+            await session.rollback()
+            return None
+        # Reload so the server-generated started_at is returned.
+        await session.refresh(new_row)
+        return AutonomousExecution.model_validate(new_row)
+
+
+async def finish_autonomous_execution(
+    execution_id: str,
+    status: AutonomousExecutionStatus,
+    *,
+    error: str | None = None,
+    result: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cached_input_tokens: int = 0,
+    credit_cost: Decimal | None = None,
+    message_count: int = 0,
+    cold_start_cost: float = 0.0,
+) -> AutonomousExecution | None:
+    """Finalize an execution record with its outcome and aggregated stats.
+
+    Returns None when the execution row no longer exists (e.g. the task and
+    its history were deleted while the run was in flight).
+    """
+    async with get_session() as session:
+        row = await session.get(AutonomousExecutionTable, execution_id)
+        if row is None:
+            return None
+        row.status = status.value
+        row.error = error
+        row.result = result
+        row.input_tokens = input_tokens
+        row.output_tokens = output_tokens
+        row.cached_input_tokens = cached_input_tokens
+        row.credit_cost = credit_cost
+        row.message_count = message_count
+        row.cold_start_cost = cold_start_cost
+        row.finished_at = datetime.now(UTC)
+        # Snapshot before commit (see update_autonomous_task_status).
+        snapshot = AutonomousExecution.model_validate(row)
+        await session.commit()
+        return snapshot
+
+
+async def get_fresh_running_execution(task_id: str) -> AutonomousExecution | None:
+    """Return the latest running execution within the staleness window, if any.
+
+    Used as a read-only pre-check before triggering a manual run.
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=EXECUTION_STALE_MINUTES)
+    async with get_session() as session:
+        row = await session.scalar(
+            select(AutonomousExecutionTable)
+            .where(
+                AutonomousExecutionTable.task_id == task_id,
+                AutonomousExecutionTable.status
+                == AutonomousExecutionStatus.RUNNING.value,
+                AutonomousExecutionTable.started_at > cutoff,
+            )
+            .order_by(desc(AutonomousExecutionTable.id))
+            .limit(1)
+        )
+        return AutonomousExecution.model_validate(row) if row else None
+
+
+async def list_autonomous_executions(
+    team_id: str,
+    task_id: str,
+    *,
+    cursor: str | None = None,
+    limit: int = 20,
+) -> tuple[list[AutonomousExecution], bool, str | None]:
+    """List executions of a task, newest first, with cursor pagination.
+
+    Returns (executions, has_more, next_cursor). The cursor is an execution id
+    (XIDs are time-ordered).
+    """
+    async with get_session() as session:
+        task_row = await session.get(AutonomousTaskTable, task_id)
+        if task_row is None or task_row.team_id != team_id:
+            raise _task_not_found_error(task_id)
+
+        stmt = (
+            select(AutonomousExecutionTable)
+            .where(AutonomousExecutionTable.task_id == task_id)
+            .order_by(desc(AutonomousExecutionTable.id))
+            .limit(limit + 1)
+        )
+        if cursor:
+            stmt = stmt.where(AutonomousExecutionTable.id < cursor)
+        rows = list(await session.scalars(stmt))
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        next_cursor = rows[-1].id if has_more and rows else None
+        return (
+            [AutonomousExecution.model_validate(row) for row in rows],
+            has_more,
+            next_cursor,
+        )
+
+
+async def get_autonomous_execution_messages(
+    team_id: str, task_id: str, execution_id: str
+) -> list[ChatMessage]:
+    """Return the log of one execution: its trigger message and all replies.
+
+    The trigger message's reply_to points to itself, so a single reply_to
+    filter returns the complete, ordered log of exactly this run.
+    """
+    async with get_session() as session:
+        task_row = await session.get(AutonomousTaskTable, task_id)
+        if task_row is None or task_row.team_id != team_id:
+            raise _task_not_found_error(task_id)
+
+        execution = await session.get(AutonomousExecutionTable, execution_id)
+        if execution is None or execution.task_id != task_id:
+            raise _execution_not_found_error(execution_id)
+
+        rows = await session.scalars(
+            select(ChatMessageTable)
+            .where(
+                ChatMessageTable.chat_id == execution.chat_id,
+                ChatMessageTable.reply_to == execution.message_id,
+            )
+            .order_by(ChatMessageTable.id)
+        )
+        return [ChatMessage.model_validate(row) for row in rows]

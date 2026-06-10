@@ -1024,6 +1024,38 @@ export interface AutonomousTask {
 }
 
 /**
+ * One run of an autonomous task; its log is a group of chat messages.
+ */
+export interface AutonomousExecution {
+  id: string;
+  task_id: string;
+  team_id: string;
+  agent_id: string;
+  target_agent_id?: string | null;
+  chat_id: string;
+  message_id: string;
+  trigger: "cron" | "manual";
+  triggered_by?: string | null;
+  status: "running" | "success" | "error";
+  error?: string | null;
+  result?: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+  credit_cost?: number | string | null;
+  message_count: number;
+  cold_start_cost: number;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface AutonomousExecutionsResponse {
+  data: AutonomousExecution[];
+  has_more: boolean;
+  next_cursor: string | null;
+}
+
+/**
  * Autonomous API functions
  * Based on app/local/autonomous.py — tasks belong to the team.
  */
@@ -1086,6 +1118,73 @@ export const autonomousApi = {
       throw new Error(
         errorData.detail ||
           `Failed to update autonomous task: ${response.statusText}`,
+      );
+    }
+    return response.json();
+  },
+
+  /**
+   * Get a single autonomous task
+   * GET /autonomous/{taskId}
+   */
+  async getTask(taskId: string): Promise<AutonomousTask> {
+    const response = await fetch(`${API_BASE}/autonomous/${taskId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to get autonomous task: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Trigger one manual run of an autonomous task
+   * POST /autonomous/{taskId}/execute
+   */
+  async executeTask(taskId: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/autonomous/${taskId}/execute`, {
+      method: "POST",
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.msg || `Failed to run task: ${response.statusText}`,
+      );
+    }
+  },
+
+  /**
+   * List executions of an autonomous task, newest first
+   * GET /autonomous/{taskId}/executions
+   */
+  async listExecutions(
+    taskId: string,
+    cursor?: string,
+  ): Promise<AutonomousExecutionsResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    const query = params.toString();
+    const response = await fetch(
+      `${API_BASE}/autonomous/${taskId}/executions${query ? `?${query}` : ""}`,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to list executions: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get the chat message log of one execution, oldest first
+   * GET /autonomous/{taskId}/executions/{executionId}/messages
+   */
+  async getExecutionMessages(
+    taskId: string,
+    executionId: string,
+  ): Promise<ChatMessage[]> {
+    const response = await fetch(
+      `${API_BASE}/autonomous/${taskId}/executions/${executionId}/messages`,
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to get execution messages: ${response.statusText}`,
       );
     }
     return response.json();

@@ -147,3 +147,54 @@ def test_status_enum_serializes_to_string():
     )
     parsed = json.loads(json.dumps(task.model_dump()))
     assert parsed["status"] == "error"
+
+
+def test_execution_defaults():
+    from intentkit.models.autonomous import (
+        AutonomousExecution,
+        AutonomousExecutionStatus,
+        AutonomousExecutionTrigger,
+    )
+
+    execution = AutonomousExecution.model_validate(
+        {
+            "task_id": "task-1",
+            "team_id": "team-1",
+            "agent_id": "team-team-1",
+            "chat_id": "autonomous-task-1",
+            "message_id": "msg-1",
+        }
+    )
+    assert execution.id  # auto-generated XID
+    assert execution.status == AutonomousExecutionStatus.RUNNING
+    assert execution.trigger == AutonomousExecutionTrigger.CRON
+    assert execution.triggered_by is None
+    assert execution.input_tokens == 0
+    assert execution.credit_cost is None
+    assert execution.finished_at is None
+
+
+def test_execution_coerces_db_string_enums():
+    from intentkit.models.autonomous import (
+        AutonomousExecution,
+        AutonomousExecutionStatus,
+        AutonomousExecutionTrigger,
+    )
+
+    # Rows store enums as plain strings; validation must coerce them back.
+    execution = AutonomousExecution.model_validate(
+        {
+            "id": "exec-1",
+            "task_id": "task-1",
+            "team_id": "team-1",
+            "agent_id": "agent-x",
+            "chat_id": "autonomous-task-1",
+            "message_id": "msg-1",
+            "trigger": "manual",
+            "status": "error",
+            "error": "interrupted",
+        }
+    )
+    assert execution.trigger == AutonomousExecutionTrigger.MANUAL
+    assert execution.status == AutonomousExecutionStatus.ERROR
+    assert execution.error == "interrupted"
