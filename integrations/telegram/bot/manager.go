@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/crestalnetwork/intentkit/integrations/shared/outage"
 	"github.com/crestalnetwork/intentkit/integrations/telegram/api"
 	"github.com/crestalnetwork/intentkit/integrations/telegram/config"
 	"github.com/crestalnetwork/intentkit/integrations/telegram/store"
@@ -37,6 +38,7 @@ type Manager struct {
 	verifyCodes map[string]string
 	// Bot info cache for syncing back to DB
 	botInfo map[string]map[string]interface{}
+	outage  *outage.Tracker
 	mu      sync.RWMutex
 	stopCh  chan struct{}
 }
@@ -53,6 +55,7 @@ func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client, redisCli
 		whitelists:  make(map[string]map[string]whitelistEntry),
 		verifyCodes: make(map[string]string),
 		botInfo:     make(map[string]map[string]interface{}),
+		outage:      outage.NewTracker(),
 		stopCh:      make(chan struct{}),
 	}
 }
@@ -67,6 +70,10 @@ func (m *Manager) Start() {
 	for {
 		select {
 		case <-ticker.C:
+			// Outage deadlines (gather window, re-alert interval) are
+			// event-driven; this tick bounds alert latency when poll
+			// backoff would otherwise delay the next NoteFailure.
+			m.emitOutageAlertIfDue()
 			m.syncBots()
 		case <-m.stopCh:
 			return
@@ -185,7 +192,7 @@ func (m *Manager) ensureBotRunning(agent *store.Agent) {
 		m.mu.Unlock()
 	}
 
-	bot, err := telego.NewBot(token, telego.WithDefaultDebugLogger())
+	bot, err := telego.NewBot(token, telego.WithLogger(slogTelegoLogger{botID: agent.ID}))
 	if err != nil {
 		slog.Error("Failed to create bot", "agent_id", agent.ID, "error", err)
 		return
@@ -198,23 +205,15 @@ func (m *Manager) ensureBotRunning(agent *store.Agent) {
 
 	// Start Long Polling
 	ctx, cancel := context.WithCancel(context.Background())
-	updates, err := bot.UpdatesViaLongPolling(ctx, nil)
-	if err != nil {
-		slog.Error("Failed to get updates channel", "agent_id", agent.ID, "error", err)
-		cancel()
-		return
-	}
-
-	go func() {
-		for update := range updates {
-			if update.Message != nil {
-				m.handleMessage(bot, *update.Message, agent.ID)
-			}
-			if update.CallbackQuery != nil {
-				m.handleCallbackQuery(bot, *update.CallbackQuery, agent.ID, false)
-			}
+	agentID := agent.ID
+	go m.pollUpdates(ctx, bot, agentID, func(update telego.Update) {
+		if update.Message != nil {
+			m.handleMessage(bot, *update.Message, agentID)
 		}
-	}()
+		if update.CallbackQuery != nil {
+			m.handleCallbackQuery(bot, *update.CallbackQuery, agentID, false)
+		}
+	})
 
 	m.mu.Lock()
 	m.bots[agent.ID] = bot
@@ -298,7 +297,7 @@ func (m *Manager) ensureTeamBotRunning(tc *store.TeamChannel) {
 		m.mu.Unlock()
 	}
 
-	bot, err := telego.NewBot(token, telego.WithDefaultDebugLogger())
+	bot, err := telego.NewBot(token, telego.WithLogger(slogTelegoLogger{botID: key}))
 	if err != nil {
 		slog.Error("Failed to create team channel bot", "team_id", tc.TeamID, "error", err)
 		m.updateTeamChannelStatus(tc.TeamID, "error", err.Error())
@@ -310,24 +309,15 @@ func (m *Manager) ensureTeamBotRunning(tc *store.TeamChannel) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	updates, err := bot.UpdatesViaLongPolling(ctx, nil)
-	if err != nil {
-		slog.Error("Failed to get updates for team channel", "team_id", tc.TeamID, "error", err)
-		cancel()
-		m.updateTeamChannelStatus(tc.TeamID, "error", err.Error())
-		return
-	}
-
-	go func() {
-		for update := range updates {
-			if update.Message != nil {
-				m.handleTeamMessage(bot, *update.Message, tc.TeamID)
-			}
-			if update.CallbackQuery != nil {
-				m.handleCallbackQuery(bot, *update.CallbackQuery, tc.TeamID, true)
-			}
+	teamID := tc.TeamID
+	go m.pollUpdates(ctx, bot, key, func(update telego.Update) {
+		if update.Message != nil {
+			m.handleTeamMessage(bot, *update.Message, teamID)
 		}
-	}()
+		if update.CallbackQuery != nil {
+			m.handleCallbackQuery(bot, *update.CallbackQuery, teamID, true)
+		}
+	})
 
 	m.mu.Lock()
 	m.bots[key] = bot
@@ -612,4 +602,3 @@ func getChatName(chat telego.Chat) string {
 	}
 	return name
 }
-

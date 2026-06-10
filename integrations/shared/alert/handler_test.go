@@ -108,6 +108,38 @@ func TestHandlerForwardsErrorOnly(t *testing.T) {
 	}
 }
 
+func TestHandlerForwardsNotifyMarkedInfo(t *testing.T) {
+	sender := &fakeSender{}
+	p, stop := pipelineWith(t, sender, func() (bool, error) { return true, nil })
+	defer stop()
+
+	inner := slog.NewTextHandler(&strings.Builder{}, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(newHandler(inner, p))
+
+	logger.Info("plain-info")
+	logger.Info("muted-info", NotifyKey, false)
+	logger.Info("recovered-msg", "duration", "5m", NotifyKey, true)
+
+	waitFor(t, func() bool { return len(sender.snapshot()) == 1 })
+
+	got := sender.snapshot()[0]
+	if !strings.Contains(got, "recovered-msg") {
+		t.Fatalf("expected marked info to be forwarded, got: %s", got)
+	}
+	if !strings.HasPrefix(got, "✅ INFO") {
+		t.Fatalf("sub-error alert should use the recovery emoji, got: %s", got)
+	}
+	if !strings.Contains(got, "duration=5m") {
+		t.Fatalf("expected kv flattened, got: %s", got)
+	}
+	if strings.Contains(got, NotifyKey) {
+		t.Fatalf("routing marker must be stripped from alert text, got: %s", got)
+	}
+	if strings.Contains(got, "plain-info") || strings.Contains(got, "muted-info") {
+		t.Fatalf("unmarked/false-marked info leaked into alert: %s", got)
+	}
+}
+
 func TestHandlerIncludesEnvAndRelease(t *testing.T) {
 	sender := &fakeSender{}
 	p, stop := pipelineWith(t, sender, func() (bool, error) { return true, nil })

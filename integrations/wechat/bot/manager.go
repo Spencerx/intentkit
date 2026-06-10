@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/crestalnetwork/intentkit/integrations/shared"
+	"github.com/crestalnetwork/intentkit/integrations/shared/alert"
+	"github.com/crestalnetwork/intentkit/integrations/shared/outage"
 	"github.com/crestalnetwork/intentkit/integrations/types"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/api"
 	"github.com/crestalnetwork/intentkit/integrations/wechat/config"
@@ -83,6 +85,7 @@ type Manager struct {
 	bots         map[string]*botEntry
 	cancelFuncs  map[string]context.CancelFunc
 	tokenHashes  map[string]string
+	outage       *outage.Tracker
 	mu           sync.RWMutex
 	stopCh       chan struct{}
 }
@@ -96,6 +99,7 @@ func NewManager(db *gorm.DB, cfg *config.Config, apiClient *api.Client, storage 
 		bots:        make(map[string]*botEntry),
 		cancelFuncs: make(map[string]context.CancelFunc),
 		tokenHashes: make(map[string]string),
+		outage:      outage.NewTracker(),
 		stopCh:      make(chan struct{}),
 	}
 	m.sessionTimer = NewSessionTimerManager(
@@ -117,10 +121,28 @@ func (m *Manager) Start() {
 	for {
 		select {
 		case <-ticker.C:
+			// Outage deadlines (gather window, re-alert interval) are
+			// event-driven; this tick bounds alert latency when poll
+			// backoff would otherwise delay the next noteFailure.
+			m.emitOutageAlertIfDue()
 			m.syncBots()
 		case <-m.stopCh:
 			return
 		}
+	}
+}
+
+// emitOutageAlertIfDue sends the aggregated GetUpdates outage alert when one
+// is due. This Error log is the only GetUpdates failure that reaches the
+// alert channel; per-team failures log at Warn.
+func (m *Manager) emitOutageAlertIfDue() {
+	if sum := m.outage.Flush(); sum != nil {
+		slog.Error("WeChat GetUpdates outage",
+			"affected_teams", strings.Join(sum.Affected, ","),
+			"team_count", len(sum.Affected),
+			"duration", sum.Duration.Round(time.Second).String(),
+			"sample_error", sum.LastErr,
+		)
 	}
 }
 
@@ -294,29 +316,14 @@ func (m *Manager) ensureTeamBotRunning(tc *store.TeamChannel) {
 	slog.Info("Started wechat bot for team channel", "team_id", tc.TeamID)
 }
 
-// getUpdatesErrLogThreshold is the number of consecutive GetUpdates failures
-// at or above which the failure is logged at Error level. A long-poll endpoint
-// routinely yields the odd transient EOF when the server (or an intermediate
-// proxy/LB) closes an idle keep-alive connection the client then reuses —
-// common in the first polls right after a restart. Those self-heal on the next
-// poll, so the first few failures log at Warn; only a sustained run (a real
-// outage, a bad token, or a network partition) escalates to Error.
-const getUpdatesErrLogThreshold = 3
-
-// getUpdatesErrLogLevel maps a consecutive-error count to the slog level used
-// for the "GetUpdates failed" line, so isolated transient failures don't read
-// as alarming Error noise.
-func getUpdatesErrLogLevel(consecutiveErrors int) slog.Level {
-	if consecutiveErrors >= getUpdatesErrLogThreshold {
-		return slog.LevelError
-	}
-	return slog.LevelWarn
-}
-
 func (m *Manager) pollLoop(ctx context.Context, entry *botEntry, teamID string) {
 	backoff := 2 * time.Second
-	const maxBackoff = 60 * time.Second
+	const maxBackoff = 4 * time.Minute
 	consecutiveErrors := 0
+
+	// A failing team must not hold the outage open after its poller goes
+	// away (channel disabled, token-change restart, shutdown).
+	defer m.outage.Forget(teamID)
 
 	for {
 		select {
@@ -331,13 +338,22 @@ func (m *Manager) pollLoop(ctx context.Context, entry *botEntry, teamID string) 
 				return // context cancelled
 			}
 			consecutiveErrors++
-			slog.Log(ctx, getUpdatesErrLogLevel(consecutiveErrors), "GetUpdates failed",
+			// Per-team lines stay at Warn so they never reach the alert
+			// channel; the aggregated outage alert is the only GetUpdates
+			// failure that pages.
+			slog.Warn("GetUpdates failed",
 				"team_id", teamID,
 				"error", err,
 				"consecutive_errors", consecutiveErrors,
 				"next_backoff", backoff.String(),
 			)
-			time.Sleep(backoff)
+			m.outage.NoteFailure(teamID, consecutiveErrors, err.Error())
+			m.emitOutageAlertIfDue()
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
 			backoff = min(backoff*2, maxBackoff)
 			continue
 		}
@@ -347,6 +363,13 @@ func (m *Manager) pollLoop(ctx context.Context, entry *botEntry, teamID string) 
 				"team_id", teamID,
 				"previous_consecutive_errors", consecutiveErrors,
 			)
+			if sum := m.outage.NoteSuccess(teamID); sum != nil {
+				slog.Info("WeChat GetUpdates outage recovered",
+					"affected_teams", strings.Join(sum.Affected, ","),
+					"duration", sum.Duration.Round(time.Second).String(),
+					alert.NotifyKey, true,
+				)
+			}
 		}
 		// Reset backoff on success
 		consecutiveErrors = 0

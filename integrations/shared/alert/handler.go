@@ -9,8 +9,17 @@ import (
 	"sync/atomic"
 )
 
+// NotifyKey marks a record for alert-channel delivery regardless of level.
+// Attach it as a record attr — slog.Bool(alert.NotifyKey, true) — on
+// sub-Error records that operators should still see in the alert channel,
+// e.g. an "outage recovered" notice. The marker must be on the record
+// itself; markers bound via Logger.With are ignored. The attr is stripped
+// from the alert text but still reaches the inner handler.
+const NotifyKey = "alert_notify"
+
 // Handler wraps an inner slog.Handler and forwards records at Error+ to an
-// async alert pipeline. Non-error records pass through untouched.
+// async alert pipeline. Non-error records pass through untouched unless
+// explicitly marked with NotifyKey.
 //
 // To preserve slog's group semantics (a group opened via WithGroup applies
 // only to attrs added *after* it), persisted attrs are stored with their
@@ -42,10 +51,22 @@ func (h *Handler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *Handler) Handle(ctx context.Context, record slog.Record) error {
-	if record.Level >= slog.LevelError {
+	if record.Level >= slog.LevelError || hasNotifyMarker(record) {
 		h.pipeline.enqueue(h.format(record))
 	}
 	return h.inner.Handle(ctx, record)
+}
+
+func hasNotifyMarker(record slog.Record) bool {
+	marked := false
+	record.Attrs(func(a slog.Attr) bool {
+		if a.Key == NotifyKey && a.Value.Kind() == slog.KindBool && a.Value.Bool() {
+			marked = true
+			return false
+		}
+		return true
+	})
+	return marked
 }
 
 func (h *Handler) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -114,8 +135,15 @@ func (h *Handler) format(record slog.Record) string {
 		env = "unknown"
 	}
 
+	// Sub-Error records only reach here via the NotifyKey marker; they are
+	// good news (recovery notices), not incidents.
+	emoji := "🚨"
+	if record.Level < slog.LevelError {
+		emoji = "✅"
+	}
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "🚨 %s", record.Level.String())
+	fmt.Fprintf(&b, "%s %s", emoji, record.Level.String())
 	if source != "" {
 		fmt.Fprintf(&b, " | source=%s", source)
 	}
@@ -125,6 +153,9 @@ func (h *Handler) format(record slog.Record) string {
 		fmt.Fprintf(&b, " %s=%v", a.key, a.val.Resolve().Any())
 	}
 	record.Attrs(func(a slog.Attr) bool {
+		if a.Key == NotifyKey {
+			return true // routing metadata, not alert content
+		}
 		fmt.Fprintf(&b, " %s=%v", h.prefixed(a.Key), a.Value.Resolve().Any())
 		return true
 	})
