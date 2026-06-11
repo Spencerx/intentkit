@@ -1,5 +1,6 @@
-# Release v2.1.1
+# Release v2.1.2
 
 ## Improvements
 
-- WeChat push messages that cannot be delivered because the recipient has been inactive too long are now treated as an expected condition and skipped quietly, instead of triggering system error alerts.
+- Existing tasks are now moved to team ownership automatically when the autonomous service starts — no manual migration step per environment. The import is skipped once tasks are present; if it cannot run yet, the service retries every minute and raises a single alert.
+- The migration now tolerates malformed legacy task data instead of failing as a whole.
