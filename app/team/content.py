@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 
 from intentkit.config.db import get_session
+from intentkit.core.agent import attach_agent_info
 from intentkit.core.team.feed import query_activity_feed, query_post_feed
 from intentkit.core.team.subscription import (
     get_subscriptions,
@@ -112,8 +113,12 @@ async def get_agent_activities(
             .where(AgentActivityTable.agent_id == agent_id)
             .order_by(AgentActivityTable.created_at.desc())
         )
-        activities = (await db.scalars(stmt)).all()
-        return [AgentActivity.model_validate(a) for a in activities]
+        activities = [
+            AgentActivity.model_validate(a) for a in (await db.scalars(stmt)).all()
+        ]
+
+    await attach_agent_info(activities)
+    return activities
 
 
 @team_content_router.get(
@@ -135,8 +140,10 @@ async def get_agent_posts(
             .where(AgentPostTable.agent_id == agent_id)
             .order_by(AgentPostTable.created_at.desc())
         )
-        posts = (await db.scalars(stmt)).all()
-        return [AgentPostBrief.from_table(p) for p in posts]
+        posts = [AgentPostBrief.from_table(p) for p in (await db.scalars(stmt)).all()]
+
+    await attach_agent_info(posts)
+    return posts
 
 
 @team_content_router.get(
@@ -160,7 +167,9 @@ async def get_post(
             )
 
     await get_accessible_agent(post.agent_id, team_id)
-    return AgentPost.model_validate(post)
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return result
 
 
 @team_content_router.get(
@@ -183,4 +192,6 @@ async def get_post_pdf(
             )
 
     await get_accessible_agent(post.agent_id, team_id)
-    return await post_pdf_response(post)
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return await post_pdf_response(result)

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select
 
 from intentkit.config.db import get_session
+from intentkit.core.agent.info import invalidate_agent_info
 from intentkit.models.agent import AgentPublicInfo, AgentTable
 from intentkit.utils.error import IntentKitAPIError
 
@@ -43,7 +44,10 @@ async def update_public_info(*, agent_id: str, public_info: AgentPublicInfo) -> 
         await session.commit()
         await session.refresh(db_agent)
 
-        return Agent.model_validate(db_agent)
+        agent = Agent.model_validate(db_agent)
+
+    await invalidate_agent_info(agent_id)
+    return agent
 
 
 async def override_public_info(*, agent_id: str, public_info: AgentPublicInfo) -> Agent:
@@ -69,4 +73,7 @@ async def override_public_info(*, agent_id: str, public_info: AgentPublicInfo) -
         await session.commit()
         await session.refresh(db_agent)
 
-        return Agent.model_validate(db_agent)
+        agent = Agent.model_validate(db_agent)
+
+    await invalidate_agent_info(agent_id)
+    return agent

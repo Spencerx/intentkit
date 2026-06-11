@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from intentkit.config.config import config
 from intentkit.config.db import get_session
 from intentkit.config.redis import get_redis
+from intentkit.core.agent.info import attach_agent_info
 from intentkit.core.share_link import create_share_link
 from intentkit.models.agent_activity import (
     AgentActivity,
@@ -48,6 +49,7 @@ async def _push_activity_to_teams(activity: AgentActivity, team_ids: list[str]) 
     try:
         from intentkit.core.team.push import push_to_team
 
+        await attach_agent_info([activity])
         push_text = await _format_activity_push(activity)
         targets = [tid for tid in team_ids if tid != "public"]
         if not targets:
@@ -67,8 +69,10 @@ async def _push_activity_to_teams(activity: AgentActivity, team_ids: list[str]) 
 async def _format_activity_push(activity: AgentActivity) -> str:
     """Format an activity as a push notification message.
 
-    For messages pushed to WeChat/Telegram (off-platform channels), a linked post is
-    rewritten as a public share link so recipients without an account can view it.
+    The activity must already be enriched via ``attach_agent_info``. For
+    messages pushed to WeChat/Telegram (off-platform channels), a linked post
+    is rewritten as a public share link so recipients without an account can
+    view it.
     """
     name = activity.agent_name or activity.agent_id
     text = f"[{name}] {activity.text}"
@@ -99,7 +103,9 @@ async def get_agent_activity(activity_id: str) -> AgentActivity | None:
     cached_raw = await redis_client.get(cache_key)
     if cached_raw:
         cached_data = json.loads(cached_raw)
-        return AgentActivity.model_validate(cached_data)
+        activity = AgentActivity.model_validate(cached_data)
+        await attach_agent_info([activity])
+        return activity
 
     async with get_session() as session:
         result = await session.execute(
@@ -118,6 +124,7 @@ async def get_agent_activity(activity_id: str) -> AgentActivity | None:
         ex=3600,
     )
 
+    await attach_agent_info([activity])
     return activity
 
 
@@ -139,4 +146,9 @@ async def get_agent_activities(agent_id: str, limit: int = 10) -> list[AgentActi
             .limit(limit)
         )
         db_activities = result.scalars().all()
-        return [AgentActivity.model_validate(activity) for activity in db_activities]
+        activities = [
+            AgentActivity.model_validate(activity) for activity in db_activities
+        ]
+
+    await attach_agent_info(activities)
+    return activities

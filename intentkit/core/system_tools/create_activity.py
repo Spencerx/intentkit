@@ -6,7 +6,6 @@ from langchain_core.tools import ArgsSchema
 from langchain_core.tools.base import ToolException
 from pydantic import BaseModel, Field, field_validator
 
-from intentkit.core.agent import get_agent
 from intentkit.core.agent_activity import create_agent_activity
 from intentkit.core.system_tools.base import SystemTool
 from intentkit.models.agent_activity import AgentActivityCreate
@@ -73,10 +72,6 @@ class CreateActivityTool(SystemTool):
             context = self.get_context()
             agent_id = context.agent_id
 
-            agent = await get_agent(agent_id)
-            agent_name = agent.name if agent else None
-            agent_picture = agent.picture if agent else None
-
             link_meta = None
             if link:
                 meta = await fetch_link_meta(link)
@@ -85,8 +80,6 @@ class CreateActivityTool(SystemTool):
 
             activity_create = AgentActivityCreate(
                 agent_id=agent_id,
-                agent_name=agent_name,
-                agent_picture=agent_picture,
                 text=text,
                 images=images,
                 video=video,

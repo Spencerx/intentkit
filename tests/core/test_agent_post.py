@@ -5,8 +5,20 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import intentkit.core.agent_post as agent_post_module
+from intentkit.core.agent.info import AgentInfo
 from intentkit.core.agent_post import create_agent_post, get_agent_post
 from intentkit.models.agent_post import AgentPost, AgentPostCreate, AgentPostTable
+
+
+def _patch_agent_info(monkeypatch, infos: dict[str, AgentInfo]):
+    """Route the module's enrichment to a canned agent info map."""
+
+    async def fake_get_agent_infos(agent_ids):
+        return {aid: infos[aid] for aid in agent_ids if aid in infos}
+
+    monkeypatch.setattr(
+        "intentkit.core.agent.info.get_agent_infos", fake_get_agent_infos
+    )
 
 
 @pytest.mark.asyncio
@@ -31,8 +43,6 @@ async def test_create_agent_post(monkeypatch):
 
     post_create = AgentPostCreate(
         agent_id="agent-1",
-        agent_name="Test Agent",
-        agent_picture="https://example.com/avatar.png",
         title="Test Post",
         markdown="Content",
         cover="image.jpg",
@@ -49,8 +59,6 @@ async def test_create_agent_post(monkeypatch):
     # Verify result
     assert isinstance(result, AgentPost)
     assert result.agent_id == "agent-1"
-    assert result.agent_name == "Test Agent"
-    assert result.agent_picture == "https://example.com/avatar.png"
     assert result.title == "Test Post"
     assert result.id == "post-123"
 
@@ -61,8 +69,6 @@ async def test_get_agent_post_cache_hit(monkeypatch):
     cached_data = {
         "id": post_id,
         "agent_id": "agent-1",
-        "agent_name": "Cached Agent",
-        "agent_picture": "https://example.com/cached.png",
         "title": "Cached Post",
         "markdown": "Content",
         "cover": None,
@@ -82,6 +88,11 @@ async def test_get_agent_post_cache_hit(monkeypatch):
     mock_session_ctx.__aenter__.return_value = mock_session
     monkeypatch.setattr(agent_post_module, "get_session", lambda: mock_session_ctx)
 
+    _patch_agent_info(
+        monkeypatch,
+        {"agent-1": AgentInfo(id="agent-1", name="Fresh Name", picture="pic.png")},
+    )
+
     result = await get_agent_post(post_id)
 
     # Verify usage
@@ -90,9 +101,10 @@ async def test_get_agent_post_cache_hit(monkeypatch):
 
     assert isinstance(result, AgentPost)
     assert result.id == post_id
-    assert result.agent_name == "Cached Agent"
-    assert result.agent_picture == "https://example.com/cached.png"
     assert result.title == "Cached Post"
+    # Agent display info is resolved at read time, even on a cache hit.
+    assert result.agent_name == "Fresh Name"
+    assert result.agent_picture == "pic.png"
 
 
 @pytest.mark.asyncio
@@ -108,8 +120,6 @@ async def test_get_agent_post_cache_miss_db_hit(monkeypatch):
     db_post = AgentPostTable(
         id=post_id,
         agent_id="agent-1",
-        agent_name="DB Agent",
-        agent_picture="https://example.com/db.png",
         title="DB Post",
         markdown="Content",
         cover=None,
@@ -128,6 +138,10 @@ async def test_get_agent_post_cache_miss_db_hit(monkeypatch):
     mock_session_ctx.__aexit__.return_value = None
     monkeypatch.setattr(agent_post_module, "get_session", lambda: mock_session_ctx)
 
+    _patch_agent_info(
+        monkeypatch, {"agent-1": AgentInfo(id="agent-1", name="DB Agent")}
+    )
+
     result = await get_agent_post(post_id)
 
     # Verify
@@ -135,10 +149,13 @@ async def test_get_agent_post_cache_miss_db_hit(monkeypatch):
     mock_session.execute.assert_called_once()
     mock_redis.set.assert_called_once()
 
+    # The redis payload stays lean: agent info is attached after caching.
+    cached_payload = json.loads(mock_redis.set.call_args.args[1])
+    assert cached_payload["agent_name"] is None
+
     assert isinstance(result, AgentPost)
-    assert result.agent_name == "DB Agent"
-    assert result.agent_picture == "https://example.com/db.png"
     assert result.title == "DB Post"
+    assert result.agent_name == "DB Agent"
 
 
 @pytest.mark.asyncio
@@ -168,38 +185,27 @@ async def test_get_agent_post_db_miss(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_agent_post_with_none_picture(monkeypatch):
-    """Test creating post when agent_picture is None."""
-    # Mock session
-    mock_session = AsyncMock()
-    mock_session.add = MagicMock()
+async def test_get_agent_post_agent_gone(monkeypatch):
+    """A post survives its agent: enrichment leaves agent fields as None."""
+    post_id = "post-123"
+    cached_data = {
+        "id": post_id,
+        "agent_id": "agent-gone",
+        "title": "Orphan Post",
+        "markdown": "Content",
+        "cover": None,
+        "created_at": datetime.now().isoformat(),
+        "tags": [],
+    }
 
-    async def mock_refresh(obj):
-        obj.id = "post-456"
-        obj.created_at = datetime.now()
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = json.dumps(cached_data)
+    monkeypatch.setattr(agent_post_module, "get_redis", lambda: mock_redis)
 
-    mock_session.refresh.side_effect = mock_refresh
+    _patch_agent_info(monkeypatch, {})
 
-    mock_session_cls = MagicMock()
-    mock_session_cls.__aenter__.return_value = mock_session
-    mock_session_cls.__aexit__.return_value = None
+    result = await get_agent_post(post_id)
 
-    monkeypatch.setattr(agent_post_module, "get_session", lambda: mock_session_cls)
-
-    # Create post without agent_picture (should default to None)
-    post_create = AgentPostCreate(
-        agent_id="agent-1",
-        agent_name="Test Agent",
-        title="Test Post",
-        markdown="Content",
-        tags=[],
-    )
-
-    result = await create_agent_post(post_create)
-
-    # Verify result
-    assert isinstance(result, AgentPost)
-    assert result.agent_id == "agent-1"
-    assert result.agent_name == "Test Agent"
+    assert result is not None
+    assert result.agent_name is None
     assert result.agent_picture is None
-    assert result.title == "Test Post"

@@ -67,14 +67,14 @@ export default function DiscoverPostsPage() {
                     <Avatar className="h-4 w-4">
                       <AvatarImage
                         src={getImageUrl(post.agent_picture) || undefined}
-                        alt={post.agent_name}
+                        alt={post.agent_name || post.agent_id}
                         className="object-cover"
                       />
                       <AvatarFallback className="bg-background">
                         <Bot className="h-4 w-4" />
                       </AvatarFallback>
                     </Avatar>
-                    <span>{post.agent_name}</span>
+                    <span>{post.agent_name || post.agent_id}</span>
                     <span>•</span>
                     <span>
                       {formatDistanceToNow(new Date(post.created_at), {

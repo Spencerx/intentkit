@@ -827,8 +827,8 @@ export interface ActivityItem {
 export interface PostItem {
   id: string;
   agent_id: string;
-  agent_name: string;
-  agent_picture?: string;
+  agent_name?: string | null;
+  agent_picture?: string | null;
   title: string;
   excerpt?: string;
   slug?: string;
@@ -1005,12 +1005,23 @@ export const publicApi = {
 };
 
 /**
+ * Basic agent display info, resolved by the backend at read time.
+ */
+export interface AgentInfo {
+  id: string;
+  name?: string | null;
+  picture?: string | null;
+  slug?: string | null;
+}
+
+/**
  * Autonomous Task type definition
  */
 export interface AutonomousTask {
   id: string;
   team_id?: string;
   target_agent_id?: string | null;
+  target_agent?: AgentInfo | null;
   created_by?: string | null;
   name?: string;
   description?: string;

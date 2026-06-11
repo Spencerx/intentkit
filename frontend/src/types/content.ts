@@ -2,7 +2,7 @@
 export interface Activity {
     id: string;
     agent_id: string;
-    agent_name: string; // Enriched field
+    agent_name?: string | null; // Resolved from the agent at read time
     activity_type: string;
     description: string;
     created_at: string;
@@ -12,7 +12,7 @@ export interface Activity {
 export interface PostBrief {
     id: string;
     agent_id: string;
-    agent_name: string; // Enriched field
+    agent_name?: string | null; // Resolved from the agent at read time
     title: string;
     summary: string;
     created_at: string;

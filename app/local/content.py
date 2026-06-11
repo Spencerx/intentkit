@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_db
+from intentkit.core.agent import attach_agent_info
 from intentkit.core.team.subscription import (
     get_subscriptions,
     subscribe_agent,
@@ -35,8 +36,11 @@ async def get_all_activities(
     * `list[AgentActivity]` - List of all activities sorted by created_at descending
     """
     stmt = select(AgentActivityTable).order_by(AgentActivityTable.created_at.desc())
-    activities = (await db.scalars(stmt)).all()
-    return [AgentActivity.model_validate(a) for a in activities]
+    activities = [
+        AgentActivity.model_validate(a) for a in (await db.scalars(stmt)).all()
+    ]
+    await attach_agent_info(activities)
+    return activities
 
 
 @content_router.get(
@@ -62,8 +66,11 @@ async def get_agent_activities(
         .where(AgentActivityTable.agent_id == agent_id)
         .order_by(AgentActivityTable.created_at.desc())
     )
-    activities = (await db.scalars(stmt)).all()
-    return [AgentActivity.model_validate(a) for a in activities]
+    activities = [
+        AgentActivity.model_validate(a) for a in (await db.scalars(stmt)).all()
+    ]
+    await attach_agent_info(activities)
+    return activities
 
 
 @content_router.get(
@@ -81,8 +88,9 @@ async def get_all_posts(
     * `list[AgentPostBrief]` - List of all posts with content truncated to 500 characters
     """
     stmt = select(AgentPostTable).order_by(AgentPostTable.created_at.desc())
-    posts = (await db.scalars(stmt)).all()
-    return [AgentPostBrief.from_table(p) for p in posts]
+    posts = [AgentPostBrief.from_table(p) for p in (await db.scalars(stmt)).all()]
+    await attach_agent_info(posts)
+    return posts
 
 
 @content_router.get(
@@ -108,8 +116,9 @@ async def get_agent_posts(
         .where(AgentPostTable.agent_id == agent_id)
         .order_by(AgentPostTable.created_at.desc())
     )
-    posts = (await db.scalars(stmt)).all()
-    return [AgentPostBrief.from_table(p) for p in posts]
+    posts = [AgentPostBrief.from_table(p) for p in (await db.scalars(stmt)).all()]
+    await attach_agent_info(posts)
+    return posts
 
 
 @content_router.get(
@@ -140,7 +149,9 @@ async def get_post(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return AgentPost.model_validate(post)
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return result
 
 
 @content_router.get(
@@ -176,7 +187,9 @@ async def get_post_by_slug(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return AgentPost.model_validate(post)
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return result
 
 
 @content_router.get(
@@ -196,7 +209,9 @@ async def get_post_pdf(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return await post_pdf_response(post)
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return await post_pdf_response(result)
 
 
 @content_router.get(
@@ -220,7 +235,9 @@ async def get_post_pdf_by_slug(
         raise IntentKitAPIError(
             status_code=404, key="NotFound", message="Post not found"
         )
-    return await post_pdf_response(post, filename=f"{slug}.pdf")
+    result = AgentPost.model_validate(post)
+    await attach_agent_info([result])
+    return await post_pdf_response(result, filename=f"{slug}.pdf")
 
 
 # ---------------------------------------------------------------------------

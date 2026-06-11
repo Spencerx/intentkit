@@ -200,12 +200,12 @@ async def post_pdf_response(
     """Generate a PDF from a post record and return it as a download Response.
 
     Accepts any object with title, markdown, agent_name, created_at, tags,
-    slug, and id attributes (e.g., AgentPostTable).
+    slug, and id attributes (e.g., an enriched AgentPost).
     """
     pdf_bytes = await generate_post_pdf(
         title=post.title,
         markdown_content=post.markdown,
-        agent_name=post.agent_name,
+        agent_name=post.agent_name or post.agent_id,
         created_at=post.created_at,
         tags=post.tags,
     )

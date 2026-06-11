@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_session
+from intentkit.core.agent.info import attach_agent_info
 from intentkit.models.agent.core import AgentVisibility
 from intentkit.models.agent.db import AgentTable
 from intentkit.models.agent_activity import AgentActivity, AgentActivityTable
@@ -151,7 +152,8 @@ async def query_activity_feed(
             last = feed_rows[-1]
             next_cursor = _build_cursor(last.created_at, last.activity_id)
 
-        return items, next_cursor
+    await attach_agent_info(items)
+    return items, next_cursor
 
 
 async def query_post_feed(
@@ -201,4 +203,5 @@ async def query_post_feed(
             last = feed_rows[-1]
             next_cursor = _build_cursor(last.created_at, last.post_id)
 
-        return items, next_cursor
+    await attach_agent_info(items)
+    return items, next_cursor

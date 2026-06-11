@@ -194,8 +194,6 @@ class TestQueryActivityFeed:
         activity_row_1 = MagicMock()
         activity_row_1.id = "act-1"
         activity_row_1.agent_id = "agent-1"
-        activity_row_1.agent_name = "Agent One"
-        activity_row_1.agent_picture = None
         activity_row_1.text = "Hello"
         activity_row_1.images = []
         activity_row_1.video = None
@@ -221,6 +219,7 @@ class TestQueryActivityFeed:
             "model_validate",
             lambda row: mock_activity,
         )
+        monkeypatch.setattr(feed_module, "attach_agent_info", AsyncMock())
 
         items, next_cursor = await query_activity_feed("team-1", limit=1)
 

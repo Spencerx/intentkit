@@ -10,6 +10,7 @@ from intentkit.models.agent.db import AgentTable
 from intentkit.models.agent_data import AgentData
 from intentkit.utils.error import IntentKitAPIError
 
+from .info import invalidate_agent_info
 from .notifications import send_agent_notification
 from .queries import get_agent, get_agent_by_id_or_slug
 from .tool_registry import sanitize_tools, validate_tools
@@ -120,6 +121,7 @@ async def override_agent(
         await db.refresh(db_agent)
         latest_agent = Agent.model_validate(db_agent)
 
+    await invalidate_agent_info(agent_id)
     agent_data = await process_agent_wallet(
         latest_agent,
         existing_agent.wallet_provider,
@@ -201,6 +203,7 @@ async def patch_agent(
         await db.refresh(db_agent)
         latest_agent = Agent.model_validate(db_agent)
 
+    await invalidate_agent_info(agent_id)
     agent_data = await process_agent_wallet(
         latest_agent,
         existing_agent.wallet_provider,
@@ -273,6 +276,8 @@ async def create_agent(agent: AgentCreate) -> tuple[Agent, AgentData]:
                 message=f"Agent with ID '{agent.id}' already exists",
             )
 
+    # A lookup before creation may have negative-cached this id.
+    await invalidate_agent_info(latest_agent.id)
     agent_data = await process_agent_wallet(latest_agent)
     send_agent_notification(latest_agent, agent_data, "Agent Deployed")
 
@@ -331,6 +336,7 @@ async def backfill_agent_avatar(agent_id: str) -> None:
                 .values(picture=avatar_path)
             )
             await db.commit()
+        await invalidate_agent_info(agent_id)
     except Exception as e:
         logger.warning("Agent avatar backfill write failed for %s: %s", agent_id, e)
 

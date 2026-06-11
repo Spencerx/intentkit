@@ -130,7 +130,7 @@ export default function AgentPostPage() {
             <div className="flex items-center gap-2">
               <User className="h-4 w-4" />
               <div className="flex items-center gap-1">
-                 <span className="font-medium text-foreground">{agent?.name ?? post.agent_name}</span>
+                 <span className="font-medium text-foreground">{agent?.name ?? (post.agent_name || post.agent_id)}</span>
                  <Link href={`/agent/${agentId}`} className="text-xs underline hover:text-primary">
                     (View Agent)
                  </Link>

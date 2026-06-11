@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import intentkit.core.agent_activity as agent_activity_module
+from intentkit.core.agent.info import AgentInfo
 from intentkit.core.agent_activity import (
     _format_activity_push,  # pyright: ignore[reportPrivateUsage]
     create_agent_activity,
@@ -16,6 +17,17 @@ from intentkit.models.agent_activity import (
     AgentActivityCreate,
     AgentActivityTable,
 )
+
+
+def _patch_agent_info(monkeypatch, infos: dict[str, AgentInfo]):
+    """Route read-time enrichment to a canned agent info map."""
+
+    async def fake_get_agent_infos(agent_ids):
+        return {aid: infos[aid] for aid in agent_ids if aid in infos}
+
+    monkeypatch.setattr(
+        "intentkit.core.agent.info.get_agent_infos", fake_get_agent_infos
+    )
 
 
 @pytest.mark.asyncio
@@ -38,8 +50,6 @@ async def test_create_agent_activity(monkeypatch):
 
     activity_create = AgentActivityCreate(
         agent_id="agent-1",
-        agent_name="Test Agent",
-        agent_picture="https://example.com/avatar.png",
         text="Test Activity",
         images=["img1.jpg"],
         video="video.mp4",
@@ -56,8 +66,6 @@ async def test_create_agent_activity(monkeypatch):
     # Verify result
     assert isinstance(result, AgentActivity)
     assert result.agent_id == "agent-1"
-    assert result.agent_name == "Test Agent"
-    assert result.agent_picture == "https://example.com/avatar.png"
     assert result.text == "Test Activity"
     assert result.images == ["img1.jpg"]
     assert result.video == "video.mp4"
@@ -71,8 +79,6 @@ async def test_get_agent_activity_cache_hit(monkeypatch):
     cached_data = {
         "id": activity_id,
         "agent_id": "agent-1",
-        "agent_name": "Cached Agent",
-        "agent_picture": "https://example.com/cached.png",
         "text": "Cached Activity",
         "images": [],
         "video": None,
@@ -86,6 +92,11 @@ async def test_get_agent_activity_cache_hit(monkeypatch):
 
     monkeypatch.setattr(agent_activity_module, "get_redis", lambda: mock_redis)
 
+    _patch_agent_info(
+        monkeypatch,
+        {"agent-1": AgentInfo(id="agent-1", name="Fresh Name", picture="pic.png")},
+    )
+
     result = await get_agent_activity(activity_id)
 
     # Verify usage
@@ -93,9 +104,10 @@ async def test_get_agent_activity_cache_hit(monkeypatch):
 
     assert isinstance(result, AgentActivity)
     assert result.id == activity_id
-    assert result.agent_name == "Cached Agent"
-    assert result.agent_picture == "https://example.com/cached.png"
     assert result.text == "Cached Activity"
+    # Agent display info is resolved at read time, even on a cache hit.
+    assert result.agent_name == "Fresh Name"
+    assert result.agent_picture == "pic.png"
 
 
 @pytest.mark.asyncio
@@ -111,8 +123,6 @@ async def test_get_agent_activity_cache_miss_db_hit(monkeypatch):
     db_activity = AgentActivityTable(
         id=activity_id,
         agent_id="agent-1",
-        agent_name="DB Agent",
-        agent_picture="https://example.com/db.png",
         text="DB Activity",
         images=None,
         video=None,
@@ -131,6 +141,10 @@ async def test_get_agent_activity_cache_miss_db_hit(monkeypatch):
     mock_session_ctx.__aexit__.return_value = None
     monkeypatch.setattr(agent_activity_module, "get_session", lambda: mock_session_ctx)
 
+    _patch_agent_info(
+        monkeypatch, {"agent-1": AgentInfo(id="agent-1", name="DB Agent")}
+    )
+
     result = await get_agent_activity(activity_id)
 
     # Verify
@@ -138,10 +152,13 @@ async def test_get_agent_activity_cache_miss_db_hit(monkeypatch):
     mock_session.execute.assert_called_once()
     mock_redis.set.assert_called_once()
 
+    # The redis payload stays lean: agent info is attached after caching.
+    cached_payload = json.loads(mock_redis.set.call_args.args[1])
+    assert cached_payload["agent_name"] is None
+
     assert isinstance(result, AgentActivity)
-    assert result.agent_name == "DB Agent"
-    assert result.agent_picture == "https://example.com/db.png"
     assert result.text == "DB Activity"
+    assert result.agent_name == "DB Agent"
 
 
 @pytest.mark.asyncio
@@ -179,8 +196,6 @@ async def test_get_agent_activities(monkeypatch):
         AgentActivityTable(
             id=f"activity-{i}",
             agent_id=agent_id,
-            agent_name=f"Agent {i}",
-            agent_picture=f"https://example.com/avatar{i}.png",
             text=f"Activity {i}",
             images=None,
             video=None,
@@ -203,6 +218,11 @@ async def test_get_agent_activities(monkeypatch):
     mock_session_ctx.__aexit__.return_value = None
     monkeypatch.setattr(agent_activity_module, "get_session", lambda: mock_session_ctx)
 
+    _patch_agent_info(
+        monkeypatch,
+        {agent_id: AgentInfo(id=agent_id, name="Agent One", picture="one.png")},
+    )
+
     result = await get_agent_activities(agent_id, limit=10)
 
     # Verify
@@ -211,9 +231,9 @@ async def test_get_agent_activities(monkeypatch):
     for i, activity in enumerate(result):
         assert isinstance(activity, AgentActivity)
         assert activity.id == f"activity-{i}"
-        assert activity.agent_name == f"Agent {i}"
-        assert activity.agent_picture == f"https://example.com/avatar{i}.png"
         assert activity.text == f"Activity {i}"
+        assert activity.agent_name == "Agent One"
+        assert activity.agent_picture == "one.png"
 
 
 @pytest.mark.asyncio
@@ -238,47 +258,10 @@ async def test_get_agent_activities_empty(monkeypatch):
     assert result == []
 
 
-@pytest.mark.asyncio
-async def test_create_agent_activity_with_none_agent_info(monkeypatch):
-    """Test creating activity when agent_name and agent_picture are None."""
-    # Mock session
-    mock_session = AsyncMock()
-    mock_session.add = MagicMock()
-
-    async def mock_refresh(obj):
-        obj.id = "activity-456"
-        obj.created_at = datetime.now()
-
-    mock_session.refresh.side_effect = mock_refresh
-
-    mock_session_cls = MagicMock()
-    mock_session_cls.__aenter__.return_value = mock_session
-    mock_session_cls.__aexit__.return_value = None
-
-    monkeypatch.setattr(agent_activity_module, "get_session", lambda: mock_session_cls)
-
-    # Create activity without agent_name and agent_picture (they should default to None)
-    activity_create = AgentActivityCreate(
-        agent_id="agent-1",
-        text="Activity without agent info",
-    )
-
-    result = await create_agent_activity(activity_create)
-
-    # Verify result
-    assert isinstance(result, AgentActivity)
-    assert result.agent_id == "agent-1"
-    assert result.agent_name is None
-    assert result.agent_picture is None
-    assert result.text == "Activity without agent info"
-
-
 def _make_activity(**overrides) -> AgentActivity:
     base = {
         "id": "activity-1",
         "agent_id": "agent-1",
-        "agent_name": "Alice",
-        "agent_picture": None,
         "text": "hello world",
         "images": None,
         "video": None,
@@ -291,15 +274,25 @@ def _make_activity(**overrides) -> AgentActivity:
     return AgentActivity.model_validate(base)
 
 
+# The caller (_push_activity_to_teams) enriches the activity before formatting.
+
+
 @pytest.mark.asyncio
 async def test_format_activity_push_plain():
-    activity = _make_activity()
+    activity = _make_activity(agent_name="Alice")
     assert await _format_activity_push(activity) == "[Alice] hello world"
 
 
 @pytest.mark.asyncio
+async def test_format_activity_push_agent_gone():
+    """Falls back to the agent id when the agent no longer exists."""
+    activity = _make_activity()
+    assert await _format_activity_push(activity) == "[agent-1] hello world"
+
+
+@pytest.mark.asyncio
 async def test_format_activity_push_with_link():
-    activity = _make_activity(link="https://example.com/x")
+    activity = _make_activity(agent_name="Alice", link="https://example.com/x")
     assert await _format_activity_push(activity) == (
         "[Alice] hello world\nhttps://example.com/x"
     )
@@ -332,7 +325,9 @@ async def test_format_activity_push_with_post_id(monkeypatch):
         agent_activity_module, "create_share_link", fake_create_share_link
     )
 
-    activity = _make_activity(text="Published a new post: hi", post_id="post-42")
+    activity = _make_activity(
+        agent_name="Alice", text="Published a new post: hi", post_id="post-42"
+    )
     assert await _format_activity_push(activity) == (
         "[Alice] Published a new post: hi\nhttps://app.example.com/share/share-xid"
     )
@@ -351,7 +346,9 @@ async def test_format_activity_push_post_fallback_on_error(monkeypatch):
         agent_activity_module, "create_share_link", broken_create_share_link
     )
 
-    activity = _make_activity(text="Published a new post: hi", post_id="post-42")
+    activity = _make_activity(
+        agent_name="Alice", text="Published a new post: hi", post_id="post-42"
+    )
     assert await _format_activity_push(activity) == (
         "[Alice] Published a new post: hi\nhttps://app.example.com/post/post-42"
     )

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { autonomousApi, AutonomousTask } from "@/lib/api";
 import { TaskDialog } from "@/app/tasks/TaskDialog";
+import { TargetAgentLabel } from "@/app/tasks/TargetAgentLabel";
 import { ExecutionsSection } from "./ExecutionsSection";
 
 export default function TaskDetailPage() {
@@ -203,11 +204,10 @@ export default function TaskDetailPage() {
             <span className="font-semibold text-muted-foreground">
               Target Agent:{" "}
             </span>
-            {task.target_agent_id ? (
-              <span className="font-mono">{task.target_agent_id}</span>
-            ) : (
-              "Team lead decides"
-            )}
+            <TargetAgentLabel
+              targetAgentId={task.target_agent_id}
+              targetAgent={task.target_agent}
+            />
           </div>
           {task.created_by && task.created_by !== "system" && (
             <div>

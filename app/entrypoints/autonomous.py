@@ -4,7 +4,6 @@ from typing import Any
 
 from epyxid import XID
 
-from intentkit.core.agent import get_agent
 from intentkit.core.agent_activity import create_agent_activity
 from intentkit.core.autonomous import (
     claim_autonomous_execution,
@@ -82,8 +81,6 @@ async def _finish_execution(
 async def _record_error_activity(
     task_id: str,
     agent_id: str,
-    agent_name: str | None,
-    agent_picture: str | None,
     text: str,
 ) -> None:
     """Best-effort surfacing of a run error as an agent activity."""
@@ -91,8 +88,6 @@ async def _record_error_activity(
         _ = await create_agent_activity(
             AgentActivityCreate(
                 agent_id=agent_id,
-                agent_name=agent_name,
-                agent_picture=agent_picture,
                 text=text,
             )
         )
@@ -141,8 +136,6 @@ async def run_autonomous_task(
 
     # The agent the run (and any error activity) is attributed to.
     effective_agent_id = target_agent_id or f"team-{team_id}"
-    agent_name: str | None = None
-    agent_picture: str | None = None
     chat_id = f"autonomous-{task_id}"
 
     message = ChatMessageCreate(
@@ -198,9 +191,6 @@ async def run_autonomous_task(
         resp: list[ChatMessage]
         if target_agent_id:
             # Direct execution on the target agent.
-            agent = await get_agent(target_agent_id)
-            agent_name = agent.name if agent else None
-            agent_picture = agent.picture if agent else None
             resp = await execute_agent(message)
         else:
             # Lead-orchestrated execution: the lead reads the prompt and
@@ -229,9 +219,7 @@ async def run_autonomous_task(
         await _finish_execution(execution, resp, error_text)
 
         if error_text:
-            await _record_error_activity(
-                task_id, effective_agent_id, agent_name, agent_picture, error_text
-            )
+            await _record_error_activity(task_id, effective_agent_id, error_text)
 
     except Exception as e:
         logger.error(
@@ -240,6 +228,4 @@ async def run_autonomous_task(
         )
         error_text = f"Autonomous task exception: {repr(e)}"
         await _finish_execution(execution, [], error_text)
-        await _record_error_activity(
-            task_id, effective_agent_id, agent_name, agent_picture, error_text
-        )
+        await _record_error_activity(task_id, effective_agent_id, error_text)

@@ -41,12 +41,6 @@ def _patch_runner(stack, *, claimed=True, response=None):
     response = response if response is not None else _ok_response()
     stack.enter_context(patch(f"{MODULE}.clear_thread_memory", new=AsyncMock()))
     stack.enter_context(patch(f"{MODULE}.create_agent_activity", new=AsyncMock()))
-    stack.enter_context(
-        patch(
-            f"{MODULE}.get_agent",
-            new=AsyncMock(return_value=SimpleNamespace(name="A", picture=None)),
-        )
-    )
     # The claim returns the persisted execution, or None when the task's run
     # slot is taken.
     claim_mock = (

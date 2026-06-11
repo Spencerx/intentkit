@@ -154,6 +154,25 @@ async def _migrate_skill_to_tool(conn) -> None:
     await conn.exec_driver_sql(_SKILL_TO_TOOL_DDL)
 
 
+# Posts/activities used to snapshot the agent's name/picture at publish time.
+# Display info is now resolved at read time (core.agent.info), so the snapshot
+# columns are dropped. Idempotent -- IF EXISTS makes it a no-op once applied.
+_DROP_CONTENT_AGENT_SNAPSHOT_DDL = """
+DO $$
+BEGIN
+    ALTER TABLE IF EXISTS agent_posts DROP COLUMN IF EXISTS agent_name;
+    ALTER TABLE IF EXISTS agent_posts DROP COLUMN IF EXISTS agent_picture;
+    ALTER TABLE IF EXISTS agent_activities DROP COLUMN IF EXISTS agent_name;
+    ALTER TABLE IF EXISTS agent_activities DROP COLUMN IF EXISTS agent_picture;
+END $$;
+"""
+
+
+async def _drop_content_agent_snapshot_columns(conn) -> None:
+    """Drop the legacy denormalized agent_name/agent_picture columns."""
+    await conn.exec_driver_sql(_DROP_CONTENT_AGENT_SNAPSHOT_DDL)
+
+
 async def safe_migrate(engine) -> None:
     """Safely migrate all SQLAlchemy models by adding new columns.
 
@@ -169,6 +188,8 @@ async def safe_migrate(engine) -> None:
             # additive auto-migration cannot create empty new-named columns/tables
             # alongside the old data. Idempotent / guarded -> no-op once applied.
             await _migrate_skill_to_tool(conn)
+
+            await _drop_content_agent_snapshot_columns(conn)
 
             # Create tables if they don't exist
             await conn.run_sync(Base.metadata.create_all)

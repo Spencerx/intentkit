@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from intentkit.config.db import get_session
 from intentkit.config.redis import get_redis
+from intentkit.core.agent.info import attach_agent_info
 from intentkit.models.agent_post import (
     AgentPost,
     AgentPostBrief,
@@ -29,8 +30,6 @@ async def create_agent_post(post_create: AgentPostCreate) -> AgentPost:
         # Create SQLAlchemy model instance
         db_post = AgentPostTable(
             agent_id=post_create.agent_id,
-            agent_name=post_create.agent_name,
-            agent_picture=post_create.agent_picture,
             title=post_create.title,
             cover=post_create.cover,
             markdown=post_create.markdown,
@@ -69,7 +68,9 @@ async def get_agent_post(post_id: str) -> AgentPost | None:
     cached_raw = await redis_client.get(cache_key)
     if cached_raw:
         cached_data = json.loads(cached_raw)
-        return AgentPost.model_validate(cached_data)
+        post = AgentPost.model_validate(cached_data)
+        await attach_agent_info([post])
+        return post
 
     async with get_session() as session:
         result = await session.execute(
@@ -88,6 +89,7 @@ async def get_agent_post(post_id: str) -> AgentPost | None:
         ex=3600,
     )
 
+    await attach_agent_info([post])
     return post
 
 
@@ -109,4 +111,7 @@ async def get_agent_posts(agent_id: str, limit: int = 10) -> list[AgentPostBrief
             .limit(limit)
         )
         rows = result.scalars().all()
-        return [AgentPostBrief.from_table(row) for row in rows]
+        posts = [AgentPostBrief.from_table(row) for row in rows]
+
+    await attach_agent_info(posts)
+    return posts

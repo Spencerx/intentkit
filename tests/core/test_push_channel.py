@@ -196,6 +196,10 @@ class TestGetPushChannel:
 # ---------------------------------------------------------------------------
 
 
+# The caller (_push_activity_to_teams) enriches the activity before formatting,
+# so agent_name is set directly here.
+
+
 class TestFormatActivityPush:
     @pytest.mark.asyncio
     async def test_basic_format(self):

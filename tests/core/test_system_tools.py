@@ -393,23 +393,13 @@ async def test_call_agent_no_response(mock_runtime):
 @pytest.mark.asyncio
 async def test_create_activity_success(mock_runtime):
     """Successful activity creation returns success message with ID."""
-    mock_agent = MagicMock()
-    mock_agent.name = "Test Agent"
-    mock_agent.picture = "https://example.com/avatar.png"
-
     mock_activity = MagicMock()
     mock_activity.id = "activity_123"
 
     tool = CreateActivityTool()
-    with (
-        patch(
-            "intentkit.core.system_tools.create_activity.get_agent",
-            new=AsyncMock(return_value=mock_agent),
-        ),
-        patch(
-            "intentkit.core.system_tools.create_activity.create_agent_activity",
-            new=AsyncMock(return_value=mock_activity),
-        ),
+    with patch(
+        "intentkit.core.system_tools.create_activity.create_agent_activity",
+        new=AsyncMock(return_value=mock_activity),
     ):
         result = await tool._arun(text="Hello world")  # pyright: ignore[reportPrivateUsage]
 
@@ -419,10 +409,6 @@ async def test_create_activity_success(mock_runtime):
 @pytest.mark.asyncio
 async def test_create_activity_with_link(mock_runtime):
     """Activity with a link fetches link meta and includes in activity."""
-    mock_agent = MagicMock()
-    mock_agent.name = "Test Agent"
-    mock_agent.picture = "https://example.com/avatar.png"
-
     mock_activity = MagicMock()
     mock_activity.id = "activity_456"
 
@@ -434,10 +420,6 @@ async def test_create_activity_with_link(mock_runtime):
 
     tool = CreateActivityTool()
     with (
-        patch(
-            "intentkit.core.system_tools.create_activity.get_agent",
-            new=AsyncMock(return_value=mock_agent),
-        ),
         patch(
             "intentkit.core.system_tools.create_activity.create_agent_activity",
             new=AsyncMock(return_value=mock_activity),

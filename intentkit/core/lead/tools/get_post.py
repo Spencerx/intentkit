@@ -47,7 +47,7 @@ class LeadGetPost(LeadTool):
 
         result_lines = [
             f"Post (ID: {post.id})",
-            f"Agent: {post.agent_name}",
+            f"Agent: {post.agent_name or post.agent_id}",
             f"Title: {post.title}",
             f"Created: {post.created_at.isoformat()}",
         ]

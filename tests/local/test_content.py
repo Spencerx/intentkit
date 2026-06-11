@@ -6,10 +6,28 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from intentkit.core.agent.info import AgentInfo
 from intentkit.models.agent_activity import AgentActivityTable
 from intentkit.models.agent_post import AgentPostTable
 
 from app.local.content import content_router
+
+AGENT_INFOS = {
+    "agent-1": AgentInfo(id="agent-1", name="Agent 1", picture="one.png"),
+    "agent-2": AgentInfo(id="agent-2", name="Agent 2"),
+}
+
+
+@pytest.fixture(autouse=True)
+def patch_agent_info(monkeypatch):
+    """Serve read-time agent enrichment from a canned map (no DB)."""
+
+    async def fake_get_agent_infos(agent_ids):
+        return {aid: AGENT_INFOS[aid] for aid in agent_ids if aid in AGENT_INFOS}
+
+    monkeypatch.setattr(
+        "intentkit.core.agent.info.get_agent_infos", fake_get_agent_infos
+    )
 
 
 # Create a test app with only the content router
@@ -76,7 +94,6 @@ def sample_posts():
         AgentPostTable(
             id="post-1",
             agent_id="agent-1",
-            agent_name="Agent 1",
             title="First Post Title",
             cover="cover1.jpg",
             markdown="A" * 600,  # Content longer than 500 chars
@@ -85,7 +102,6 @@ def sample_posts():
         AgentPostTable(
             id="post-2",
             agent_id="agent-1",
-            agent_name="Agent 1",
             title="Second Post Title",
             cover=None,
             markdown="Short content",
@@ -94,7 +110,6 @@ def sample_posts():
         AgentPostTable(
             id="post-3",
             agent_id="agent-2",
-            agent_name="Agent 2",
             title="Post from Agent 2",
             cover="cover3.jpg",
             markdown="Content from agent 2",
@@ -125,6 +140,10 @@ async def test_get_all_activities(monkeypatch, sample_activities):
     assert len(result) == 3
     assert result[0].id == "activity-1"
     assert result[1].text == "Second activity"
+    # Agent display info is attached at read time
+    assert result[0].agent_name == "Agent 1"
+    assert result[0].agent_picture == "one.png"
+    assert result[2].agent_name == "Agent 2"
 
 
 @pytest.mark.asyncio
@@ -165,6 +184,9 @@ async def test_get_all_posts_truncates_content(monkeypatch, sample_posts):
     assert len(result[0].excerpt or "") == 500
     # Second post has short content, should not be truncated
     assert result[1].excerpt == "Short content"
+    # Agent display info is attached at read time
+    assert result[0].agent_name == "Agent 1"
+    assert result[2].agent_name == "Agent 2"
 
 
 @pytest.mark.asyncio

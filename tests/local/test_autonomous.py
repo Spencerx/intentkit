@@ -70,6 +70,64 @@ async def test_list_autonomous(client, monkeypatch):
     assert len(data) == 1
     assert data[0]["id"] == "task-1"
     assert data[0]["chat_id"] == "autonomous-task-1"
+    # No target agent pinned: nothing to resolve
+    assert data[0]["target_agent"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_autonomous_attaches_target_agent(client, monkeypatch):
+    from intentkit.core.agent.info import AgentInfo
+
+    import app.local.autonomous as autonomous_module
+
+    async def mock_list(team_id):
+        return [
+            AutonomousTask(
+                id="task-1",
+                team_id=LEAD_TEAM_ID,
+                name="Task 1",
+                cron="0 * * * *",
+                prompt="Do something",
+                enabled=True,
+                status=AutonomousTaskStatus.WAITING,
+                target_agent_id="agent-x",
+            ),
+            AutonomousTask(
+                id="task-2",
+                team_id=LEAD_TEAM_ID,
+                name="Task 2",
+                cron="0 * * * *",
+                prompt="Do something else",
+                enabled=True,
+                status=AutonomousTaskStatus.WAITING,
+                target_agent_id="agent-gone",
+            ),
+        ]
+
+    async def fake_get_agent_infos(agent_ids):
+        ids = set(agent_ids)
+        assert ids == {"agent-x", "agent-gone"}
+        return {
+            "agent-x": AgentInfo(
+                id="agent-x", name="Agent X", picture="x.png", slug="agent-x"
+            )
+        }
+
+    monkeypatch.setattr(autonomous_module, "list_team_autonomous_tasks", mock_list)
+    monkeypatch.setattr("app.common.autonomous.get_agent_infos", fake_get_agent_infos)
+
+    response = client.get("/autonomous")
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["target_agent"] == {
+        "id": "agent-x",
+        "name": "Agent X",
+        "picture": "x.png",
+        "slug": "agent-x",
+    }
+    # A deleted target agent leaves the id but no display info
+    assert data[1]["target_agent_id"] == "agent-gone"
+    assert data[1]["target_agent"] is None
 
 
 @pytest.mark.asyncio

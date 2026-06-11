@@ -20,7 +20,12 @@ from intentkit.models.autonomous import (
 from intentkit.models.chat import ChatMessage
 from intentkit.utils.error import IntentKitAPIError
 
-from app.common.autonomous import AutonomousExecutionsResponse, AutonomousResponse
+from app.common.autonomous import (
+    AutonomousExecutionsResponse,
+    AutonomousResponse,
+    to_autonomous_response,
+    to_autonomous_responses,
+)
 from app.entrypoints.autonomous import run_autonomous_task
 from app.local.lead import LEAD_TEAM_ID, LEAD_USER_ID
 
@@ -38,7 +43,7 @@ logger = logging.getLogger(__name__)
 async def list_all_autonomous() -> list[AutonomousResponse]:
     """List all autonomous tasks of the team."""
     tasks = await list_team_autonomous_tasks(LEAD_TEAM_ID)
-    return [AutonomousResponse.from_model(task) for task in tasks]
+    return await to_autonomous_responses(tasks)
 
 
 @autonomous_router.get(
@@ -52,7 +57,7 @@ async def get_autonomous(
 ) -> AutonomousResponse:
     """Get a single autonomous task."""
     task = await get_autonomous_task(LEAD_TEAM_ID, task_id)
-    return AutonomousResponse.from_model(task)
+    return await to_autonomous_response(task)
 
 
 @autonomous_router.post(
@@ -71,7 +76,7 @@ async def add_autonomous(
     added_task = await add_autonomous_task(
         LEAD_TEAM_ID, task_request, created_by=LEAD_USER_ID
     )
-    return AutonomousResponse.from_model(added_task)
+    return await to_autonomous_response(added_task)
 
 
 @autonomous_router.patch(
@@ -88,7 +93,7 @@ async def update_autonomous(
 ) -> AutonomousResponse:
     """Update a specific autonomous task."""
     updated_task = await update_autonomous_task(LEAD_TEAM_ID, task_id, task_update)
-    return AutonomousResponse.from_model(updated_task)
+    return await to_autonomous_response(updated_task)
 
 
 @autonomous_router.delete(

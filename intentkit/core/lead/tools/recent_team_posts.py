@@ -38,7 +38,7 @@ class LeadRecentTeamPosts(LeadTool):
         result_lines = [f"Found {len(posts)} recent team posts:"]
         for i, post in enumerate(posts, 1):
             result_lines.append(f"\n--- Post {i} (ID: {post.id}) ---")
-            result_lines.append(f"Agent: {post.agent_name}")
+            result_lines.append(f"Agent: {post.agent_name or post.agent_id}")
             result_lines.append(f"Title: {post.title}")
             result_lines.append(f"Created: {post.created_at.isoformat()}")
             if post.slug:

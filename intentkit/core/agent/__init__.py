@@ -5,6 +5,13 @@ from .analytics import (
     update_agents_assets,
     update_agents_statistics,
 )
+from .info import (
+    AgentInfo,
+    attach_agent_info,
+    get_agent_info,
+    get_agent_infos,
+    invalidate_agent_info,
+)
 from .management import (
     backfill_agent_avatar,
     create_agent,
@@ -19,6 +26,11 @@ from .queries import get_agent, get_agent_by_id_or_slug, iterate_agent_id_batche
 from .wallet import process_agent_wallet, set_agent_safe_token_spending_limit
 
 __all__ = [
+    "AgentInfo",
+    "attach_agent_info",
+    "get_agent_info",
+    "get_agent_infos",
+    "invalidate_agent_info",
     "get_agent",
     "get_agent_by_id_or_slug",
     "iterate_agent_id_batches",
