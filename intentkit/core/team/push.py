@@ -29,6 +29,15 @@ _ILINK_MESSAGE_TYPE_BOT = 2
 _ILINK_MESSAGE_STATE_FINISH = 2
 _ILINK_ITEM_TYPE_TEXT = 1
 
+# iLink returns ret=-2 when the session window is closed (the user hasn't
+# messaged recently), so the bot has no permission to push. Expected condition,
+# not an error worth alerting on.
+_ILINK_RET_WINDOW_CLOSED = -2
+
+
+class WechatPushWindowClosedError(RuntimeError):
+    """Push rejected because the WeChat session window is closed (ret=-2)."""
+
 
 def _rewrite_for_wechat(text: str) -> str:
     """Swap APP_BASE_URL for WECHAT_BASE_URL in WeChat-bound text."""
@@ -97,9 +106,14 @@ async def _send_wechat(
         logger.debug("iLink sendmessage response: %s", data)
         # iLink only includes `ret` on failure; a missing or zero ret means success
         # (matches the Go integration, which relies on int's zero-value default).
-        if data.get("ret", 0) != 0:
+        ret = data.get("ret", 0)
+        if ret == _ILINK_RET_WINDOW_CLOSED:
+            raise WechatPushWindowClosedError(
+                f"iLink push rejected: session window closed (ret={ret})"
+            )
+        if ret != 0:
             raise RuntimeError(
-                f"iLink API error: ret={data.get('ret')} errmsg={data.get('errmsg')}"
+                f"iLink API error: ret={ret} errmsg={data.get('errmsg')}"
             )
 
 
@@ -192,6 +206,12 @@ async def push_to_team(team_id: str, text: str) -> bool:
         logger.info("Pushed message to team %s via %s", team_id, channel_type)
         return True
 
+    except WechatPushWindowClosedError:
+        logger.info(
+            "Skipped push to team %s: WeChat session window closed (user inactive)",
+            team_id,
+        )
+        return False
     except Exception:
         logger.exception("Failed to push message to team %s", team_id)
         return False
