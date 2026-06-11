@@ -8,8 +8,13 @@ For each task embedded in ``agents.autonomous`` (JSONB):
 - ``minutes`` is converted to ``cron``; other fields and runtime status/next_run_time
   are preserved.
 
-Idempotent: rows are inserted with ``ON CONFLICT (id) DO NOTHING``, so re-running is
-safe. Remove this script (and the ``agents.autonomous`` column) in the next release.
+The autonomous service runs :func:`migrate_if_table_empty` automatically at
+startup, so per-environment manual runs are not needed. Running this script
+directly forces the migration regardless of existing rows (still idempotent:
+inserts use ``ON CONFLICT (id) DO NOTHING``).
+
+Remove this script (and the ``agents.autonomous`` column, and the startup hook
+in ``app/autonomous.py``) after a few releases.
 """
 
 from __future__ import annotations
@@ -52,7 +57,13 @@ def _resolve_cron(task: dict[str, Any]) -> str | None:
     # minutes_to_cron normalizes 0/negative to a 5-minute schedule, matching the
     # old behavior, so convert whenever minutes is present (including 0).
     if minutes is not None:
-        return minutes_to_cron(int(minutes))
+        try:
+            return minutes_to_cron(int(minutes))
+        except (TypeError, ValueError):
+            # The legacy JSONB is schema-less; a malformed minutes value must
+            # not fail the whole batch — treat the task as unscheduled.
+            logger.warning("Invalid minutes value %r; treating as no schedule", minutes)
+            return None
     return None
 
 
@@ -130,8 +141,7 @@ def build_task_rows(
 
 
 async def migrate():
-    await init_db(**config.db)
-
+    """Run the migration. The database must already be initialized."""
     async with get_session() as db:
         result = await db.execute(
             text(
@@ -156,5 +166,30 @@ async def migrate():
     )
 
 
+async def migrate_if_table_empty() -> bool:
+    """Run the migration only when ``autonomous_tasks`` has no rows yet.
+
+    Called by the autonomous service at startup. The guard is row presence by
+    design: once any task exists (migrated or newly created), boots skip the
+    legacy scan. Caveat: if every task is deleted while the legacy
+    ``agents.autonomous`` column still exists, the next service start
+    re-imports the legacy tasks — accepted for the short window until the
+    column and this script are removed. Returns True when the migration ran.
+    """
+    async with get_session() as db:
+        existing = await db.execute(text("SELECT id FROM autonomous_tasks LIMIT 1"))
+        if existing.first() is not None:
+            logger.info("autonomous_tasks already has data; skipping legacy migration")
+            return False
+
+    await migrate()
+    return True
+
+
+async def main():
+    await init_db(**config.db)
+    await migrate()
+
+
 if __name__ == "__main__":
-    asyncio.run(migrate())
+    asyncio.run(main())

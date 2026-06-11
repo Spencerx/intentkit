@@ -289,6 +289,101 @@ async def test_get_execution_messages(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_legacy_migration_failure_is_contained_and_alerts_once(monkeypatch):
+    import app.autonomous as autonomous_module
+
+    alerts: list[str] = []
+    monkeypatch.setattr(autonomous_module, "send_alert", alerts.append)
+    monkeypatch.setattr(autonomous_module, "_legacy_migration_alerted", False)
+    monkeypatch.setattr(
+        "importlib.util.spec_from_file_location",
+        lambda *args, **kwargs: None,
+    )
+
+    # Must not raise: a failed legacy migration only logs and alerts.
+    assert await autonomous_module.run_legacy_autonomous_migration() is False
+    # Retries (here: a second failure) don't spam the alert channel.
+    assert await autonomous_module.run_legacy_autonomous_migration() is False
+    assert len(alerts) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_migration_failure_survives_failing_alerter(monkeypatch):
+    import app.autonomous as autonomous_module
+
+    def broken_alert(message: str) -> None:
+        raise RuntimeError("alert transport down")
+
+    monkeypatch.setattr(autonomous_module, "send_alert", broken_alert)
+    monkeypatch.setattr(autonomous_module, "_legacy_migration_alerted", False)
+    monkeypatch.setattr(
+        "importlib.util.spec_from_file_location",
+        lambda *args, **kwargs: None,
+    )
+
+    # A raising alerter must not escape the containment either.
+    assert await autonomous_module.run_legacy_autonomous_migration() is False
+
+
+@pytest.mark.asyncio
+async def test_sweep_waits_for_legacy_migration(monkeypatch):
+    import app.autonomous as autonomous_module
+
+    monkeypatch.setattr(autonomous_module, "_legacy_migration_done", False)
+    calls = {"migration": 0}
+
+    async def failing_migration() -> bool:
+        calls["migration"] += 1
+        return False
+
+    monkeypatch.setattr(
+        autonomous_module, "run_legacy_autonomous_migration", failing_migration
+    )
+
+    def must_not_be_called():
+        raise AssertionError("sweep must not touch the DB before migration succeeds")
+
+    monkeypatch.setattr(autonomous_module, "get_session", must_not_be_called)
+
+    # Failed migration -> the sweep retries next time and prunes nothing now.
+    await autonomous_module.schedule_agent_autonomous_tasks()
+    assert calls["migration"] == 1
+    assert getattr(autonomous_module, "_legacy_migration_done") is False
+
+
+@pytest.mark.asyncio
+async def test_sweep_runs_migration_once_then_proceeds(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    import app.autonomous as autonomous_module
+
+    monkeypatch.setattr(autonomous_module, "_legacy_migration_done", False)
+    calls = {"migration": 0}
+
+    async def ok_migration() -> bool:
+        calls["migration"] += 1
+        return True
+
+    monkeypatch.setattr(
+        autonomous_module, "run_legacy_autonomous_migration", ok_migration
+    )
+
+    session = MagicMock()
+    session.scalars = AsyncMock(return_value=[])
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=None)
+    monkeypatch.setattr(autonomous_module, "get_session", lambda: ctx)
+    monkeypatch.setattr(autonomous_module.scheduler, "get_jobs", lambda: [])
+
+    await autonomous_module.schedule_agent_autonomous_tasks()
+    assert getattr(autonomous_module, "_legacy_migration_done") is True
+    # Once done, later sweeps skip the migration check entirely.
+    await autonomous_module.schedule_agent_autonomous_tasks()
+    assert calls["migration"] == 1
+
+
+@pytest.mark.asyncio
 async def test_update_autonomous_status_uses_core_update(monkeypatch):
     import app.autonomous as autonomous_module
 

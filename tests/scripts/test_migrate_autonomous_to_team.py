@@ -2,6 +2,9 @@
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def load_script_module():
@@ -98,3 +101,61 @@ def test_build_rows_preserves_runtime_and_defaults_has_memory():
     rows, _stats = build_task_rows(agent_rows)
     assert rows[0]["status"] == "waiting"
     assert rows[0]["has_memory"] is True
+
+
+def _patch_module_session(module, first_row):
+    """Patch the loaded module's get_session to a mocked async session.
+
+    Returns the started patcher so the caller can stop it; the session's only
+    job is to make ``SELECT id FROM autonomous_tasks LIMIT 1`` return first_row.
+    """
+    mock_session = MagicMock()
+    result = MagicMock()
+    result.first.return_value = first_row
+    mock_session.execute = AsyncMock(return_value=result)
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    ctx.__aexit__ = AsyncMock(return_value=None)
+    patcher = patch.object(module, "get_session", return_value=ctx)
+    patcher.start()
+    return patcher
+
+
+@pytest.mark.asyncio
+async def test_migrate_if_table_empty_skips_when_populated():
+    module = load_script_module()
+    patcher = _patch_module_session(module, first_row=("task-1",))
+    migrate_mock = AsyncMock()
+    try:
+        with patch.object(module, "migrate", migrate_mock):
+            ran = await module.migrate_if_table_empty()
+        assert ran is False
+        migrate_mock.assert_not_awaited()
+    finally:
+        patcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_migrate_if_table_empty_runs_when_empty():
+    module = load_script_module()
+    patcher = _patch_module_session(module, first_row=None)
+    migrate_mock = AsyncMock()
+    try:
+        with patch.object(module, "migrate", migrate_mock):
+            ran = await module.migrate_if_table_empty()
+        assert ran is True
+        migrate_mock.assert_awaited_once()
+    finally:
+        patcher.stop()
+
+
+def test_build_rows_tolerates_malformed_minutes():
+    # Legacy JSONB is schema-less; a bad minutes value must skip the task,
+    # not fail the whole batch.
+    build_task_rows = load_script_module().build_task_rows
+    agent_rows = [
+        ("agent-1", "team-1", [{"id": "t1", "minutes": "abc", "prompt": "do"}]),
+    ]
+    rows, stats = build_task_rows(agent_rows)
+    assert rows == []
+    assert stats["skipped_no_cron"] == 1

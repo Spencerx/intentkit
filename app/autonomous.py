@@ -1,7 +1,9 @@
 import asyncio
+import importlib.util
 import logging
 import signal
 from datetime import datetime
+from pathlib import Path
 
 import sentry_sdk
 from apscheduler.events import (
@@ -157,6 +159,50 @@ def _handle_autonomous_event(
     _ = asyncio.create_task(update_autonomous_status_safe(event.job_id, status))
 
 
+# Legacy migration coordination: the head job retries the guarded migration
+# every sweep until it succeeds once; the failure alert is sent at most once.
+_legacy_migration_done = False
+_legacy_migration_alerted = False
+
+
+async def run_legacy_autonomous_migration() -> bool:
+    """Migrate legacy per-agent tasks into autonomous_tasks.
+
+    Loads the temporary migration script by file path (scripts/ is not a
+    package) and runs it only while the autonomous_tasks table is still empty,
+    so every environment migrates itself on first boot of this version.
+    Returns True when the table is migrated or already populated. Failures are
+    logged (and alerted once) and reported as False so the head job retries on
+    its next sweep instead of blocking the scheduler. Remove together with
+    scripts/migrate_autonomous_to_team.py.
+    """
+    global _legacy_migration_alerted
+    try:
+        script = (
+            Path(__file__).resolve().parent.parent
+            / "scripts"
+            / "migrate_autonomous_to_team.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "migrate_autonomous_to_team", script
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load migration script at {script}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _ = await module.migrate_if_table_empty()
+        return True
+    except Exception as e:
+        logger.error("Legacy autonomous migration failed: %s", e, exc_info=True)
+        if not _legacy_migration_alerted:
+            _legacy_migration_alerted = True
+            try:
+                send_alert(f"Legacy autonomous task migration failed: {e}")
+            except Exception as alert_error:
+                logger.warning("Failed to send migration alert: %s", alert_error)
+        return False
+
+
 async def send_autonomous_heartbeat():
     """Send a heartbeat signal to Redis to indicate the autonomous service is running.
 
@@ -178,6 +224,15 @@ async def schedule_agent_autonomous_tasks():
     This function is called periodically to update the scheduler with new or modified tasks.
     """
     logger.info("Checking for team autonomous tasks...")
+
+    # One-time legacy task migration; retried here until it succeeds (or the
+    # table already has data). Don't schedule or prune from a possibly
+    # unmigrated table — the next sweep retries in a minute.
+    global _legacy_migration_done
+    if not _legacy_migration_done:
+        if not await run_legacy_autonomous_migration():
+            return
+        _legacy_migration_done = True
 
     # List of jobs to schedule, will delete jobs not in this list
     planned_jobs = [HEAD_JOB_ID, "autonomous_heartbeat"]
