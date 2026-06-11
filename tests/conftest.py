@@ -2,15 +2,23 @@ import os
 import sys
 from pathlib import Path
 
-import pytest
-import pytest_asyncio
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from testing.postgresql import Postgresql
-
-from intentkit.config import db as db_module
-
+# Tests must never send traces to LangSmith, even if the developer's shell or
+# .env enables tracing. All four env var spellings the langsmith SDK accepts
+# must be pinned before any intentkit import: the SDK caches env reads, so a
+# value seen at import time would stick.
+os.environ["LANGSMITH_TRACING"] = "false"
+os.environ["LANGSMITH_TRACING_V2"] = "false"
+os.environ["LANGCHAIN_TRACING"] = "false"
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
 os.environ.setdefault("REDIS_HOST", "localhost")
+
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine  # noqa: E402
+from testing.postgresql import Postgresql  # noqa: E402
+
+from intentkit.config import db as db_module  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:

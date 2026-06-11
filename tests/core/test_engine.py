@@ -471,6 +471,72 @@ def test_summarize_history_messages_respects_max():
     assert [e["content_preview"] for e in summary] == [f"m{i}" for i in range(15, 20)]
 
 
+def _make_user_message(
+    user_id: str | None = "user-789",
+    author_type: AuthorType = AuthorType.WEB,
+    app_id: str | None = None,
+) -> ChatMessage:
+    return ChatMessage(
+        id="msg-1",
+        agent_id="agent-123",
+        chat_id="chat-456",
+        user_id=user_id,
+        author_id="user-789",
+        author_type=author_type,
+        message="hello",
+        app_id=app_id,
+        created_at=datetime.now(UTC),
+    )
+
+
+def test_build_stream_config_metadata(mock_agent):
+    from intentkit.config.config import config
+    from intentkit.core.engine import _build_stream_config
+
+    user_message = _make_user_message(app_id="app-1")
+    stream_config = _build_stream_config(
+        user_message, mock_agent, "team-1", "agent-123-chat-456"
+    )
+
+    assert stream_config.get("configurable") == {"thread_id": "agent-123-chat-456"}
+    assert stream_config.get("recursion_limit") == config.recursion_limit
+    metadata = stream_config.get("metadata")
+    assert metadata is not None
+    assert metadata["env"] == config.env
+    assert metadata["agent_id"] == "agent-123"
+    assert metadata["chat_id"] == "chat-456"
+    assert metadata["thread_id"] == "agent-123-chat-456"
+    assert metadata["channel"] == "web"
+    assert metadata["model"] == "gpt-4o"
+    assert metadata["user_id"] == "user-789"
+    assert metadata["team_id"] == "team-1"
+    assert metadata["app_id"] == "app-1"
+    # mock_agent has no owning team
+    assert "agent_team_id" not in metadata
+
+
+def test_build_stream_config_omits_missing_optional_fields(mock_agent):
+    from intentkit.config.config import config
+    from intentkit.core.engine import _build_stream_config
+
+    agent = mock_agent.model_copy(update={"team_id": "team-owner", "super_mode": True})
+    user_message = _make_user_message(user_id=None, author_type=AuthorType.TRIGGER)
+    stream_config = _build_stream_config(
+        user_message, agent, None, "agent-123-chat-456"
+    )
+
+    assert stream_config.get("recursion_limit") == max(
+        config.super_recursion_limit, 1000
+    )
+    metadata = stream_config.get("metadata")
+    assert metadata is not None
+    assert metadata["channel"] == "trigger"
+    assert metadata["agent_team_id"] == "team-owner"
+    assert "user_id" not in metadata
+    assert "team_id" not in metadata
+    assert "app_id" not in metadata
+
+
 @pytest.mark.asyncio
 async def test_cleanup_empty_model_output_removes_trailing_empty_ai():
     from langchain_core.messages import HumanMessage, RemoveMessage

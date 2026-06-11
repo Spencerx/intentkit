@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
+from intentkit.config.config import config
 from intentkit.config.db import get_session
 from intentkit.models.chat import (
     AuthorType,
@@ -194,7 +195,7 @@ def _normalize_summary_title(title: str) -> str:
     return normalized[:40]
 
 
-async def _generate_summary_title(prompt_text: str) -> str:
+async def _generate_summary_title(agent_id: str, chat_id: str, prompt_text: str) -> str:
     content = prompt_text.strip()
     if not content:
         return ""
@@ -206,7 +207,16 @@ async def _generate_summary_title(prompt_text: str) -> str:
         [
             SystemMessage(content=SUMMARY_TITLE_SYSTEM_PROMPT),
             HumanMessage(content=content),
-        ]
+        ],
+        config={
+            "run_name": "chat_summary_title",
+            # keep these traces filterable in the shared LangSmith project
+            "metadata": {
+                "env": config.env,
+                "agent_id": agent_id,
+                "chat_id": chat_id,
+            },
+        },
     )
     raw_title = _extract_model_response_text(response.content)
     return _normalize_summary_title(raw_title)
@@ -255,7 +265,9 @@ async def _generate_chat_summary_title(agent_id: str, chat_id: str) -> str:
     if not transcript:
         return ""
 
-    return await _generate_summary_title(f"Conversation:\n{transcript}")
+    return await _generate_summary_title(
+        agent_id, chat_id, f"Conversation:\n{transcript}"
+    )
 
 
 async def _update_chat_summary_title(agent_id: str, chat_id: str) -> None:
@@ -302,7 +314,9 @@ async def update_chat_summary_from_first_message(
         return
 
     try:
-        title = await _generate_summary_title(f"First user message:\n{first_message}")
+        title = await _generate_summary_title(
+            agent_id, chat_id, f"First user message:\n{first_message}"
+        )
         if not title:
             return
         _ = await chat.update_summary(title)

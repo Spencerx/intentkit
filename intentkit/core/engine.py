@@ -826,6 +826,48 @@ async def _cancel_cleanup(
     await cancel_message_create.save()
 
 
+def _build_stream_config(
+    user_message: ChatMessage,
+    agent: Agent,
+    team_id: str | None,
+    thread_id: str,
+) -> RunnableConfig:
+    """Build the LangGraph run config for a chat stream.
+
+    The metadata block is attached by LangSmith tracing to every run in the
+    trace, so a shared tracing project can be filtered by environment, agent,
+    team, channel, etc.
+    """
+    # super mode — determined by agent config
+    recursion_limit = config.recursion_limit
+    if agent.super_mode:
+        recursion_limit = max(config.super_recursion_limit, 1000)
+    metadata: dict[str, Any] = {
+        "env": config.env,
+        "agent_id": user_message.agent_id,
+        "chat_id": user_message.chat_id,
+        "thread_id": thread_id,
+        # author_type is already a plain string here (use_enum_values)
+        "channel": user_message.author_type,
+        "model": agent.model,
+    }
+    if user_message.user_id:
+        metadata["user_id"] = user_message.user_id
+    if team_id:
+        metadata["team_id"] = team_id
+    if agent.team_id:
+        metadata["agent_team_id"] = agent.team_id
+    if user_message.app_id:
+        metadata["app_id"] = user_message.app_id
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+        },
+        "recursion_limit": recursion_limit,
+        "metadata": metadata,
+    }
+
+
 async def stream_agent_raw(
     message: ChatMessageCreate,
     agent: Agent,
@@ -964,11 +1006,6 @@ async def stream_agent_raw(
                 + "\n".join(url_lines)
             )
 
-    # super mode — determined by agent config
-    recursion_limit = config.recursion_limit
-    if agent.super_mode:
-        recursion_limit = max(config.super_recursion_limit, 1000)
-
     # content to llm
     messages = [
         HumanMessage(content=input_message),
@@ -1023,12 +1060,9 @@ async def stream_agent_raw(
 
     # stream config
     thread_id = f"{user_message.agent_id}-{user_message.chat_id}"
-    stream_config: RunnableConfig = {
-        "configurable": {
-            "thread_id": thread_id,
-        },
-        "recursion_limit": recursion_limit,
-    }
+    stream_config = _build_stream_config(
+        user_message, agent, message.team_id, thread_id
+    )
 
     def get_agent_for_context() -> Agent:
         return agent
