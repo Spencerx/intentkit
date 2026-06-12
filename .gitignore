@@ -172,6 +172,7 @@ cython_debug/
 .zed
 CLAUDE.local.md
 .claude/scheduled_tasks.lock
+.mcp.json
 .obsidian
 
 # web3
