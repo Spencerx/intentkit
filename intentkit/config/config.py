@@ -241,6 +241,14 @@ class Config:
         self.cloudflare_api_token: str | None = self.load("CLOUDFLARE_API_TOKEN")
         # Z.AI Plan API
         self.zai_plan_api_key: str | None = self.load("ZAI_PLAN_API_KEY")
+        # LangSmith tracing. The langsmith SDK reads its settings from env
+        # vars directly; load them through config first (env or AWS secrets,
+        # quotes stripped) and write the sanitized values back for the SDK.
+        self.langsmith_tracing: bool = self.load("LANGSMITH_TRACING", "false") == "true"
+        self.langsmith_api_key: str | None = self.load("LANGSMITH_API_KEY")
+        self.langsmith_project: str = self.load("LANGSMITH_PROJECT", "intentkit")
+        self.langsmith_endpoint: str | None = self.load("LANGSMITH_ENDPOINT")
+        self._export_langsmith_env()
         # Sentry
         self.sentry_dsn: str | None = self.load("SENTRY_DSN")
         self.sentry_sample_rate: float = self.load_float("SENTRY_SAMPLE_RATE", 0.1)
@@ -291,6 +299,37 @@ class Config:
             release=self.release,
         )
 
+    def _export_langsmith_env(self) -> None:
+        """Write sanitized LangSmith settings back to the env vars the SDK reads.
+
+        Every tracing-flag spelling the SDK accepts is pinned, so a stray
+        LANGCHAIN_* variable in the deployment cannot override the config
+        value (LANGSMITH_TRACING_V2 has the highest precedence in the SDK).
+        """
+        api_key = self.langsmith_api_key
+        enabled = self.langsmith_tracing and api_key is not None
+        for var in (
+            "LANGSMITH_TRACING",
+            "LANGSMITH_TRACING_V2",
+            "LANGCHAIN_TRACING",
+            "LANGCHAIN_TRACING_V2",
+        ):
+            os.environ[var] = "true" if enabled else "false"
+        if enabled and api_key is not None:
+            os.environ["LANGSMITH_API_KEY"] = api_key
+            os.environ["LANGSMITH_PROJECT"] = self.langsmith_project
+            if self.langsmith_endpoint:
+                os.environ["LANGSMITH_ENDPOINT"] = self.langsmith_endpoint
+        # The SDK caches env reads (lru_cache); drop any values read before
+        # this export so correctness doesn't depend on import order.
+        try:
+            from langsmith import utils as ls_utils
+
+            ls_utils.get_env_var.cache_clear()  # pyright: ignore[reportFunctionMemberAccess]
+            ls_utils.get_tracer_project.cache_clear()
+        except (ImportError, AttributeError):
+            pass
+
     @overload
     def load(self, key: str) -> str | None: ...  # noqa: F811
 
@@ -314,7 +353,15 @@ class Config:
 
         if value:
             value = value.replace("\\n", "\n")
-        if value and value.startswith("'") and value.endswith("'"):
+        # Strip one pair of matching surrounding quotes from either source
+        # (process env or AWS secret) — docker `environment:` blocks and
+        # pasted secret values carry quotes through literally.
+        if (
+            value
+            and len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in ("'", '"')
+        ):
             value = value[1:-1]
         return value
 
