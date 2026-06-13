@@ -373,7 +373,11 @@ async def build_entrypoint_prompt(agent: Agent, context: AgentContext) -> str | 
             entrypoint_prompt = _append(entrypoint_prompt, agent.xmtp_entrypoint_prompt)
     elif entrypoint == AuthorType.WECHAT.value:
         wechat_hardcoded = (
-            "WeChat only supports plain text and emoji. Do not use markdown formatting. "
+            "WeChat now supports most Markdown formatting for agent replies. "
+            "Supported: headings of a single level only (prefer level-2 headings, `##`), "
+            "bold, strikethrough, horizontal rules, unordered lists (including nested ones), "
+            "ordered lists, blockquotes, hyperlinks, inline code, code blocks, and tables. "
+            "Not supported: italics, task lists, and images. "
             "WeChat does not support rendering UI components. Do not call ui_ tools."
         )
         entrypoint_prompt = _append(entrypoint_prompt, wechat_hardcoded)
