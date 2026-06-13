@@ -1,9 +1,5 @@
-# Release v2.4.2
+# Release v2.5.0
 
-## Improvements
+## New Features
 
-- MCP-based tool integrations (such as CoinGecko) are now configured with a single per-service control instead of a long per-tool list, and always expose whatever the remote service currently offers. There is no longer any need to re-sync when a provider changes its tools.
-
-## Bug Fixes
-
-- Fixed an issue where MCP-based tools could silently stop working after the remote provider changed its set of available tools.
+- Added Langfuse as an observability option alongside the existing LangSmith integration. Each deployment chooses a tracing service through its configuration: when Langfuse credentials are provided it is used automatically and LangSmith is turned off; otherwise LangSmith continues to be used. This makes it easy to evaluate both services and settle on the one that fits best.
