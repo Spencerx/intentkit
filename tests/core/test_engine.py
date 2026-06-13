@@ -275,10 +275,10 @@ async def test_stream_agent_flow(mock_agent):
 
     with (
         patch(
-            "intentkit.core.engine.get_agent", new_callable=AsyncMock
+            "intentkit.core.engine.stream.get_agent", new_callable=AsyncMock
         ) as mock_get_agent,
         patch(
-            "intentkit.core.engine.agent_executor", new_callable=AsyncMock
+            "intentkit.core.engine.stream.agent_executor", new_callable=AsyncMock
         ) as mock_executor_func,
         patch(
             "intentkit.models.chat.ChatMessageCreate.save", new_callable=AsyncMock
@@ -286,8 +286,10 @@ async def test_stream_agent_flow(mock_agent):
         patch("intentkit.models.llm.LLMModelInfo.get", new_callable=AsyncMock),
         patch("intentkit.config.db.engine", new=MagicMock()),
         patch("intentkit.config.db.AsyncSession", new=MagicMock()) as mock_session_cls,
-        patch("intentkit.core.engine.expense_message", new_callable=AsyncMock),
-        patch("intentkit.core.engine.clear_thread_memory", new_callable=AsyncMock),
+        patch("intentkit.core.engine.chunks.expense_message", new_callable=AsyncMock),
+        patch(
+            "intentkit.core.engine.stream.clear_thread_memory", new_callable=AsyncMock
+        ),
     ):
         mock_get_agent.return_value = mock_agent
         mock_executor_func.return_value = (mock_executor_instance, 0.1)
@@ -297,7 +299,7 @@ async def test_stream_agent_flow(mock_agent):
         mock_session_cls.return_value = mock_session
 
         # Mock payment config to False to simplify test
-        with patch("intentkit.core.engine.config") as mock_config:
+        with patch("intentkit.core.engine.stream.config") as mock_config:
             mock_config.payment_enabled = False
 
             # mock_save is called for input message
@@ -390,10 +392,10 @@ async def test_stream_agent_rejects_unsupported_image_input(mock_agent):
 
     with (
         patch(
-            "intentkit.core.engine.get_agent", new_callable=AsyncMock
+            "intentkit.core.engine.stream.get_agent", new_callable=AsyncMock
         ) as mock_get_agent,
         patch(
-            "intentkit.core.engine.agent_executor", new_callable=AsyncMock
+            "intentkit.core.engine.stream.agent_executor", new_callable=AsyncMock
         ) as mock_executor_func,
         patch(
             "intentkit.models.chat.ChatMessageCreate.save",
@@ -404,11 +406,13 @@ async def test_stream_agent_rejects_unsupported_image_input(mock_agent):
             "intentkit.models.llm.LLMModelInfo.get", new_callable=AsyncMock
         ) as mock_get_model,
         patch(
-            "intentkit.core.engine.check_hourly_budget_exceeded",
+            "intentkit.core.engine.stream.check_hourly_budget_exceeded",
             new_callable=AsyncMock,
             return_value=budget_status,
         ),
-        patch("intentkit.core.engine.clear_thread_memory", new_callable=AsyncMock),
+        patch(
+            "intentkit.core.engine.stream.clear_thread_memory", new_callable=AsyncMock
+        ),
         patch(
             "intentkit.models.app_setting.AppSetting.error_message",
             new_callable=AsyncMock,
@@ -419,7 +423,7 @@ async def test_stream_agent_rejects_unsupported_image_input(mock_agent):
         mock_executor_func.return_value = (mock_executor_instance, 0.1)
         mock_get_model.return_value = MagicMock(supports_image_input=False)
 
-        with patch("intentkit.core.engine.config") as mock_config:
+        with patch("intentkit.core.engine.stream.config") as mock_config:
             mock_config.payment_enabled = False
             results = []
             async for res in stream_agent(first_msg):
@@ -432,7 +436,7 @@ async def test_stream_agent_rejects_unsupported_image_input(mock_agent):
 def test_summarize_history_messages_captures_tool_calls():
     from langchain_core.messages import HumanMessage
 
-    from intentkit.core.engine import _summarize_history_messages
+    from intentkit.core.engine.recovery import summarize_history_messages
 
     messages = [
         HumanMessage(content="hi", id="h1"),
@@ -449,7 +453,7 @@ def test_summarize_history_messages_captures_tool_calls():
         ),
     ]
 
-    summary = _summarize_history_messages(messages, max_messages=10)
+    summary = summarize_history_messages(messages, max_messages=10)
 
     assert len(summary) == 3
     assert summary[0]["type"] == "HumanMessage"
@@ -462,10 +466,10 @@ def test_summarize_history_messages_captures_tool_calls():
 def test_summarize_history_messages_respects_max():
     from langchain_core.messages import HumanMessage
 
-    from intentkit.core.engine import _summarize_history_messages
+    from intentkit.core.engine.recovery import summarize_history_messages
 
     messages = [HumanMessage(content=f"m{i}", id=f"h{i}") for i in range(20)]
-    summary = _summarize_history_messages(messages, max_messages=5)
+    summary = summarize_history_messages(messages, max_messages=5)
 
     assert len(summary) == 5
     assert [e["content_preview"] for e in summary] == [f"m{i}" for i in range(15, 20)]
@@ -491,10 +495,10 @@ def _make_user_message(
 
 def test_build_stream_config_metadata(mock_agent):
     from intentkit.config.config import config
-    from intentkit.core.engine import _build_stream_config
+    from intentkit.core.engine.stream import build_stream_config
 
     user_message = _make_user_message(app_id="app-1")
-    stream_config = _build_stream_config(
+    stream_config = build_stream_config(
         user_message, mock_agent, "team-1", "agent-123-chat-456"
     )
 
@@ -517,13 +521,11 @@ def test_build_stream_config_metadata(mock_agent):
 
 def test_build_stream_config_omits_missing_optional_fields(mock_agent):
     from intentkit.config.config import config
-    from intentkit.core.engine import _build_stream_config
+    from intentkit.core.engine.stream import build_stream_config
 
     agent = mock_agent.model_copy(update={"team_id": "team-owner", "super_mode": True})
     user_message = _make_user_message(user_id=None, author_type=AuthorType.TRIGGER)
-    stream_config = _build_stream_config(
-        user_message, agent, None, "agent-123-chat-456"
-    )
+    stream_config = build_stream_config(user_message, agent, None, "agent-123-chat-456")
 
     assert stream_config.get("recursion_limit") == max(
         config.super_recursion_limit, 1000
@@ -541,7 +543,7 @@ def test_build_stream_config_omits_missing_optional_fields(mock_agent):
 async def test_cleanup_empty_model_output_removes_trailing_empty_ai():
     from langchain_core.messages import HumanMessage, RemoveMessage
 
-    from intentkit.core.engine import _cleanup_empty_model_output
+    from intentkit.core.engine.recovery import cleanup_empty_model_output
 
     empty_ai = AIMessage(content="", id="ai-empty", tool_calls=[])
     msgs = [HumanMessage(content="hi", id="h1"), empty_ai]
@@ -553,7 +555,7 @@ async def test_cleanup_empty_model_output_removes_trailing_empty_ai():
     executor.aget_state = AsyncMock(return_value=snap)
     executor.aupdate_state = AsyncMock()
 
-    result = await _cleanup_empty_model_output(
+    result = await cleanup_empty_model_output(
         executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
     )
 
@@ -572,7 +574,7 @@ async def test_cleanup_empty_model_output_removes_thinking_only_ai():
     with thinking blocks but no text/tool_calls. `not content` would miss it."""
     from langchain_core.messages import HumanMessage, RemoveMessage
 
-    from intentkit.core.engine import _cleanup_empty_model_output
+    from intentkit.core.engine.recovery import cleanup_empty_model_output
 
     thinking_only = AIMessage(
         content=[{"type": "thinking", "thinking": "let me..."}],
@@ -588,7 +590,7 @@ async def test_cleanup_empty_model_output_removes_thinking_only_ai():
     executor.aget_state = AsyncMock(return_value=snap)
     executor.aupdate_state = AsyncMock()
 
-    result = await _cleanup_empty_model_output(
+    result = await cleanup_empty_model_output(
         executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
     )
 
@@ -605,7 +607,7 @@ async def test_cleanup_empty_model_output_returns_msgs_when_update_fails():
     still get the messages for logging."""
     from langchain_core.messages import HumanMessage
 
-    from intentkit.core.engine import _cleanup_empty_model_output
+    from intentkit.core.engine.recovery import cleanup_empty_model_output
 
     empty_ai = AIMessage(content="", id="ai-empty", tool_calls=[])
     msgs = [HumanMessage(content="hi", id="h1"), empty_ai]
@@ -617,7 +619,7 @@ async def test_cleanup_empty_model_output_returns_msgs_when_update_fails():
     executor.aget_state = AsyncMock(return_value=snap)
     executor.aupdate_state = AsyncMock(side_effect=RuntimeError("boom"))
 
-    result = await _cleanup_empty_model_output(
+    result = await cleanup_empty_model_output(
         executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
     )
 
@@ -628,7 +630,7 @@ async def test_cleanup_empty_model_output_returns_msgs_when_update_fails():
 async def test_cleanup_empty_model_output_keeps_non_empty_ai():
     from langchain_core.messages import HumanMessage
 
-    from intentkit.core.engine import _cleanup_empty_model_output
+    from intentkit.core.engine.recovery import cleanup_empty_model_output
 
     normal_ai = AIMessage(content="ok", id="ai-normal")
     msgs = [HumanMessage(content="hi", id="h1"), normal_ai]
@@ -640,7 +642,7 @@ async def test_cleanup_empty_model_output_keeps_non_empty_ai():
     executor.aget_state = AsyncMock(return_value=snap)
     executor.aupdate_state = AsyncMock()
 
-    result = await _cleanup_empty_model_output(
+    result = await cleanup_empty_model_output(
         executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
     )
 
@@ -650,13 +652,13 @@ async def test_cleanup_empty_model_output_keeps_non_empty_ai():
 
 @pytest.mark.asyncio
 async def test_cleanup_empty_model_output_swallows_state_error():
-    from intentkit.core.engine import _cleanup_empty_model_output
+    from intentkit.core.engine.recovery import cleanup_empty_model_output
 
     executor = MagicMock()
     executor.aget_state = AsyncMock(side_effect=RuntimeError("boom"))
     executor.aupdate_state = AsyncMock()
 
-    result = await _cleanup_empty_model_output(
+    result = await cleanup_empty_model_output(
         executor, {"configurable": {"thread_id": "t"}}, "agent-123", "t"
     )
 

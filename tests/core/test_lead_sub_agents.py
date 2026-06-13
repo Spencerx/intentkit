@@ -46,7 +46,7 @@ async def test_get_self_info_defaults(mock_lead_runtime):
             new=AsyncMock(return_value=mock_agent_data),
         ),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert result.name == "Team Lead"
     assert result.avatar is None
@@ -82,7 +82,7 @@ async def test_get_self_info_with_config(mock_lead_runtime):
             new=AsyncMock(return_value=mock_agent_data),
         ),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert result.name == "Custom Lead"
     assert result.avatar == "https://example.com/avatar.png"
@@ -108,7 +108,7 @@ async def test_update_self_name(mock_lead_runtime):
         ),
         patch("intentkit.core.lead.cache.invalidate_lead_cache") as mock_invalidate,
     ):
-        result = await tool._arun(name="New Name")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(name="New Name")
 
     assert "name" in result.updated_fields
     assert result.message == "Lead agent updated: name."
@@ -128,7 +128,7 @@ async def test_update_self_multiple_fields(mock_lead_runtime):
         ),
         patch("intentkit.core.lead.cache.invalidate_lead_cache"),
     ):
-        result = await tool._arun(  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(
             name="New Name",
             avatar="https://example.com/new.png",
             personality="Very helpful",
@@ -143,7 +143,7 @@ async def test_update_self_no_fields(mock_lead_runtime):
     from intentkit.core.lead.tools.update_self import LeadUpdateSelf
 
     tool = LeadUpdateSelf()
-    result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun()
 
     assert result.updated_fields == []
     assert "No fields" in result.message
@@ -169,7 +169,7 @@ async def test_update_self_name_truncation(mock_lead_runtime):
         ),
         patch("intentkit.core.lead.cache.invalidate_lead_cache"),
     ):
-        await tool._arun(name=long_name)  # pyright: ignore[reportPrivateUsage]
+        await tool._arun(name=long_name)
 
     assert len(captured_updates["name"]) == 50
 
@@ -189,7 +189,7 @@ async def test_update_self_memory(mock_lead_runtime):
         "intentkit.core.memory.update_memory",
         new=AsyncMock(return_value="merged memory content"),
     ) as mock_update:
-        result = await tool._arun(content="New info to remember")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(content="New info to remember")
 
     mock_update.assert_called_once_with("team-test-team", "New info to remember")
     assert "merged memory content" in result
@@ -224,7 +224,7 @@ async def test_recent_team_activities_found(mock_lead_runtime):
         "intentkit.core.team.feed.query_activity_feed",
         new=AsyncMock(return_value=([mock_activity], None)),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "1 recent team activities" in result
     assert "Agent One" in result
@@ -243,7 +243,7 @@ async def test_recent_team_activities_empty(mock_lead_runtime):
         "intentkit.core.team.feed.query_activity_feed",
         new=AsyncMock(return_value=([], None)),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "No recent activities" in result
 
@@ -271,7 +271,7 @@ async def test_recent_team_activities_with_link(mock_lead_runtime):
         "intentkit.core.team.feed.query_activity_feed",
         new=AsyncMock(return_value=([mock_activity], None)),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "https://example.com" in result
     assert "post_1" in result
@@ -303,7 +303,7 @@ async def test_recent_team_posts_found(mock_lead_runtime):
         "intentkit.core.team.feed.query_post_feed",
         new=AsyncMock(return_value=([mock_post], None)),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "1 recent team posts" in result
     assert "Great Post" in result
@@ -320,7 +320,7 @@ async def test_recent_team_posts_empty(mock_lead_runtime):
         "intentkit.core.team.feed.query_post_feed",
         new=AsyncMock(return_value=([], None)),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "No recent posts" in result
 
@@ -358,7 +358,7 @@ async def test_lead_get_post_success(mock_lead_runtime):
             new=AsyncMock(return_value=None),
         ),
     ):
-        result = await tool._arun(post_id="post_1")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(post_id="post_1")
 
     assert "Test Post" in result
     assert "# Full Content" in result
@@ -375,7 +375,7 @@ async def test_lead_get_post_not_found(mock_lead_runtime):
         "intentkit.core.agent_post.get_agent_post",
         new=AsyncMock(return_value=None),
     ):
-        result = await tool._arun(post_id="nonexistent")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(post_id="nonexistent")
 
     assert "not found" in result
 
@@ -493,7 +493,7 @@ async def test_update_user_profile_no_user_id():
     with patch("intentkit.tools.base.get_runtime") as mock_get_runtime:
         mock_get_runtime.return_value.context = mock_context
         with pytest.raises(ToolException, match="No user_id in context"):
-            await tool._arun(name="Alice")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(name="Alice")
 
 
 @pytest.mark.asyncio
@@ -506,7 +506,7 @@ async def test_update_user_profile_invalid_timezone(mock_lead_runtime, bad_tz):
 
     tool = LeadUpdateUserProfile()
     with pytest.raises(ToolException, match="Invalid IANA timezone"):
-        await tool._arun(timezone=bad_tz)  # pyright: ignore[reportPrivateUsage]
+        await tool._arun(timezone=bad_tz)
 
 
 @pytest.mark.asyncio
@@ -515,7 +515,7 @@ async def test_update_user_profile_no_fields(mock_lead_runtime):
     from intentkit.core.lead.tools.update_user_profile import LeadUpdateUserProfile
 
     tool = LeadUpdateUserProfile()
-    result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun()
     assert result.updated_fields == []
     assert "No fields" in result.message
 
@@ -547,7 +547,7 @@ async def test_update_user_profile_happy_path(mock_lead_runtime):
             return_value=mock_redis,
         ),
     ):
-        result = await tool._arun(  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(
             name="  Alice  ",
             timezone="Asia/Shanghai",
             language="zh-CN",
@@ -589,7 +589,7 @@ async def test_update_user_profile_clear_with_empty_string(mock_lead_runtime):
             return_value=mock_redis,
         ),
     ):
-        result = await tool._arun(timezone="", language="   ")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(timezone="", language="   ")
 
     assert captured["dump"] == {"timezone": None, "language": None}
     assert set(result.updated_fields) == {"timezone", "language"}

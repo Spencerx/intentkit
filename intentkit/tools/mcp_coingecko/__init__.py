@@ -1,6 +1,6 @@
 """CoinGecko MCP tools — crypto market data, prices, and analytics."""
 
-from intentkit.clients.mcp.wrapper import create_mcp_category
+from intentkit.tools.mcp.wrapper import create_mcp_category
 
 _module = create_mcp_category("mcp_coingecko")
 

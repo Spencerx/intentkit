@@ -68,7 +68,7 @@ async def test_list_public_agents_marks_followed(mock_lead_runtime):
             new=AsyncMock(return_value={"a2"}),
         ),
     ):
-        result = await tool._arun(search="x", limit=10)  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(search="x", limit=10)
 
     by_id = {a.id: a for a in result.agents}
     assert by_id["a1"].followed is False
@@ -95,7 +95,7 @@ async def test_follow_agent_success(mock_lead_runtime):
         patch("intentkit.core.team.subscribe_agent", new=AsyncMock()) as mock_subscribe,
         patch("intentkit.core.lead.cache.invalidate_lead_cache") as mock_invalidate,
     ):
-        result = await tool._arun(agent_id="public-agent")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(agent_id="public-agent")
 
     assert result.agent_id == "a1"
     assert result.name == "Public Agent"
@@ -113,7 +113,7 @@ async def test_follow_agent_not_found(mock_lead_runtime):
         new=AsyncMock(return_value=None),
     ):
         with pytest.raises(ToolException, match="not found"):
-            await tool._arun(agent_id="ghost")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="ghost")
 
 
 @pytest.mark.asyncio
@@ -137,7 +137,7 @@ async def test_follow_agent_not_public_raises_tool_exception(mock_lead_runtime):
         patch("intentkit.core.lead.cache.invalidate_lead_cache") as mock_invalidate,
     ):
         with pytest.raises(ToolException, match="not public"):
-            await tool._arun(agent_id="a1")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="a1")
 
         # Cache must not be invalidated when the follow fails.
         mock_invalidate.assert_not_called()
@@ -163,7 +163,7 @@ async def test_unfollow_agent_success(mock_lead_runtime):
         patch("intentkit.core.team.unsubscribe_agent", new=AsyncMock()) as mock_unsub,
         patch("intentkit.core.lead.cache.invalidate_lead_cache") as mock_invalidate,
     ):
-        result = await tool._arun(agent_id="public-agent")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(agent_id="public-agent")
 
     assert result.agent_id == "a1"
     mock_unsub.assert_awaited_once_with("test-team", "a1")
@@ -188,7 +188,7 @@ async def test_unfollow_agent_refuses_own_team(mock_lead_runtime):
         patch("intentkit.core.lead.cache.invalidate_lead_cache") as mock_invalidate,
     ):
         with pytest.raises(ToolException, match="own team"):
-            await tool._arun(agent_id="own-agent")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="own-agent")
 
         mock_unsub.assert_not_called()
         mock_invalidate.assert_not_called()
@@ -208,7 +208,7 @@ async def test_unfollow_agent_falls_back_to_raw_id(mock_lead_runtime):
         patch("intentkit.core.team.unsubscribe_agent", new=AsyncMock()) as mock_unsub,
         patch("intentkit.core.lead.cache.invalidate_lead_cache"),
     ):
-        result = await tool._arun(agent_id="deleted-id")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(agent_id="deleted-id")
 
     assert result.agent_id == "deleted-id"
     mock_unsub.assert_awaited_once_with("test-team", "deleted-id")
@@ -221,7 +221,7 @@ async def test_unfollow_agent_falls_back_to_raw_id(mock_lead_runtime):
 
 def test_followed_agents_section_empty():
     from intentkit.core.lead.engine import (
-        _build_followed_agents_section,  # pyright: ignore[reportPrivateUsage]
+        _build_followed_agents_section,
     )
 
     assert _build_followed_agents_section([]) == ""
@@ -229,7 +229,7 @@ def test_followed_agents_section_empty():
 
 def test_followed_agents_section_lists_agents():
     from intentkit.core.lead.engine import (
-        _build_followed_agents_section,  # pyright: ignore[reportPrivateUsage]
+        _build_followed_agents_section,
     )
 
     agents = [
@@ -297,9 +297,7 @@ async def test_call_db_agent_allows_followed_public_cross_team(mock_lead_runtime
             return_value="",
         ),
     ):
-        text, _attachments = await tool._call_db_agent(  # pyright: ignore[reportPrivateUsage]
-            context, "ext-1", "hi", None
-        )
+        text, _attachments = await tool._call_db_agent(context, "ext-1", "hi", None)
 
     assert text == "done"
     mock_execute.assert_awaited_once()
@@ -328,9 +326,7 @@ async def test_call_db_agent_rejects_unfollowed_public_cross_team(mock_lead_runt
         ),
     ):
         with pytest.raises(ToolException, match="follow it first"):
-            await tool._call_db_agent(  # pyright: ignore[reportPrivateUsage]
-                context, "ext-1", "hi", None
-            )
+            await tool._call_db_agent(context, "ext-1", "hi", None)
 
 
 @pytest.mark.asyncio
@@ -358,9 +354,7 @@ async def test_call_db_agent_rejects_private_cross_team(mock_lead_runtime):
         ),
     ):
         with pytest.raises(ToolException, match="not accessible"):
-            await tool._call_db_agent(  # pyright: ignore[reportPrivateUsage]
-                context, "ext-2", "hi", None
-            )
+            await tool._call_db_agent(context, "ext-2", "hi", None)
 
 
 @pytest.mark.asyncio
@@ -382,6 +376,4 @@ async def test_call_db_agent_rejects_archived(mock_lead_runtime):
         new=AsyncMock(return_value=archived),
     ):
         with pytest.raises(ToolException, match="archived"):
-            await tool._call_db_agent(  # pyright: ignore[reportPrivateUsage]
-                context, "own-1", "hi", None
-            )
+            await tool._call_db_agent(context, "own-1", "hi", None)

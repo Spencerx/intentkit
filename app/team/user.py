@@ -20,8 +20,8 @@ from intentkit.config.redis import get_redis
 from intentkit.models.team import Team, TeamPlan, TeamTable
 from intentkit.models.user import User, UserUpdate
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.utils.upload import validate_and_store_image
 
+from app.common.upload import validate_and_store_image
 from app.team.auth import get_current_user
 
 _team_list_adapter = TypeAdapter(list[Team])

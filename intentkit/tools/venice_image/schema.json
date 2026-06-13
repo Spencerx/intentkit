@@ -36,9 +36,9 @@
           "description": "Describes an image provided via URL using the Venice AI API. Ideal for understanding the content of an existing image",
           "default": "disabled"
         },
-        "image_enchance": {
+        "image_enhance": {
           "type": "string",
-          "title": "Image Enchance",
+          "title": "Image Enhance",
           "enum": [
             "disabled",
             "public",
@@ -49,7 +49,7 @@
             "Agent Owner + All Users",
             "Agent Owner Only"
           ],
-          "description": "Tool for **Enchance** (modifying specific areas of) an existing image using a selected image model via Venice AI",
+          "description": "Tool for **Enhance** (modifying specific areas of) an existing image using a selected image model via Venice AI",
           "default": "disabled"
         },
         "image_upscale": {

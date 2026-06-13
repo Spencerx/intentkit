@@ -6,7 +6,7 @@ import pytest
 
 from intentkit.abstracts.graph import AgentContext
 from intentkit.core.prompt import (
-    _build_user_info_section,  # pyright: ignore[reportPrivateUsage]
+    _build_user_info_section,
     build_sub_agents_section,
     build_system_prompt,
     build_system_tools_section,

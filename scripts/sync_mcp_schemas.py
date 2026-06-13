@@ -81,7 +81,7 @@ def generate_init_py(server_name: str) -> str:
     """Generate __init__.py content for a thin tool category directory."""
     return f'''"""MCP: {MCP_SERVERS[server_name].display_name} tools (auto-generated)."""
 
-from intentkit.clients.mcp.wrapper import create_mcp_category
+from intentkit.tools.mcp.wrapper import create_mcp_category
 
 _module = create_mcp_category("{server_name}")
 

@@ -4,16 +4,16 @@ import logging
 import time
 from typing import Any
 
-from intentkit.clients.mcp.client import McpToolInfo, list_mcp_tools
+from intentkit.clients.mcp.client import list_mcp_tools
 from intentkit.clients.mcp.registry import MCP_SERVERS, McpServerDef
-from intentkit.clients.mcp.tool import McpToolTool, create_mcp_tool
 from intentkit.config.config import config as system_config
-from intentkit.tools.base import ToolsetConfig
+from intentkit.tools.base import ToolsetConfig, filter_enabled_tool_names
+from intentkit.tools.mcp.tool import McpToolTool, create_mcp_tool
 
 logger = logging.getLogger(__name__)
 
-# In-memory cache: {server_name: (tools, tool_instances, timestamp)}
-_cache: dict[str, tuple[list[McpToolInfo], dict[str, McpToolTool], float]] = {}
+# In-memory cache: {server_name: (tool_instances, timestamp)}
+_cache: dict[str, tuple[dict[str, McpToolTool], float]] = {}
 _CACHE_TTL = 3600  # 1 hour
 
 
@@ -24,35 +24,35 @@ def _resolve_system_api_key(server_def: McpServerDef) -> str | None:
     return None
 
 
-async def _get_mcp_tools_and_tools(
+async def _get_mcp_tool_instances(
     server_def: McpServerDef,
     api_key_override: str | None = None,
-) -> tuple[list[McpToolInfo], dict[str, McpToolTool]]:
-    """Get tools and pre-built tool instances for an MCP server, with caching."""
+) -> dict[str, McpToolTool]:
+    """Get pre-built tool instances for an MCP server, with caching."""
     now = time.time()
     cached = _cache.get(server_def.name)
     if cached:
-        tools, tools, ts = cached
+        instances, ts = cached
         if now - ts < _CACHE_TTL:
-            return tools, tools
+            return instances
 
     api_key = api_key_override or _resolve_system_api_key(server_def)
 
     try:
-        tools = await list_mcp_tools(server_def, api_key)
-        tools = {
+        tool_infos = await list_mcp_tools(server_def, api_key)
+        instances = {
             f"{server_def.name}_{t.name}": create_mcp_tool(
                 server_def, t.name, t.description, t.input_schema
             )
-            for t in tools
+            for t in tool_infos
         }
-        _cache[server_def.name] = (tools, tools, now)
+        _cache[server_def.name] = (instances, now)
         logger.info(
             "Discovered %d tools from MCP server '%s'",
-            len(tools),
+            len(instances),
             server_def.name,
         )
-        return tools, tools
+        return instances
     except Exception:
         logger.warning(
             "Failed to discover tools from MCP server '%s'",
@@ -60,8 +60,8 @@ async def _get_mcp_tools_and_tools(
             exc_info=True,
         )
         if cached:
-            return cached[0], cached[1]
-        return [], {}
+            return cached[0]
+        return {}
 
 
 class McpCategoryModule:
@@ -83,25 +83,17 @@ class McpCategoryModule:
         **_: Any,
     ) -> list[McpToolTool]:
         """Discover MCP tools, filter by states, return McpToolTool instances."""
-        states: dict[str, str] = config.get("states", {})
-
-        available_tools: set[str] = set()
-        for tool_name, state in states.items():
-            if state == "disabled":
-                continue
-            if state == "public" or (state == "private" and is_private):
-                available_tools.add(tool_name)
-
+        states: dict[str, Any] = config.get("states", {})
+        available_tools = set(filter_enabled_tool_names(states, is_private))
         if not available_tools:
             return []
 
         # Use per-agent API key for discovery if system key is not set
         agent_api_key = config.get("api_key")
-        result = await _get_mcp_tools_and_tools(
+        instances = await _get_mcp_tool_instances(
             self._server_def, api_key_override=agent_api_key
         )
-        tools = result[1]
-        return [s for name, s in tools.items() if name in available_tools]
+        return [s for name, s in instances.items() if name in available_tools]
 
     def available(self) -> bool:
         """Check if this MCP server is available.

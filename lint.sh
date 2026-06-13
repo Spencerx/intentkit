@@ -13,6 +13,19 @@ else
     uv run ruff check --fix
 fi
 
+echo "Running type checker..."
+# Pre-existing diagnostics are frozen in .basedpyright/baseline.json;
+# only new issues fail. After fixing baselined ones, the baseline
+# auto-shrinks; regenerate intentionally with: basedpyright --writebaseline
+uv run basedpyright
+
+echo "Checking architecture layer contract..."
+# Layer order is defined in [tool.importlinter] in pyproject.toml
+uv run lint-imports
+
+echo "Checking dependency declarations..."
+uv run deptry .
+
 echo "Validating JSON schema files..."
 
 # Function to validate a JSON schema file using Python

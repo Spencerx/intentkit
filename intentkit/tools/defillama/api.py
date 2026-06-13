@@ -87,9 +87,11 @@ async def fetch_price_chart(coins: list[str]) -> dict[str, Any]:
     """Get historical price chart data from the past day for multiple tokens."""
     coins_str = ",".join(coins)
     start_time = int(datetime.now().timestamp()) - 86400  # now - 1 day
+    # 12 points at 2h intervals spans exactly the past day; a longer period
+    # would request future timestamps and the API returns no data at all.
     return await _get(
         f"{DEFILLAMA_COINS_BASE_URL}/chart/{coins_str}",
-        params={"start": start_time, "span": 10, "period": "2d", "searchWidth": "600"},
+        params={"start": start_time, "span": 12, "period": "2h", "searchWidth": "600"},
     )
 
 

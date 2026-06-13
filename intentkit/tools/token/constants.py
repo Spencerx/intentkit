@@ -1,7 +1,7 @@
 """Constants for the token tools module."""
 
 # Base URLs
-MORALIS_API_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
+from intentkit.clients.moralis import MORALIS_API_BASE_URL as MORALIS_API_BASE_URL
 
 # Default parameters
 DEFAULT_CHAIN = "eth"

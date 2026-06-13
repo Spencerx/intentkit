@@ -23,7 +23,7 @@ from intentkit.core.system_tools.get_post import GetPostTool
 from intentkit.core.system_tools.read_webpage import ReadWebpageCloudflareTool
 from intentkit.core.system_tools.recent_activities import RecentActivitiesTool
 from intentkit.core.system_tools.recent_posts import RecentPostsTool
-from intentkit.core.system_tools.search_web import (  # pyright: ignore[reportPrivateUsage]
+from intentkit.core.system_tools.search_web import (
     WebSearchTool,
     _QuotaError,
 )
@@ -69,7 +69,7 @@ def _extract_unix_timestamp(result: str) -> int:
 async def test_current_time_utc():
     """Default timezone returns current time with UTC."""
     tool = CurrentTimeTool()
-    result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun()
     assert result.startswith("Current time: ")
     assert "UTC" in result
     assert "Unix timestamp: " in result
@@ -79,7 +79,7 @@ async def test_current_time_utc():
 async def test_current_time_custom_timezone():
     """Custom timezone returns formatted time with that timezone."""
     tool = CurrentTimeTool()
-    result = await tool._arun(timezone="Asia/Tokyo")  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun(timezone="Asia/Tokyo")
     assert result.startswith("Current time: ")
     assert "JST" in result or "Asia/Tokyo" in result
 
@@ -89,7 +89,7 @@ async def test_current_time_includes_unix_timestamp():
     """Output includes a Unix timestamp close to the current time."""
     tool = CurrentTimeTool()
     before = int(datetime.now().timestamp())
-    result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+    result = await tool._arun()
     after = int(datetime.now().timestamp())
 
     # The timestamp is timezone-independent and should fall within the window
@@ -102,8 +102,8 @@ async def test_current_time_unix_timestamp_timezone_independent():
     """The Unix timestamp does not depend on the requested timezone."""
     tool = CurrentTimeTool()
 
-    utc_result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
-    tokyo_result = await tool._arun(timezone="Asia/Tokyo")  # pyright: ignore[reportPrivateUsage]
+    utc_result = await tool._arun()
+    tokyo_result = await tool._arun(timezone="Asia/Tokyo")
 
     # Both calls happen within a second, so timestamps should be within 2s.
     delta = abs(
@@ -117,7 +117,7 @@ async def test_current_time_invalid_timezone():
     """Unknown timezone raises ToolException with suggestions."""
     tool = CurrentTimeTool()
     with pytest.raises(ToolException, match="Unknown timezone"):
-        await tool._arun(timezone="Invalid/Zone")  # pyright: ignore[reportPrivateUsage]
+        await tool._arun(timezone="Invalid/Zone")
 
 
 # ──────────────────────────────────────────────
@@ -133,7 +133,7 @@ async def test_call_agent_max_recursion(mock_runtime):
 
     tool = CallAgentTool()
     with pytest.raises(ToolException, match="Maximum call_agent recursion depth"):
-        await tool._arun(agent_id="other_agent", message="hello")  # pyright: ignore[reportPrivateUsage]
+        await tool._arun(agent_id="other_agent", message="hello")
 
 
 @pytest.mark.asyncio
@@ -145,7 +145,7 @@ async def test_call_agent_not_found(mock_runtime):
         new=AsyncMock(return_value=None),
     ):
         with pytest.raises(ToolException, match="not found"):
-            await tool._arun(agent_id="nonexistent", message="hello")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="nonexistent", message="hello")
 
 
 @pytest.mark.asyncio
@@ -164,7 +164,7 @@ async def test_call_agent_not_in_allowed(mock_runtime):
         new=AsyncMock(return_value=mock_resolved),
     ):
         with pytest.raises(ToolException, match="not in the allowed sub-agents"):
-            await tool._arun(agent_id="other_agent", message="hello")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="other_agent", message="hello")
 
 
 @pytest.mark.asyncio
@@ -190,7 +190,7 @@ async def test_call_agent_success(mock_runtime):
             new=AsyncMock(return_value=[mock_msg]),
         ),
     ):
-        result = await tool._arun(agent_id="target_id", message="hello")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(agent_id="target_id", message="hello")
 
     content, attachments = result
     assert content == "Hello from agent"
@@ -240,7 +240,7 @@ async def test_call_agent_success_with_attachments(mock_runtime):
             new=AsyncMock(return_value=[mock_msg]),
         ),
     ):
-        content, returned_attachments = await tool._arun(  # pyright: ignore[reportPrivateUsage]
+        content, returned_attachments = await tool._arun(
             agent_id="target_id", message="hello"
         )
 
@@ -289,7 +289,7 @@ async def test_call_agent_forwards_start_message_attachments(mock_runtime):
             new=AsyncMock(return_value=[mock_msg]),
         ) as mock_execute_agent,
     ):
-        await tool._arun(agent_id="target_id", message="hello")  # pyright: ignore[reportPrivateUsage]
+        await tool._arun(agent_id="target_id", message="hello")
 
     assert mock_execute_agent.await_args is not None
     forwarded = mock_execute_agent.await_args.args[0]
@@ -382,7 +382,7 @@ async def test_call_agent_no_response(mock_runtime):
         ),
     ):
         with pytest.raises(ToolException, match="No response received"):
-            await tool._arun(agent_id="target_id", message="hello")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun(agent_id="target_id", message="hello")
 
 
 # ──────────────────────────────────────────────
@@ -401,7 +401,7 @@ async def test_create_activity_success(mock_runtime):
         "intentkit.core.system_tools.create_activity.create_agent_activity",
         new=AsyncMock(return_value=mock_activity),
     ):
-        result = await tool._arun(text="Hello world")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(text="Hello world")
 
     assert "Activity created successfully with ID: activity_123" in result
 
@@ -429,7 +429,7 @@ async def test_create_activity_with_link(mock_runtime):
             new=AsyncMock(return_value=mock_meta),
         ),
     ):
-        result = await tool._arun(  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(
             text="Check this out",
             link="https://example.com",
         )
@@ -466,7 +466,7 @@ async def test_get_post_success(mock_runtime):
         "intentkit.core.system_tools.get_post.get_agent_post",
         new=AsyncMock(return_value=mock_post),
     ):
-        result = await tool._arun(post_id="post_1")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(post_id="post_1")
 
     assert "Test Post" in result
     assert "# Content" in result
@@ -481,7 +481,7 @@ async def test_get_post_not_found(mock_runtime):
         "intentkit.core.system_tools.get_post.get_agent_post",
         new=AsyncMock(return_value=None),
     ):
-        result = await tool._arun(post_id="nonexistent")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(post_id="nonexistent")
 
     assert "not found" in result
 
@@ -507,7 +507,7 @@ async def test_recent_activities_found(mock_runtime):
         "intentkit.core.system_tools.recent_activities.get_agent_activities",
         new=AsyncMock(return_value=[mock_activity]),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "1 recent activities" in result
     assert "Did something" in result
@@ -521,7 +521,7 @@ async def test_recent_activities_empty(mock_runtime):
         "intentkit.core.system_tools.recent_activities.get_agent_activities",
         new=AsyncMock(return_value=[]),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert result == "No recent activities found."
 
@@ -548,7 +548,7 @@ async def test_recent_posts_found(mock_runtime):
         "intentkit.core.system_tools.recent_posts.get_agent_posts",
         new=AsyncMock(return_value=[mock_post]),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert "1 recent posts" in result
     assert "My Post" in result
@@ -562,7 +562,7 @@ async def test_recent_posts_empty(mock_runtime):
         "intentkit.core.system_tools.recent_posts.get_agent_posts",
         new=AsyncMock(return_value=[]),
     ):
-        result = await tool._arun()  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun()
 
     assert result == "No recent posts found."
 
@@ -582,7 +582,7 @@ async def test_read_webpage_cloudflare_missing_config():
         with pytest.raises(
             ToolException, match="Cloudflare Browser Rendering is not configured"
         ):
-            await tool._arun("https://example.com")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun("https://example.com")
 
 
 @pytest.mark.asyncio
@@ -600,7 +600,7 @@ async def test_read_webpage_cloudflare_success():
     ):
         mock_config.cloudflare_account_id = "test_id"
         mock_config.cloudflare_api_token = "test_token"
-        result = await tool._arun("https://example.com", tool_call_id="call_1")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("https://example.com", tool_call_id="call_1")
 
     assert result == "cleaned markdown"
 
@@ -660,7 +660,7 @@ async def test_web_search_no_backend_configured():
     with patch("intentkit.config.config.config") as mock_config:
         _set_search_keys(mock_config)
         with pytest.raises(ToolException, match="No web search backend"):
-            await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun("query")
 
 
 @pytest.mark.asyncio
@@ -675,7 +675,7 @@ async def test_web_search_tavily_only_success():
         ),
     ):
         _set_search_keys(mock_config, tavily="k")
-        result = await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("query")
     assert result == "tavily result"
 
 
@@ -699,7 +699,7 @@ async def test_web_search_quota_falls_back_and_sets_cooldown():
         patch.object(tool, "_search_jina", new=AsyncMock(return_value="jina result")),
     ):
         _set_search_keys(mock_config, tavily="k", jina="k")
-        result = await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("query")
     assert result == "jina result"
     set_cooldown.assert_awaited_once_with("tavily")
 
@@ -723,7 +723,7 @@ async def test_web_search_falls_back_to_gemini_when_metered_exhausted():
         ),
     ):
         _set_search_keys(mock_config, tavily="k", jina="k", google="k", zai="k")
-        result = await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("query")
     assert result == "gemini result"
 
 
@@ -736,7 +736,7 @@ async def test_web_search_zai_is_last_resort():
         patch.object(tool, "_search_zai", new=AsyncMock(return_value="zai result")),
     ):
         _set_search_keys(mock_config, zai="k")
-        result = await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("query")
     assert result == "zai result"
 
 
@@ -756,7 +756,7 @@ async def test_web_search_skips_cooled_down_backend():
         patch.object(tool, "_search_jina", new=AsyncMock(return_value="jina result")),
     ):
         _set_search_keys(mock_config, tavily="k", jina="k")
-        result = await tool._arun("query")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("query")
     assert result == "jina result"
     tavily.assert_not_awaited()
 
@@ -773,7 +773,7 @@ async def test_web_search_tavily_http_parsing():
         "intentkit.core.system_tools.search_web.httpx.AsyncClient",
         return_value=_FakeAsyncClient(response),
     ):
-        result = await tool._search_tavily("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+        result = await tool._search_tavily("k", "query", 5)
     assert "https://e.com" in result
     assert "snippet" in result
     assert "T" in result
@@ -789,7 +789,7 @@ async def test_web_search_tavily_quota_status_raises_quota_error():
         return_value=_FakeAsyncClient(response),
     ):
         with pytest.raises(_QuotaError):
-            await tool._search_tavily("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+            await tool._search_tavily("k", "query", 5)
 
 
 @pytest.mark.asyncio
@@ -804,7 +804,7 @@ async def test_web_search_jina_http_parsing():
         "intentkit.core.system_tools.search_web.httpx.AsyncClient",
         return_value=_FakeAsyncClient(response),
     ):
-        result = await tool._search_jina("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+        result = await tool._search_jina("k", "query", 5)
     assert "https://j.com" in result
     assert "desc" in result
 
@@ -819,13 +819,13 @@ async def test_web_search_jina_quota_status_raises_quota_error():
         return_value=_FakeAsyncClient(response),
     ):
         with pytest.raises(_QuotaError):
-            await tool._search_jina("k", "query", 5)  # pyright: ignore[reportPrivateUsage]
+            await tool._search_jina("k", "query", 5)
 
 
 def test_web_search_format_results_empty():
     """No usable results yields a friendly message."""
     tool = WebSearchTool()
-    assert "No results found" in tool._format_results("query", [])  # pyright: ignore[reportPrivateUsage]
+    assert "No results found" in tool._format_results("query", [])
 
 
 # ──────────────────────────────────────────────
@@ -1081,7 +1081,7 @@ async def test_store_image_success(mock_runtime):
             return_value="https://cdn.example.com/prod/test_agent_123/image/store_image/abc.png",
         ),
     ):
-        result = await tool._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun("https://example.com/foo.png")
 
     assert result == (
         "https://cdn.example.com/prod/test_agent_123/image/store_image/abc.png"
@@ -1097,7 +1097,7 @@ async def test_store_image_rejects_non_image(mock_runtime):
         new=AsyncMock(side_effect=ValueError("URL does not point to an image")),
     ):
         with pytest.raises(ToolException, match="does not point to an image"):
-            await tool._arun("https://example.com/foo.html")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun("https://example.com/foo.html")
 
 
 @pytest.mark.asyncio
@@ -1109,7 +1109,7 @@ async def test_store_image_download_failure(mock_runtime):
         new=AsyncMock(side_effect=httpx.ConnectError("dns failure")),
     ):
         with pytest.raises(ToolException, match="Failed to download image"):
-            await tool._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun("https://example.com/foo.png")
 
 
 @pytest.mark.asyncio
@@ -1127,4 +1127,4 @@ async def test_store_image_s3_not_configured(mock_runtime):
         ),
     ):
         with pytest.raises(ToolException, match="S3 storage is not configured"):
-            await tool._arun("https://example.com/foo.png")  # pyright: ignore[reportPrivateUsage]
+            await tool._arun("https://example.com/foo.png")

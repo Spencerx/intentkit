@@ -17,8 +17,8 @@ dependencies = [
     # Web framework
     "fastapi>=0.115.8",
     "starlette>=0.47.1",
-    "uvicorn>=0.34.0,<1.0.0",
     "httpx>=0.28.1",
+    "httpcore>=1.0.9",
     "aiohttp>=3.14.0",
     # Database
     "psycopg>=3.2.9",
@@ -34,23 +34,27 @@ dependencies = [
     "langchain-core>=1.4,<2",
     "langchain-openai>=1.2,<2",
     "langchain-text-splitters>=1.1,<2",
-    "langchain-xai>=1.2,<2",
     "langchain-deepseek>=1.0,<2",
     "langchain-google-genai>=4.2,<5",
     "langchain-anthropic>=1.4,<2",
     "langchain-openrouter>=0.2.3,<1",
     "openrouter>=0.9.0",
+    "google-genai>=2.8.0",
     "langgraph>=1.2,<2",
     "langgraph-checkpoint>=4.1,<5",
     "langgraph-checkpoint-postgres>=3.1,<4",
     "langgraph-prebuilt>=1.1,<2",
     "openai>=1.59.6",
+    "langsmith>=0.8.9",
+    "ormsgpack>=1.12.2",
     # Blockchain / Web3
     "cdp-sdk>=1.31.1",
     "web3>=7.10.0",
     "eth-abi>=5.0.0",
-    "eth-keys>=0.4.0",
+    "eth-account>=0.13.7",
+    "eth-typing>=6.0.0",
     "eth-utils>=2.1.0",
+    "hexbytes>=1.3.1",
     "x402>=2.0.0",
     # Social platforms
     "slack-sdk>=3.34.0",
@@ -67,7 +71,12 @@ dependencies = [
     "pyyaml>=6.0.2",
     "requests>=2.32.3",
     "requests-oauthlib>=2.0.0",
-    "tenacity>=9.1.2",
+    # Scheduling (core/scheduler.py)
+    "apscheduler>=3.11.0",
+    # Utilities (direct imports of pydantic/web3 companions)
+    "cryptography>=48.0.0",
+    "pydantic-core>=2.46.4",
+    "typing-extensions>=4.15.0",
     # MCP (Model Context Protocol)
     "mcp>=1.0.0",
     # Chinese A-share market data (cn_stock tool)
@@ -84,6 +93,19 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+[project.optional-dependencies]
+# PDF rendering (utils/pdf.py imports these lazily; weasyprint needs system
+# pango/cairo, so it stays out of the default install)
+pdf = [
+    "weasyprint>=63.0",
+    "markdown>=3.7",
+    "pymdown-extensions>=10.0",
+]
+# Ollama provider support (models/llm.py imports langchain_ollama lazily)
+ollama = [
+    "langchain-ollama>=1.1,<2",
+]
+
 [project.urls]
 Homepage = "https://github.com/crestalnetwork/intentkit"
 Repository = "https://github.com/crestalnetwork/intentkit"
@@ -93,15 +115,16 @@ Documentation = "https://github.com/crestalnetwork/intentkit/tree/main/docs"
 [dependency-groups]
 # App runtime dependencies (app/ folder needs these beyond intentkit)
 app = [
-    "APScheduler>=3.11.0",
     "gunicorn>=23.0.0",
+    "uvicorn>=0.34.0,<1.0.0",
     "pydantic-settings>=2.8.1",
     "python-multipart>=0.0.20",
     "sentry-sdk[fastapi]>=2.20.0",
-    # PDF generation
+    # PDF generation (the pdf extra, pinned identically)
     "weasyprint>=63.0",
     "markdown>=3.7",
     "pymdown-extensions>=10.0",
+    "pyjwt>=2.13.0",
 ]
 # Development-only dependencies (testing, linting, local dev tools)
 dev = [
@@ -119,6 +142,8 @@ dev = [
     # Local LLM testing
     "langchain-ollama>=1.1,<2",
     "jsonschema>=4.26.0",
+    "basedpyright>=1.39.7",
+    "import-linter>=2.11",
 ]
 
 [tool.uv]
@@ -132,6 +157,8 @@ override-dependencies = ["bcl>=3.0.0"]
 
 
 [tool.basedpyright]
+# scripts/ holds one-off ops/migration scripts with loose typing; not worth checking
+exclude = ["scripts", "**/node_modules", "**/__pycache__", "**/.*", "dist", "build"]
 reportAny = false
 reportExplicitAny = false
 reportMissingTypeStubs = false
@@ -150,6 +177,12 @@ reportUnknownLambdaType = false
 reportMissingTypeArgument = false
 reportUnnecessaryIsInstance = false
 reportUnnecessaryComparison = false
+
+# Tests legitimately reach into private members; keep those rules library-only
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+reportPrivateUsage = false
+reportPrivateLocalImportUsage = false
 
 [build-system]
 requires = ["hatchling"]
@@ -175,12 +208,41 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 
 [tool.deptry]
 known_first_party = ["intentkit"]
+# scripts/ are one-off ops tools run in the dev env; tests run under dev deps
+exclude = ["scripts", "tests", "frontend", "docs", "\\.venv"]
+
+[tool.deptry.per_rule_ignores]
+# asyncpg/aiosqlite are loaded dynamically by SQLAlchemy as DB drivers;
+# pymdown-extensions is loaded by name through the markdown extension registry
+DEP002 = ["asyncpg", "aiosqlite", "pymdown-extensions"]
+# app/ legitimately uses the app dependency group (deptry treats groups as dev)
+DEP004 = ["sentry_sdk", "jwt"]
+
+# Enforces the import dependency order documented in CLAUDE.md.
+# Each layer may import the ones below it, never above.
+[tool.importlinter]
+root_package = "intentkit"
+
+[[tool.importlinter.contracts]]
+name = "intentkit layered architecture"
+type = "layers"
+layers = [
+    "intentkit.core",
+    "intentkit.tools",
+    "intentkit.wallets",
+    "intentkit.clients",
+    "intentkit.abstracts",
+    "intentkit.models",
+    "intentkit.config",
+    "intentkit.utils",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
     "bdd: mark test as BDD integration test",
+    "integration: hits live external APIs; excluded from the default CI run",
 ]
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

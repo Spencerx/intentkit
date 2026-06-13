@@ -1,3 +1,7 @@
+"""Local API: single-user, unauthenticated reference API for the bundled
+`frontend/`. Intentionally self-contained — see `app/__init__.py` for why
+this is kept separate from `app/team` despite the similar routes."""
+
 from app.local.agent import agent_router
 from app.local.autonomous import autonomous_router
 from app.local.chat import chat_router

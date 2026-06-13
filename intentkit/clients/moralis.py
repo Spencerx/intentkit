@@ -5,9 +5,10 @@ import logging
 import httpx
 
 from intentkit.config.config import config
-from intentkit.tools.portfolio.constants import MORALIS_API_BASE_URL
 
 logger = logging.getLogger(__name__)
+
+MORALIS_API_BASE_URL = "https://deep-index.moralis.io/api/v2.2"
 
 # Chains to check for wallet net worth
 _VALUATION_CHAINS = ["eth", "base", "arbitrum", "bsc"]

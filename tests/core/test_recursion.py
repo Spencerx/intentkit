@@ -54,10 +54,10 @@ async def test_recursion_error_handling(mock_agent):
 
     with (
         patch(
-            "intentkit.core.engine.get_agent", new_callable=AsyncMock
+            "intentkit.core.engine.stream.get_agent", new_callable=AsyncMock
         ) as mock_get_agent,
         patch(
-            "intentkit.core.engine.agent_executor", new_callable=AsyncMock
+            "intentkit.core.engine.stream.agent_executor", new_callable=AsyncMock
         ) as mock_executor_func,
         patch(
             "intentkit.models.chat.ChatMessageCreate.save", new_callable=AsyncMock
@@ -65,7 +65,7 @@ async def test_recursion_error_handling(mock_agent):
         patch("intentkit.models.llm.LLMModelInfo.get", new_callable=AsyncMock),
         patch("intentkit.config.db.engine", new=MagicMock()),
         patch("intentkit.config.db.AsyncSession", new=MagicMock()),
-        patch("intentkit.core.engine.config") as mock_config,
+        patch("intentkit.core.engine.stream.config") as mock_config,
         patch(
             "intentkit.models.chat.ChatMessageCreate.from_system_message",
             new_callable=AsyncMock,

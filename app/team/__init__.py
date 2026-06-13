@@ -1,3 +1,7 @@
+"""Team API: multi-tenant, authenticated reference API for the team
+frontend (intentcat). Intentionally self-contained — see `app/__init__.py`
+for why this is kept separate from `app/local` despite the similar routes."""
+
 from app.team.agent import team_agent_router
 from app.team.autonomous import team_autonomous_router
 from app.team.chat import team_chat_router

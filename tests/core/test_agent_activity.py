@@ -7,7 +7,7 @@ import pytest
 import intentkit.core.agent_activity as agent_activity_module
 from intentkit.core.agent.info import AgentInfo
 from intentkit.core.agent_activity import (
-    _format_activity_push,  # pyright: ignore[reportPrivateUsage]
+    _format_activity_push,
     create_agent_activity,
     get_agent_activities,
     get_agent_activity,

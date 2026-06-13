@@ -1,4 +1,9 @@
-"""McpToolTool — wraps a single MCP tool as an IntentKit tool."""
+"""McpToolTool — wraps a single MCP tool as an IntentKit tool.
+
+Lives in the tools layer (not clients) because it depends on
+``intentkit.tools.base``; the protocol-level MCP client stays in
+``intentkit.clients.mcp``.
+"""
 
 import logging
 from typing import Any
@@ -82,8 +87,9 @@ class McpToolTool(IntentKitTool):
             agent_key = tool_config.get("api_key") if tool_config else None
             if agent_key:
                 return agent_key
-        except ValueError:
-            # No AgentContext available (e.g. during schema generation)
+        except (ValueError, RuntimeError):
+            # No AgentContext / runnable context available
+            # (e.g. schema generation or direct invocation)
             pass
         if server_def.api_key_config_attr:
             return getattr(system_config, server_def.api_key_config_attr, None)
@@ -115,12 +121,13 @@ def create_mcp_tool(
 ) -> McpToolTool:
     """Factory to create an McpToolTool instance from MCP tool info."""
     args_model = create_args_model(tool_name, input_schema)
-    # Prefix tool name with category to avoid name collisions
-    tool_name = f"{server_def.name}_{tool_name}"
+    # The LangChain-facing name is prefixed with the category to avoid
+    # collisions, but the remote server only knows the original name.
+    prefixed_name = f"{server_def.name}_{tool_name}"
 
     return McpToolTool(
-        name=tool_name,
-        description=tool_description or f"MCP tool: {tool_name}",
+        name=prefixed_name,
+        description=tool_description or f"MCP tool: {prefixed_name}",
         args_schema=args_model,
         category=server_def.name,
         server_name=server_def.name,

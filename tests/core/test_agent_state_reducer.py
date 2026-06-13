@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveM
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
 from intentkit.abstracts.graph import (
-    _messages_reducer,  # pyright: ignore[reportPrivateUsage]
+    _messages_reducer,
 )
 
 

@@ -45,7 +45,8 @@ from intentkit.models.agent import (
 from intentkit.models.agent_data import AgentData, AgentDataTable
 from intentkit.tools import __all__ as toolsets
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.utils.upload import validate_and_store_image
+
+from app.common.upload import validate_and_store_image
 
 agent_router = APIRouter()
 

@@ -6,10 +6,10 @@ import types
 from unittest.mock import MagicMock, patch
 
 from intentkit.utils.pdf import (
-    _BLOCKED_RESOURCE,  # pyright: ignore[reportPrivateUsage]
-    _POST_TEMPLATE,  # pyright: ignore[reportPrivateUsage]
-    _render_template,  # pyright: ignore[reportPrivateUsage]
-    _safe_url_fetcher,  # pyright: ignore[reportPrivateUsage]
+    _BLOCKED_RESOURCE,
+    _POST_TEMPLATE,
+    _render_template,
+    _safe_url_fetcher,
 )
 
 _GETADDRINFO = "intentkit.utils.pdf.socket.getaddrinfo"

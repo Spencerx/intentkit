@@ -1,0 +1,428 @@
+{
+    "files": {
+        "./app/local/lead.py": [
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 24,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 21,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 26,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 27,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 38,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 32,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 34,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 4,
+                    "endColumn": 42,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/config/config.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 22,
+                    "endColumn": 28,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/core/agent/wallet.py": [
+            {
+                "code": "reportRedeclaration",
+                "range": {
+                    "startColumn": 24,
+                    "endColumn": 31,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/core/agent_activity.py": [
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/core/chat.py": [
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/core/lead/cache.py": [
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportImportCycles",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 0,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/core/public_api.py": [
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 32,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 29,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 26,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 29,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 35,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 39,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/models/agent/response.py": [
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 18,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportIncompatibleMethodOverride",
+                "range": {
+                    "startColumn": 8,
+                    "endColumn": 23,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/tools/__init__.py": [
+            {
+                "code": "reportUnsupportedDunderAll",
+                "range": {
+                    "startColumn": 0,
+                    "endColumn": 1,
+                    "lineCount": 5
+                }
+            }
+        ],
+        "./intentkit/tools/venice_image/image_enhance/image_enhance.py": [
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 33,
+                    "endColumn": 46,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/tools/venice_image/image_upscale/image_upscale.py": [
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 33,
+                    "endColumn": 46,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/tools/venice_image/utils.py": [
+            {
+                "code": "reportPrivateLocalImportUsage",
+                "range": {
+                    "startColumn": 33,
+                    "endColumn": 46,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/wallets/privy_nonce.py": [
+            {
+                "code": "reportPrivateImportUsage",
+                "range": {
+                    "startColumn": 22,
+                    "endColumn": 41,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./intentkit/wallets/privy_signer.py": [
+            {
+                "code": "reportPrivateImportUsage",
+                "range": {
+                    "startColumn": 22,
+                    "endColumn": 28,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportPrivateImportUsage",
+                "range": {
+                    "startColumn": 30,
+                    "endColumn": 49,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/bdd/test_onchain_aerodrome.py": [
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 34,
+                    "endColumn": 47,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/bdd/test_onchain_pancakeswap.py": [
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 34,
+                    "endColumn": 47,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/core/test_agent_info.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 28,
+                    "endColumn": 33,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/core/test_agent_management.py": [
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 24,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 26,
+                    "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 24,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 26,
+                    "endColumn": 37,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 16,
+                    "endColumn": 28,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 30,
+                    "endColumn": 41,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/core/test_share_link.py": [
+            {
+                "code": "reportUnusedVariable",
+                "range": {
+                    "startColumn": 13,
+                    "endColumn": 22,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/wallets/test_native_wallet.py": [
+            {
+                "code": "reportUnusedFunction",
+                "range": {
+                    "startColumn": 18,
+                    "endColumn": 32,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportUnusedClass",
+                "range": {
+                    "startColumn": 14,
+                    "endColumn": 24,
+                    "lineCount": 1
+                }
+            }
+        ]
+    }
+}

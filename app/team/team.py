@@ -34,8 +34,8 @@ from intentkit.core.team.membership import (
 from intentkit.models.team import TeamMember, TeamPlan, TeamRole, TeamTable
 from intentkit.models.user import User
 from intentkit.utils.error import IntentKitAPIError
-from intentkit.utils.upload import validate_and_store_image
 
+from app.common.upload import validate_and_store_image
 from app.team.auth import get_current_user, verify_team_admin, verify_team_member
 
 _team_member_list_adapter = TypeAdapter(list[TeamMember])

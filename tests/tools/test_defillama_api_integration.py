@@ -4,6 +4,8 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.runner import TextTestResult
 
+import pytest
+
 # Import all functions from your API module
 from intentkit.tools.defillama.api import (
     fetch_chains,
@@ -21,11 +23,14 @@ from intentkit.tools.defillama.api import (
     fetch_stablecoins,
 )
 
+# Hits the live DefiLlama API; run explicitly with: pytest -m integration
+pytestmark = pytest.mark.integration
+
 # Configure logging to only show warnings and errors
 logging.basicConfig(level=logging.WARNING)
 
 
-class QuietTestResult(TextTestResult):  # pyright: ignore[reportUninitializedInstanceVariable]
+class QuietTestResult(TextTestResult):
     """Custom TestResult class that minimizes output unless there's a failure"""
 
     def startTest(self, test):
@@ -38,7 +43,7 @@ class QuietTestResult(TextTestResult):  # pyright: ignore[reportUninitializedIns
             self.stream.write("")
             self.stream.flush()
 
-    def addError(self, test, err):  # pyright: ignore[reportAttributeAccessIssue]
+    def addError(self, test, err):
         super().addError(test, err)
         self.stream.write("\n")
         self.stream.write(self.separator1 + "\n")
@@ -48,7 +53,7 @@ class QuietTestResult(TextTestResult):  # pyright: ignore[reportUninitializedIns
         self.stream.write("\n")
         self.stream.flush()
 
-    def addFailure(self, test, err):  # pyright: ignore[reportAttributeAccessIssue]
+    def addFailure(self, test, err):
         super().addFailure(test, err)
         self.stream.write("\n")
         self.stream.write(self.separator1 + "\n")
@@ -65,7 +70,7 @@ class QuietTestRunner(unittest.TextTestRunner):
     resultclass: type[TextTestResult] = QuietTestResult  # pyright: ignore[reportIncompatibleMethodOverride]
 
 
-class TestDefiLlamaAPI(unittest.TestCase):  # pyright: ignore[reportUninitializedInstanceVariable]
+class TestDefiLlamaAPI(unittest.TestCase):
     """Integration tests for DeFi Llama API client"""
 
     def setUp(self):

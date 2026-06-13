@@ -78,7 +78,7 @@ async def test_create_post_success(mock_db_session):
             return_value=mock_context,
         ),
     ):
-        result = await tool._arun(  # pyright: ignore[reportPrivateUsage]
+        result = await tool._arun(
             title=title, markdown=markdown, slug=slug, excerpt=excerpt, tags=tags
         )
 

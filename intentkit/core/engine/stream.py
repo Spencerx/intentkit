@@ -1,0 +1,609 @@
+"""Agent execution stream orchestration.
+
+Validates the incoming message (payment, budget, media capability), prepares
+multimodal input, drives the LangGraph stream loop and routes chunks to the
+handlers in ``intentkit.core.engine.chunks``; error handling and checkpoint
+recovery live in ``intentkit.core.engine.recovery``.
+"""
+
+# pyright: reportImportCycles=false
+
+import asyncio
+import logging
+import re
+import time
+import traceback
+from typing import Any
+
+import httpcore
+import httpx
+from epyxid import XID
+from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.errors import GraphRecursionError
+from langgraph.graph.state import CompiledStateGraph
+from sqlalchemy.exc import SQLAlchemyError
+
+from intentkit.abstracts.graph import AgentContext, AgentState
+from intentkit.config.config import config
+from intentkit.core.agent import get_agent
+from intentkit.core.budget import check_hourly_budget_exceeded
+from intentkit.core.chat import clear_thread_memory
+from intentkit.core.engine.chunks import handle_model_chunk, handle_tools_chunk
+from intentkit.core.engine.media import (
+    FORWARDABLE_TYPES,
+    MEDIA_INPUT_SPECS,
+    build_image_url_block,
+    build_v1_data_block,
+    fetch_media_bytes,
+)
+from intentkit.core.engine.recovery import (
+    cancel_cleanup,
+    cleanup_empty_model_output,
+    is_unrecoverable_checkpoint_error,
+    summarize_history_messages,
+)
+from intentkit.core.executor import agent_executor
+from intentkit.models.agent import Agent
+from intentkit.models.app_setting import SystemMessageType
+from intentkit.models.chat import (
+    AuthorType,
+    ChatMessage,
+    ChatMessageAttachmentType,
+    ChatMessageCreate,
+)
+from intentkit.models.credit import CreditAccount, OwnerType
+from intentkit.models.llm import LLMModelInfo
+from intentkit.models.user import User
+from intentkit.utils.error import IntentKitAPIError
+
+logger = logging.getLogger(__name__)
+
+
+# Cap raw_chunks to prevent unbounded memory growth in super_mode
+_MAX_RAW_CHUNKS = 200
+
+
+async def stream_agent(message: ChatMessageCreate):
+    """
+    Stream agent execution results as an async generator.
+
+    This function:
+    1. Configures execution context with thread ID
+    2. Initializes agent if not in cache
+    3. Streams agent execution results
+    4. Formats and times the execution steps
+
+    Args:
+        message (ChatMessageCreate): The chat message containing agent_id, chat_id, and message content
+
+    Yields:
+        ChatMessage: Individual response messages including timing information
+    """
+    agent = await get_agent(message.agent_id)
+    if not agent:
+        raise IntentKitAPIError(
+            status_code=404, key="AgentNotFound", message="Agent not found"
+        )
+    executor, cold_start_cost = await agent_executor(message.agent_id)
+    message.cold_start_cost = cold_start_cost
+    async for chat_message in stream_agent_raw(message, agent, executor):
+        yield chat_message
+
+
+async def _create_system_error_response(
+    message_type: SystemMessageType,
+    user_message: ChatMessage,
+    time_cost: float,
+) -> ChatMessage:
+    """Create and save a system error/info message.
+
+    This helper consolidates the repeated pattern of creating a
+    ``ChatMessageCreate.from_system_message(...)`` and calling ``.save()``.
+    """
+    error_message_create = await ChatMessageCreate.from_system_message(
+        message_type,
+        agent_id=user_message.agent_id,
+        chat_id=user_message.chat_id,
+        user_id=user_message.user_id or "",
+        author_id=user_message.agent_id,
+        thread_type=user_message.author_type,
+        reply_to=user_message.id,
+        time_cost=time_cost,
+    )
+    return await error_message_create.save()
+
+
+async def _validate_payment(
+    user_message: ChatMessage,
+    agent: Agent,
+    payer: str | None,
+    start: float,
+) -> ChatMessage | None:
+    """Validate payment preconditions.
+
+    Returns ``None`` when validation passes, or a saved ``ChatMessage``
+    error that the caller should yield and then return.
+    """
+    if not payer:
+        raise IntentKitAPIError(
+            500,
+            "PaymentError",
+            "Payment is enabled but no team_id available for billing",
+        )
+    if agent.fee_percentage and agent.fee_percentage > 100:
+        owner = await User.get(agent.owner) if agent.owner else None
+        if owner and agent.fee_percentage > 100 + owner.nft_count * 10:
+            return await _create_system_error_response(
+                SystemMessageType.SERVICE_FEE_ERROR,
+                user_message,
+                time.perf_counter() - start,
+            )
+    # Fetch team credit account
+    team_account = await CreditAccount.get_or_create(OwnerType.TEAM, payer)
+    # As long as balance is positive, allow one conversation opportunity.
+    # Credit can go negative during the conversation — that is acceptable.
+    if team_account.balance <= 0:
+        return await _create_system_error_response(
+            SystemMessageType.INSUFFICIENT_BALANCE,
+            user_message,
+            time.perf_counter() - start,
+        )
+    return None
+
+
+def build_stream_config(
+    user_message: ChatMessage,
+    agent: Agent,
+    team_id: str | None,
+    thread_id: str,
+) -> RunnableConfig:
+    """Build the LangGraph run config for a chat stream.
+
+    The metadata block is attached by LangSmith tracing to every run in the
+    trace, so a shared tracing project can be filtered by environment, agent,
+    team, channel, etc.
+    """
+    # super mode — determined by agent config
+    recursion_limit = config.recursion_limit
+    if agent.super_mode:
+        recursion_limit = max(config.super_recursion_limit, 1000)
+    metadata: dict[str, Any] = {
+        "env": config.env,
+        "agent_id": user_message.agent_id,
+        "chat_id": user_message.chat_id,
+        "thread_id": thread_id,
+        # author_type is already a plain string here (use_enum_values)
+        "channel": user_message.author_type,
+        "model": agent.model,
+    }
+    if user_message.user_id:
+        metadata["user_id"] = user_message.user_id
+    if team_id:
+        metadata["team_id"] = team_id
+    if agent.team_id:
+        metadata["agent_team_id"] = agent.team_id
+    if user_message.app_id:
+        metadata["app_id"] = user_message.app_id
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+        },
+        "recursion_limit": recursion_limit,
+        "metadata": metadata,
+    }
+
+
+async def stream_agent_raw(
+    message: ChatMessageCreate,
+    agent: Agent,
+    executor: CompiledStateGraph[AgentState, AgentContext, Any, Any],
+):
+    start = time.perf_counter()
+    # make sure reply_to is set
+    message.reply_to = message.id
+
+    # save input message first
+    user_message = await message.save()
+
+    # temporary debug logging for telegram messages
+    if user_message.author_type == AuthorType.TELEGRAM:
+        logger.info(
+            f"[TELEGRAM DEBUG] Agent: {user_message.agent_id} | Chat: {user_message.chat_id} | Message: {user_message.message}"
+        )
+
+    if re.search(
+        r"(@clear|/clear)(?!\w)",
+        user_message.message.strip(),
+        re.IGNORECASE,
+    ):
+        _ = await clear_thread_memory(user_message.agent_id, user_message.chat_id)
+
+        confirmation_message = ChatMessageCreate(
+            id=str(XID()),
+            agent_id=user_message.agent_id,
+            chat_id=user_message.chat_id,
+            user_id=user_message.user_id,
+            author_id=user_message.agent_id,
+            author_type=AuthorType.AGENT,
+            model=agent.model,
+            thread_type=user_message.author_type,
+            reply_to=user_message.id,
+            message="Memory in context has been cleared.",
+            time_cost=time.perf_counter() - start,
+        )
+
+        yield await confirmation_message.save()
+        return
+
+    model = await LLMModelInfo.get(agent.model)
+
+    payment_enabled = config.payment_enabled
+
+    # Determine payer team (needed for credit event recording regardless of payment_enabled)
+    # Normal user conversations: user's team pays
+    # Platform channels (Telegram/Discord/Twitter/API/X402) and autonomous triggers:
+    # agent's team pays
+    payer = message.team_id
+    if user_message.author_type in [
+        AuthorType.TELEGRAM,
+        AuthorType.DISCORD,
+        AuthorType.TWITTER,
+        AuthorType.API,
+        AuthorType.X402,
+        AuthorType.TRIGGER,
+    ]:
+        payer = agent.team_id
+
+    budget_status = await check_hourly_budget_exceeded(f"base_llm:{payer}")
+    if budget_status.exceeded:
+        yield await _create_system_error_response(
+            SystemMessageType.HOURLY_BUDGET_EXCEEDED,
+            user_message,
+            time.perf_counter() - start,
+        )
+        return
+
+    # check user balance
+    if payment_enabled:
+        payment_error = await _validate_payment(user_message, agent, payer, start)
+        if payment_error is not None:
+            yield payment_error
+            return
+
+    is_private = False
+    if user_message.user_id == agent.owner:
+        is_private = True
+    # Team-level access: if both team_ids exist and match, treat as private
+    # Use original message (not user_message) because team_id is excluded from DB persistence
+    if message.team_id and agent.team_id and message.team_id == agent.team_id:
+        is_private = True
+    # Hack for local mode: treat "system" user as private.
+    # This is safe because in authenticated environments,
+    # user_id cannot be "system".
+    if user_message.user_id == "system":
+        is_private = True
+
+    last = start
+
+    # Group media URLs by attachment type and gate each on the model's
+    # corresponding supports_<type>_input capability.
+    media_urls_by_type: dict[ChatMessageAttachmentType, list[str]] = {
+        atype: [] for atype, _, _ in MEDIA_INPUT_SPECS
+    }
+    if user_message.attachments:
+        for att in user_message.attachments:
+            atype = att.get("type")
+            url = att.get("url")
+            if atype in media_urls_by_type and url is not None:
+                media_urls_by_type[atype].append(str(url))
+
+    for atype, capability, error_type in MEDIA_INPUT_SPECS:
+        if not media_urls_by_type[atype]:
+            continue
+        if not getattr(model, capability):
+            yield await _create_system_error_response(
+                error_type,
+                user_message,
+                time.perf_counter() - start,
+            )
+            return
+
+    input_message = user_message.message
+
+    # Append media attachment URLs as text so the LLM can reference them
+    # across turns (e.g. when delegating to sub-agents later).
+    if user_message.attachments:
+        url_lines = []
+        for att in user_message.attachments:
+            att_type = att.get("type")
+            att_url = att.get("url")
+            if att_type in FORWARDABLE_TYPES and att_url:
+                type_label = (
+                    att_type.value
+                    if isinstance(att_type, ChatMessageAttachmentType)
+                    else att_type
+                )
+                url_lines.append(f"- [{type_label}] {att_url}")
+        if url_lines:
+            input_message += (
+                "\n\n[Attachments in this message"
+                " - use these URLs when delegating to other agents]\n"
+                + "\n".join(url_lines)
+            )
+
+    # content to llm
+    messages = [
+        HumanMessage(content=input_message),
+    ]
+    # Image URLs ride straight through as `image_url` blocks; the LangChain
+    # adapter handles the fetch. Audio/video/file get fetched here so we
+    # can hand Gemini a `media` block with raw bytes + an explicit
+    # mime_type, avoiding the empty-mimeType failure mode that the URL-only
+    # data block path has produced in production.
+    fetch_tasks: list = []
+    fetch_meta: list[ChatMessageAttachmentType] = []
+    for atype, _, _ in MEDIA_INPUT_SPECS:
+        urls = media_urls_by_type[atype]
+        if not urls:
+            continue
+        logger.info(
+            "Passing %d %s url(s) to LLM for agent=%s chat=%s: %s",
+            len(urls),
+            atype.value,
+            user_message.agent_id,
+            user_message.chat_id,
+            urls,
+        )
+        if atype == ChatMessageAttachmentType.IMAGE:
+            messages.extend(
+                HumanMessage(content=[build_image_url_block(url)]) for url in urls
+            )
+            continue
+        for url in urls:
+            fetch_tasks.append(fetch_media_bytes(url, atype))
+            fetch_meta.append(atype)
+
+    if fetch_tasks:
+        try:
+            fetched_media = await asyncio.gather(*fetch_tasks)
+        except Exception:
+            logger.exception(
+                "Failed to fetch media attachments for agent=%s chat=%s",
+                user_message.agent_id,
+                user_message.chat_id,
+            )
+            yield await _create_system_error_response(
+                SystemMessageType.AGENT_INTERNAL_ERROR,
+                user_message,
+                time.perf_counter() - start,
+            )
+            return
+        messages.extend(
+            HumanMessage(content=[build_v1_data_block(atype, fetched)])
+            for atype, fetched in zip(fetch_meta, fetched_media, strict=True)
+        )
+
+    # stream config
+    thread_id = f"{user_message.agent_id}-{user_message.chat_id}"
+    stream_config = build_stream_config(user_message, agent, message.team_id, thread_id)
+
+    def get_agent_for_context() -> Agent:
+        return agent
+
+    context = AgentContext(
+        agent_id=user_message.agent_id,
+        get_agent=get_agent_for_context,
+        chat_id=user_message.chat_id,
+        user_id=user_message.user_id,
+        team_id=message.team_id,
+        app_id=user_message.app_id,
+        entrypoint=user_message.author_type,
+        is_private=is_private,
+        payer=payer if payment_enabled else None,
+        start_message_id=user_message.id,
+        start_message_attachments=user_message.attachments,
+        call_depth=message.call_depth,
+    )
+
+    # run
+    yielded_any = False
+    raw_chunks: list[Any] = []
+    cached_tool_step = None
+    in_tools_phase = False
+    try:
+        async for chunk in executor.astream(
+            {"messages": messages},
+            context=context,
+            config=stream_config,
+            stream_mode=["updates", "custom"],
+            durability="exit",
+        ):
+            this_time = time.perf_counter()
+            logger.debug("stream chunk: %s", chunk, extra={"thread_id": thread_id})
+            if len(raw_chunks) < _MAX_RAW_CHUNKS:
+                raw_chunks.append(chunk)
+
+            if isinstance(chunk, tuple) and len(chunk) == 2:
+                _, payload = chunk
+                chunk = payload
+
+            if not isinstance(chunk, dict):
+                continue
+
+            if "model" in chunk and "messages" in chunk["model"]:
+                (
+                    model_msgs,
+                    last,
+                    cached_tool_step,
+                    in_tools_phase,
+                ) = await handle_model_chunk(
+                    chunk,
+                    user_message,
+                    agent,
+                    model,
+                    payer,
+                    this_time,
+                    last,
+                    thread_id,
+                    cached_tool_step,
+                    in_tools_phase,
+                )
+                for m in model_msgs:
+                    yielded_any = True
+                    yield m
+            elif "tools" in chunk and "messages" in chunk["tools"]:
+                in_tools_phase = False
+                tools_msgs, last = await handle_tools_chunk(
+                    chunk,
+                    user_message,
+                    agent,
+                    model,
+                    payer,
+                    this_time,
+                    last,
+                    thread_id,
+                    cached_tool_step,
+                )
+                for m in tools_msgs:
+                    yielded_any = True
+                    yield m
+            else:
+                pass
+    except asyncio.CancelledError:
+        logger.info(
+            f"Agent execution cancelled for {user_message.agent_id}",
+            extra={"thread_id": thread_id},
+        )
+        # Shield cleanup DB operations from cancellation propagation.
+        # Without shield, awaits inside CancelledError handler also get cancelled,
+        # causing SQLAlchemy connection termination errors.
+        await asyncio.shield(
+            cancel_cleanup(
+                executor,
+                stream_config,
+                in_tools_phase,
+                user_message,
+                thread_id,
+                start,
+            )
+        )
+        return
+    except (httpx.TimeoutException, httpcore.ReadTimeout, asyncio.TimeoutError):
+        logger.error(
+            f"Agent request timed out for {user_message.agent_id}",
+            extra={"thread_id": thread_id},
+        )
+        yield await _create_system_error_response(
+            SystemMessageType.TIMEOUT_ERROR,
+            user_message,
+            time.perf_counter() - start,
+        )
+        return
+    except SQLAlchemyError as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"failed to execute agent: {str(e)}\n{error_traceback}",
+            extra={"thread_id": thread_id},
+        )
+        yield await _create_system_error_response(
+            SystemMessageType.AGENT_INTERNAL_ERROR,
+            user_message,
+            time.perf_counter() - start,
+        )
+        return
+    except GraphRecursionError:
+        logger.error(
+            f"Recursion limit reached for Agent {user_message.agent_id} (Thread: {thread_id}). Sending error message to chat.",
+            extra={"thread_id": thread_id, "agent_id": user_message.agent_id},
+        )
+        yield await _create_system_error_response(
+            SystemMessageType.RECURSION_LIMIT_EXCEEDED,
+            user_message,
+            time.perf_counter() - start,
+        )
+        return
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        logger.error(
+            f"failed to execute agent: {str(e)}\n{error_traceback}",
+            extra={"thread_id": thread_id, "agent_id": user_message.agent_id},
+        )
+        yield await _create_system_error_response(
+            SystemMessageType.AGENT_INTERNAL_ERROR,
+            user_message,
+            time.perf_counter() - start,
+        )
+        # Only clear thread memory for known unrecoverable checkpoint corruption,
+        # not for transient errors (LLM API failures, network issues, etc.)
+        # that should preserve the conversation history.
+        if is_unrecoverable_checkpoint_error(e):
+            logger.warning(
+                f"Clearing thread memory due to unrecoverable error for {user_message.agent_id}",
+                extra={"thread_id": thread_id},
+            )
+            _ = await clear_thread_memory(user_message.agent_id, user_message.chat_id)
+        return
+
+    # If the stream completed normally but yielded zero messages,
+    # the LLM likely returned an empty response (no content, no tool calls).
+    # Typical cause: Gemini MALFORMED_FUNCTION_CALL — the malformed call isn't
+    # in this turn's chunks, so dump recent history tool_calls for diagnosis
+    # and prune the empty AIMessage so the thread isn't stuck on next turn.
+    if not yielded_any:
+        history_msgs = await cleanup_empty_model_output(
+            executor,
+            stream_config,
+            user_message.agent_id,
+            thread_id,
+        )
+        history_summary = summarize_history_messages(history_msgs)
+        logger.error(
+            f"Agent {user_message.agent_id} produced no output messages. "
+            f"Total chunks received: {len(raw_chunks)}. "
+            f"Raw chunks: {raw_chunks}. "
+            f"Recent history ({len(history_summary)} of {len(history_msgs)} msgs): "
+            f"{history_summary}",
+            extra={"thread_id": thread_id},
+        )
+        yield await _create_system_error_response(
+            SystemMessageType.AGENT_INTERNAL_ERROR,
+            user_message,
+            time.perf_counter() - start,
+        )
+
+
+async def execute_agent(message: ChatMessageCreate) -> list[ChatMessage]:
+    """
+    Execute an agent with the given prompt and return response lines.
+
+    This function:
+    1. Configures execution context with thread ID
+    2. Initializes agent if not in cache
+    3. Streams agent execution results
+    4. Formats and times the execution steps
+
+    Args:
+        message (ChatMessageCreate): The chat message containing agent_id, chat_id, and message content
+        debug (bool): Enable debug mode, will save the tool results
+
+    Returns:
+        list[ChatMessage]: Formatted response lines including timing information
+    """
+    resp = []
+    async for chat_message in stream_agent(message):
+        resp.append(chat_message)
+    return resp
+
+
+async def thread_stats(agent_id: str, chat_id: str) -> list[BaseMessage]:
+    thread_id = f"{agent_id}-{chat_id}"
+    from langchain_core.runnables import RunnableConfig
+
+    stream_config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    executor, _ = await agent_executor(agent_id)
+    snap = await executor.aget_state(stream_config)
+    if snap.values and "messages" in snap.values:
+        return snap.values["messages"]
+    else:
+        return []

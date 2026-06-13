@@ -19,9 +19,11 @@ NO_GET_TOOLS = {"mcp_coingecko"}
 
 
 def _toolset_names():
+    # Mirror the tool_registry contract: a toolset category is a directory
+    # with a schema.json (shared infra packages like tools/mcp don't count).
     names = []
     for p in sorted(TOOLS_DIR.iterdir()):
-        if p.is_dir() and p.name != "__pycache__" and (p / "__init__.py").exists():
+        if p.is_dir() and (p / "schema.json").exists():
             names.append(p.name)
     return names
 
@@ -49,8 +51,6 @@ def test_toolset_imports_and_exposes_get_tools(name):
 @pytest.mark.parametrize("name", TOOLSETS)
 def test_toolset_schema_parses(name):
     schema = TOOLS_DIR / name / "schema.json"
-    if not schema.exists():
-        pytest.skip(f"{name} has no schema.json")
     data = json.loads(schema.read_text())
     props = data.get("properties", {})
     assert "states" in props or "enabled" in props, (
