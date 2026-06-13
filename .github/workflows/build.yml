@@ -7,7 +7,9 @@ on:
 jobs:
   publish-package:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'release' }}
+    # Only publish to PyPI from the public upstream repo; the private fork's
+    # test releases are skipped (shown grey, not failed).
+    if: ${{ github.event_name == 'release' && github.repository == 'crestalnetwork/intentkit' }}
     permissions:
       contents: read
       id-token: write
