@@ -16,6 +16,7 @@ from intentkit.models.llm_picker import (
     pick_default_model,
     pick_fastest_model,
     pick_finance_model,
+    pick_lead_model,
     pick_lite_model,
     pick_long_context_model,
     pick_multimodal_model,
@@ -27,6 +28,7 @@ from intentkit.models.llm_picker import (
 
 # Category pickers that always resolve to a model (fallback instead of raising).
 CATEGORY_PICKERS = [
+    pick_lead_model,
     pick_lite_model,
     pick_smartest_model,
     pick_fastest_model,
@@ -123,6 +125,16 @@ def test_pick_default_model_different_providers_yield_different_models():
     with mock_llm_config(deepseek_api_key="dk"):
         deepseek_result = pick_default_model()
     assert google_result != deepseek_result
+
+
+# ── pick_lead_model ──────────────────────────────────────────────────
+
+
+def test_pick_lead_model_differs_from_default_on_google():
+    """The lead runs an upgraded model, so it must not match the per-agent
+    default when Google (the top provider for both) is configured."""
+    with mock_llm_config(google_api_key="gk"):
+        assert pick_lead_model() != pick_default_model()
 
 
 # ── pick_long_context_model ──────────────────────────────────────────

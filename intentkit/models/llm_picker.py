@@ -91,6 +91,24 @@ def pick_default_model() -> str:
     return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
 
 
+def pick_lead_model() -> str:
+    """Pick the model for the team lead orchestrator.
+
+    The lead drives user conversation and multi-agent delegation, so it runs a
+    stronger flash model than the per-agent default (``pick_default_model``).
+    """
+    order: list[tuple[str, LLMProvider]] = [
+        ("gemini-3.5-flash", LLMProvider.GOOGLE),
+        ("google/gemini-3.5-flash", LLMProvider.OPENROUTER),
+        ("gpt-5.4-mini", LLMProvider.OPENAI),
+        ("grok-4.20-non-reasoning", LLMProvider.XAI),
+        ("MiniMax-M3", LLMProvider.MINIMAX),
+        ("deepseek-v4-flash", LLMProvider.DEEPSEEK),
+        ("mimo-v2.5", LLMProvider.MIMO_PLAN),
+    ]
+    return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
+
+
 def pick_lite_model() -> str:
     """Pick the cheapest/fastest "lite" model — good enough for simple tasks."""
     order: list[tuple[str, LLMProvider]] = [

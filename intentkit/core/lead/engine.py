@@ -36,7 +36,7 @@ from intentkit.core.lead.tools.call_agent import lead_call_agent_tool
 from intentkit.models.agent import Agent
 from intentkit.models.agent_data import AgentData
 from intentkit.models.chat import ChatMessage, ChatMessageCreate
-from intentkit.models.llm_picker import pick_default_model
+from intentkit.models.llm_picker import pick_lead_model
 from intentkit.models.team import Team
 from intentkit.utils.error import IntentKitAPIError
 
@@ -199,7 +199,7 @@ async def _build_lead_agent(team_id: str) -> Agent:
         ),
         "personality": lead_config.get("personality", LEAD_DEFAULT_PERSONALITY),
         "principles": "Speak to users in the language they ask their questions.",
-        "model": pick_default_model(),
+        "model": pick_lead_model(),
         "prompt": prompt,
         "prompt_append": None,
         "temperature": 0.5,
