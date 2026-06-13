@@ -81,6 +81,7 @@ dependencies = [
     "mcp>=1.0.0",
     # Chinese A-share market data (cn_stock tool)
     "akshare>=1.16.0",
+    "langfuse>=4.7,<5",
 ]
 keywords = ["ai", "agent", "intent", "blockchain", "crypto"]
 classifiers = [

@@ -241,13 +241,30 @@ class Config:
         self.cloudflare_api_token: str | None = self.load("CLOUDFLARE_API_TOKEN")
         # Z.AI Plan API
         self.zai_plan_api_key: str | None = self.load("ZAI_PLAN_API_KEY")
-        # LangSmith tracing. The langsmith SDK reads its settings from env
-        # vars directly; load them through config first (env or AWS secrets,
-        # quotes stripped) and write the sanitized values back for the SDK.
-        self.langsmith_tracing: bool = self.load("LANGSMITH_TRACING", "false") == "true"
+        # Tracing backends (LangSmith / Langfuse). Only one runs at a time:
+        # Langfuse takes precedence when its keys are present and LangSmith is
+        # disabled, so a deployment can A/B the two by swapping env vars.
+        # Values load through config first (env or AWS secrets, quotes stripped).
+        self.langfuse_public_key: str | None = self.load("LANGFUSE_PUBLIC_KEY")
+        self.langfuse_secret_key: str | None = self.load("LANGFUSE_SECRET_KEY")
+        # LANGFUSE_BASE_URL is the canonical name in the SDK; LANGFUSE_HOST is
+        # its legacy alias, kept as a fallback. Optional — defaults to cloud.
+        self.langfuse_base_url: str | None = self.load(
+            "LANGFUSE_BASE_URL"
+        ) or self.load("LANGFUSE_HOST")
+        self.langfuse_tracing: bool = bool(
+            self.langfuse_public_key and self.langfuse_secret_key
+        )
+        # LangSmith reads its settings from env vars directly; load them and
+        # write the sanitized values back for the SDK. Langfuse wins when both
+        # are configured, so LangSmith is forced off in that case.
         self.langsmith_api_key: str | None = self.load("LANGSMITH_API_KEY")
         self.langsmith_project: str = self.load("LANGSMITH_PROJECT", "intentkit")
         self.langsmith_endpoint: str | None = self.load("LANGSMITH_ENDPOINT")
+        self.langsmith_tracing: bool = (
+            self.load("LANGSMITH_TRACING", "false") == "true"
+            and not self.langfuse_tracing
+        )
         self._export_langsmith_env()
         # Sentry
         self.sentry_dsn: str | None = self.load("SENTRY_DSN")
@@ -296,6 +313,30 @@ class Config:
             redis_password=self.redis_password,
             redis_ssl=self.redis_ssl,
             env=self.env,
+            release=self.release,
+        )
+        # Attach Langfuse last, so its startup log uses the configured logging.
+        self._setup_langfuse()
+
+    def _setup_langfuse(self) -> None:
+        """Attach Langfuse to every LangChain run when its keys are configured.
+
+        Unlike LangSmith (env-var driven), Langfuse needs a callback handler;
+        ``intentkit.config.tracing`` registers it through LangChain's global
+        configure hook. Langfuse and LangSmith are mutually exclusive — see the
+        tracing-backend block in ``__init__``.
+        """
+        if not self.langfuse_tracing:
+            return
+        if not (self.langfuse_public_key and self.langfuse_secret_key):
+            return
+        from intentkit.config.tracing import setup_langfuse
+
+        _ = setup_langfuse(
+            public_key=self.langfuse_public_key,
+            secret_key=self.langfuse_secret_key,
+            base_url=self.langfuse_base_url,
+            environment=self.env,
             release=self.release,
         )
 

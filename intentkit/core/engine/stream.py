@@ -160,9 +160,9 @@ def build_stream_config(
 ) -> RunnableConfig:
     """Build the LangGraph run config for a chat stream.
 
-    The metadata block is attached by LangSmith tracing to every run in the
-    trace, so a shared tracing project can be filtered by environment, agent,
-    team, channel, etc.
+    The metadata block is attached by the active tracing backend (LangSmith or
+    Langfuse) to every run, so a shared tracing project can be filtered by
+    environment, agent, team, channel, etc.
     """
     # super mode — determined by agent config
     recursion_limit = config.recursion_limit
@@ -185,6 +185,12 @@ def build_stream_config(
         metadata["agent_team_id"] = agent.team_id
     if user_message.app_id:
         metadata["app_id"] = user_message.app_id
+    # Langfuse groups traces by these reserved metadata keys (LangSmith ignores
+    # them). Only set when Langfuse is the active backend.
+    if config.langfuse_tracing:
+        metadata["langfuse_session_id"] = thread_id
+        if user_message.user_id:
+            metadata["langfuse_user_id"] = user_message.user_id
     return {
         "configurable": {
             "thread_id": thread_id,

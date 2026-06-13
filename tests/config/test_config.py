@@ -1,6 +1,6 @@
 import os
 
-from intentkit.config.config import config
+from intentkit.config.config import Config, config
 
 _LANGSMITH_ENV_VARS = (
     "LANGSMITH_TRACING",
@@ -11,6 +11,18 @@ _LANGSMITH_ENV_VARS = (
     "LANGSMITH_PROJECT",
     "LANGSMITH_ENDPOINT",
 )
+
+_LANGFUSE_ENV_VARS = (
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LANGFUSE_BASE_URL",
+    "LANGFUSE_HOST",
+)
+
+
+def _clear_tracing_env(monkeypatch):
+    for var in (*_LANGSMITH_ENV_VARS, *_LANGFUSE_ENV_VARS):
+        monkeypatch.delenv(var, raising=False)
 
 
 def test_load_strips_matching_surrounding_quotes(monkeypatch):
@@ -66,3 +78,52 @@ def test_export_langsmith_env_disabled_without_key(monkeypatch):
         assert os.environ[var] == "false"
     assert "LANGSMITH_API_KEY" not in os.environ
     assert "LANGSMITH_PROJECT" not in os.environ
+
+
+def test_langfuse_takes_precedence_over_langsmith(monkeypatch):
+    _clear_tracing_env(monkeypatch)
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-key")
+    # Avoid initializing the real Langfuse client / global hook during the test.
+    called = {}
+    monkeypatch.setattr(
+        Config, "_setup_langfuse", lambda self: called.setdefault("ran", True)
+    )
+
+    cfg = Config()
+
+    assert cfg.langfuse_tracing is True
+    assert cfg.langsmith_tracing is False
+    # LangSmith must be force-disabled in the env so it does not also trace.
+    assert os.environ["LANGSMITH_TRACING"] == "false"
+    assert called.get("ran") is True
+
+
+def test_langsmith_used_when_no_langfuse(monkeypatch):
+    _clear_tracing_env(monkeypatch)
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-key")
+    monkeypatch.setattr(Config, "_setup_langfuse", lambda self: None)
+
+    cfg = Config()
+
+    assert cfg.langfuse_tracing is False
+    assert cfg.langsmith_tracing is True
+    assert os.environ["LANGSMITH_TRACING"] == "true"
+
+
+def test_langfuse_disabled_without_both_keys(monkeypatch):
+    _clear_tracing_env(monkeypatch)
+    # Only the public key is present — not enough to enable Langfuse.
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "ls-test-key")
+    monkeypatch.setattr(Config, "_setup_langfuse", lambda self: None)
+
+    cfg = Config()
+
+    assert cfg.langfuse_tracing is False
+    # LangSmith stays enabled because Langfuse did not take over.
+    assert cfg.langsmith_tracing is True
