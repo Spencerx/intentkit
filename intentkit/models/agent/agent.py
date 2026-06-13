@@ -14,7 +14,6 @@ import yaml
 from pydantic import ConfigDict
 from pydantic import Field as PydanticField
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from intentkit.config.db import get_session
 from intentkit.models.agent.db import AgentTable
@@ -269,14 +268,8 @@ class Agent(AgentCreate, AgentPublicInfo):
         return self.tools.get(category, {}) if self.tools else {}
 
     @classmethod
-    async def get_json_schema(
-        cls,
-        db: AsyncSession,
-    ) -> dict[str, Any]:
+    async def get_json_schema(cls) -> dict[str, Any]:
         """Get the JSON schema for Agent model with all $ref references resolved.
-
-        Args:
-            db: Database session
 
         Returns:
             Dict containing the complete JSON schema for the Agent model
@@ -294,11 +287,11 @@ class Agent(AgentCreate, AgentPublicInfo):
             # Get the model property from the schema
             model_property = schema.get("properties", {}).get("model", {})
 
-            # Process model property using defaults merged with database overrides
+            # Populate the model enum from the in-memory LLM catalog
             if model_property:
                 new_enum = []
 
-                for model_info in await LLMModelInfo.get_all(db):
+                for model_info in await LLMModelInfo.get_all():
                     if not model_info.enabled:
                         continue
                     new_enum.append(model_info.id)

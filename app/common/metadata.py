@@ -1,9 +1,7 @@
 import logging
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter
 
-from intentkit.config.db import get_db
 from intentkit.models.llm import LLMModelInfo, LLMProvider
 
 # Create a readonly router for metadata endpoints
@@ -22,7 +20,7 @@ class LLMModelInfoWithProviderName(LLMModelInfo):
     summary="Get all LLM models",
     description="Returns a list of all available LLM models in the system",
 )
-async def get_llms(db: AsyncSession = Depends(get_db)):
+async def get_llms():
     """
     Get all LLM models available in the system.
 
@@ -31,7 +29,7 @@ async def get_llms(db: AsyncSession = Depends(get_db)):
     """
     try:
         result_models = []
-        for model_info in await LLMModelInfo.get_all(db):
+        for model_info in await LLMModelInfo.get_all():
             provider = LLMProvider(model_info.provider)
             result_models.append(
                 LLMModelInfoWithProviderName(

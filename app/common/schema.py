@@ -3,12 +3,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi import Path as PathParam
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from intentkit.config.db import get_db
 from intentkit.models.agent import AGENT_TAG_CATEGORIES, Agent, AgentPublicInfo
 from intentkit.tools.availability import (
     filter_unavailable_states,
@@ -63,24 +61,19 @@ def _simplify_tool_schema(tool_schema: dict[str, Any]) -> dict[str, Any]:
 
 
 @schema_router.get("/schema/agent", tags=["Metadata"], operation_id="get_agent_schema")
-async def get_agent_schema(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+async def get_agent_schema() -> JSONResponse:
     """Get the JSON schema for Agent model with all $ref references resolved.
 
     This function applies additional adaptations:
+    - Populates the model enum from the in-memory LLM catalog (enabled models only)
     - Filters out toolsets where available() returns False
     - Simplifies tool schemas to only keep enabled and states fields
     - Removes telegram-related fields
 
-    Updates the model property in the schema based on LLMModelInfo.get results.
-    For each model in the enum list:
-    - If the model is not found in LLMModelInfo, it remains unchanged
-    - If the model is found but disabled (enabled=False), it is removed from the schema
-    - If the model is found and enabled, its properties are updated based on the LLMModelInfo record
-
     **Returns:**
     * `JSONResponse` - The complete JSON schema for the Agent model with application/json content type
     """
-    schema = await Agent.get_json_schema(db)
+    schema = await Agent.get_json_schema()
     properties = schema.get("properties", {})
 
     # Remove telegram-related fields

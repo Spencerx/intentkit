@@ -4,7 +4,7 @@ Logic for selecting the best available LLM model for various tasks.
 Each ``pick_*`` function defines a provider-spanning preference list and returns
 the first model whose provider is configured in this deployment. The lists are
 hand-ranked and meant to be tuned over time — the model catalogue itself lives
-in ``llm.csv``.
+in ``llm.yaml``.
 """
 
 from intentkit.config.config import config

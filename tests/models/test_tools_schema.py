@@ -1,30 +1,12 @@
-import pytest  # noqa: F401
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import async_sessionmaker
+import pytest
 
-from intentkit.config.base import Base
 from intentkit.models.agent import Agent
-from intentkit.models.llm import LLMModelInfoTable
-
-
-@pytest_asyncio.fixture()
-async def session(db_engine):
-    async with db_engine.begin() as conn:
-        await conn.run_sync(
-            Base.metadata.create_all,
-            tables=[LLMModelInfoTable.__table__],
-        )
-
-    session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
-
-    async with session_factory() as session:
-        yield session
 
 
 @pytest.mark.asyncio
-async def test_agent_get_json_schema_includes_toolsets(session):
+async def test_agent_get_json_schema_includes_toolsets():
     """Test that Agent.get_json_schema includes toolsets from schema.json files."""
-    schema = await Agent.get_json_schema(session)
+    schema = await Agent.get_json_schema()
 
     tools_schema = schema["properties"]["tools"]["properties"]
     # erc20 should be present since it has a schema.json

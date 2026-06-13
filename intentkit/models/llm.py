@@ -1,5 +1,3 @@
-import csv
-import json
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -8,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Callable, ClassVar
 
+import yaml
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
@@ -15,15 +14,9 @@ from langchain_core.outputs import ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
 from typing_extensions import override
 
-from intentkit.config.base import Base
 from intentkit.config.config import config
-from intentkit.config.db import get_session
-from intentkit.config.redis import get_redis
 from intentkit.models.app_setting import AppSetting
 from intentkit.utils.error import IntentKitAPIError
 
@@ -36,109 +29,40 @@ credit_per_usdc = None
 FOURPLACES = Decimal("0.0001")
 
 
-def _parse_bool(value: str | None) -> bool:
-    if value is None:
-        return False
-    return value.strip().lower() in {"true", "1", "yes"}
-
-
-def _parse_optional_int(value: str | None) -> int | None:
-    if value is None:
-        return None
-    value = value.strip()
-    return int(value) if value else None
-
-
-def _parse_optional_decimal(value: str | None) -> Decimal | None:
-    if value is None:
-        return None
-    value = value.strip()
-    return Decimal(value) if value else None
-
-
 def load_default_llm_models() -> dict[str, "LLMModelInfo"]:
-    """Load default LLM models from a CSV file.
+    """Load default LLM models from the bundled ``llm.yaml`` catalog.
 
     Models are keyed by ``{provider}:{id}`` so that the same model ID from
     different providers (e.g. ``deepseek-v4-flash`` via DeepSeek *and* OpenRouter)
     is preserved as separate entries.
     """
 
-    path = Path(__file__).with_name("llm.csv")
+    path = Path(__file__).with_name("llm.yaml")
     if not path.exists():
-        logger.warning("Default LLM CSV not found at %s", path)
+        logger.warning("Default LLM YAML not found at %s", path)
         return {}
 
+    with path.open(encoding="utf-8") as f:
+        rows: list[dict[str, Any]] = yaml.safe_load(f) or []
+
     defaults: dict[str, LLMModelInfo] = {}
-    with path.open(newline="", encoding="utf-8") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            try:
-                row_id = row.get("id")
-                if not row_id:
-                    continue
-
-                timestamp = datetime.now(UTC)
-                provider_val = row.get("provider", "")
-                if not provider_val:
-                    continue
-                provider = LLMProvider(provider_val)
-
-                # Use a dict to gather attributes for cleaner instantiation
-                attrs: dict[str, Any] = {
-                    "id": row_id,
-                    "name": row.get("name") or row_id,
-                    "provider": provider,
-                    "enabled": _parse_bool(row.get("enabled")),
-                    "input_price": Decimal(row.get("input_price", "0")),
-                    "cached_input_price": _parse_optional_decimal(
-                        row.get("cached_input_price")
-                    ),
-                    "output_price": Decimal(row.get("output_price", "0")),
-                    "price_level": _parse_optional_int(row.get("price_level")),
-                    "context_length": int(row.get("context_length") or 0),
-                    "output_length": int(row.get("output_length") or 0),
-                    "intelligence": int(row.get("intelligence") or 1),
-                    "speed": int(row.get("speed") or 1),
-                    "supports_image_input": _parse_bool(
-                        row.get("supports_image_input")
-                    ),
-                    "supports_audio_input": _parse_bool(
-                        row.get("supports_audio_input")
-                    ),
-                    "supports_video_input": _parse_bool(
-                        row.get("supports_video_input")
-                    ),
-                    "supports_file_input": _parse_bool(row.get("supports_file_input")),
-                    "reasoning_effort": row.get("reasoning_effort", "").strip() or None,
-                    "supports_temperature": _parse_bool(
-                        row.get("supports_temperature")
-                    ),
-                    "supports_frequency_penalty": _parse_bool(
-                        row.get("supports_frequency_penalty")
-                    ),
-                    "supports_presence_penalty": _parse_bool(
-                        row.get("supports_presence_penalty")
-                    ),
-                    "timeout": int(row.get("timeout") or 180),
-                    "created_at": timestamp,
-                    "updated_at": timestamp,
-                }
-                model = LLMModelInfo(**attrs)
-                if not model.enabled:
-                    continue
-                if not model.provider.is_configured:
-                    continue
-            except Exception as exc:
-                logger.error(
-                    "Failed to load default LLM model %s: %s", row.get("id"), exc
-                )
+    for row in rows:
+        row_id = row.get("id") if isinstance(row, dict) else None
+        try:
+            # Pydantic coerces the catalog's string prices to exact Decimals and
+            # validates types; unknown providers raise here and are skipped.
+            model = LLMModelInfo.model_validate(row)
+            if not model.enabled:
                 continue
-            # Key by provider:id so the same model from different providers is kept
-            key = f"{provider.value}:{row_id}"
-            defaults[key] = model
+            if not model.provider.is_configured:
+                continue
+        except Exception as exc:
+            logger.error("Failed to load default LLM model %s: %s", row_id, exc)
+            continue
+        # Key by provider:id so the same model from different providers is kept
+        defaults[f"{model.provider.value}:{model.id}"] = model
 
-    # Load OpenAI Compatible models from config (not CSV)
+    # Load OpenAI Compatible models from config (not the YAML catalog)
     if (
         config.openai_compatible_api_key
         and config.openai_compatible_base_url
@@ -185,7 +109,7 @@ def load_default_llm_models() -> dict[str, "LLMModelInfo"]:
             )
             defaults[f"{provider.value}:{lite_id}"] = lite_model
 
-    # Load Anthropic Compatible models from config (not CSV)
+    # Load Anthropic Compatible models from config (not the YAML catalog)
     if (
         config.anthropic_compatible_api_key
         and config.anthropic_compatible_base_url
@@ -289,83 +213,19 @@ class LLMProvider(str, Enum):
         return display_names.get(self, self.value)
 
 
-class LLMModelInfoTable(Base):
-    """Database table model for LLM model information."""
-
-    __tablename__: str = "llm_models"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    provider: Mapped[str] = mapped_column(String, nullable=False)  # Stored as enum
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    input_price: Mapped[Decimal] = mapped_column(
-        Numeric(22, 4), nullable=False
-    )  # Price per 1M input tokens in USD
-    cached_input_price: Mapped[Decimal | None] = mapped_column(
-        Numeric(22, 4), nullable=True
-    )  # Price per 1M cached input tokens in USD
-    output_price: Mapped[Decimal] = mapped_column(
-        Numeric(22, 4), nullable=False
-    )  # Price per 1M output tokens in USD
-    price_level: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )  # Price level rating
-    context_length: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # Context length
-    output_length: Mapped[int] = mapped_column(Integer, nullable=False)  # Output length
-    intelligence: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )  # Intelligence rating
-    speed: Mapped[int] = mapped_column(Integer, nullable=False)  # Speed rating
-    supports_image_input: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    supports_audio_input: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    supports_video_input: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    supports_file_input: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    reasoning_effort: Mapped[str | None] = mapped_column(String, nullable=True)
-    supports_temperature: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    supports_frequency_penalty: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    supports_presence_penalty: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    timeout: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=180
-    )  # Timeout seconds
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=lambda: datetime.now(UTC),
-    )
-
-
 class LLMModelInfo(BaseModel):
     """Information about an LLM model."""
-
-    model_config: ClassVar[ConfigDict] = ConfigDict(
-        from_attributes=True,
-    )
 
     id: str
     name: str
     provider: LLMProvider
+    origin_provider: str | None = Field(
+        default=None,
+        description=(
+            "OpenRouter-only: pin the upstream provider using an OpenRouter "
+            "provider routing slug. None lets OpenRouter choose."
+        ),
+    )
     enabled: bool = Field(default=True)
     input_price: Decimal  # Price per 1M input tokens in USD
     cached_input_price: Decimal | None = None  # Price per 1M cached input tokens in USD
@@ -416,61 +276,24 @@ class LLMModelInfo(BaseModel):
 
     @staticmethod
     async def get(model_id: str) -> "LLMModelInfo":
-        """Get a model by ID with Redis caching.
+        """Get a model by ID from the in-memory catalog.
 
-        The model info is cached in Redis for 3 minutes.
+        Resolution order:
+
+        1. Exact key — supports both the composite ``provider:id`` key and a
+           legacy bare ``id``.
+        2. Backward-compatible fallback by bare model id; when several providers
+           expose the same id, native providers are preferred over OpenRouter.
 
         Args:
-            model_id: ID of the model to retrieve
+            model_id: ID of the model to retrieve.
 
-        Returns:
-            LLMModelInfo: The model info if found, None otherwise
+        Raises:
+            IntentKitAPIError: if no model matches ``model_id``.
         """
-        # Redis cache key for model info
-        cache_key = f"intentkit:llm_model:{model_id}"
-        cache_ttl = 180  # 3 minutes in seconds
-
-        # Try to get from Redis cache first
-        redis = get_redis()
-        cached_data = await redis.get(cache_key)
-
-        if cached_data:
-            # If found in cache, deserialize and return
-            try:
-                return LLMModelInfo.model_validate_json(cached_data)
-            except (json.JSONDecodeError, TypeError):
-                # If cache is corrupted, invalidate it
-                await redis.delete(cache_key)
-
-        # If not in cache or cache is invalid, get from database
-        async with get_session() as session:
-            # Query the database for the model
-            stmt = select(LLMModelInfoTable).where(LLMModelInfoTable.id == model_id)
-            model = await session.scalar(stmt)
-
-            # If model exists in database, convert to LLMModelInfo model and cache it
-            if model:
-                # Convert provider string to enum
-                model_info = LLMModelInfo.model_validate(model)
-
-                # Cache the model in Redis
-                await redis.set(
-                    cache_key,
-                    model_info.model_dump_json(),
-                    ex=cache_ttl,
-                )
-
-                return model_info
-
-        # If not found in database, check AVAILABLE_MODELS.
         # Try exact key first (supports both "provider:id" and legacy "id" keys).
         if model_id in AVAILABLE_MODELS:
-            model_info = AVAILABLE_MODELS[model_id]
-
-            # Cache the model in Redis
-            await redis.set(cache_key, model_info.model_dump_json(), ex=cache_ttl)
-
-            return model_info
+            return AVAILABLE_MODELS[model_id]
 
         # Backward-compatible fallback: match by bare model id.
         # If multiple providers have the same model id, prefer native over OpenRouter.
@@ -490,7 +313,6 @@ class LLMModelInfo(BaseModel):
                 fallback.provider.value,
                 fallback.id,
             )
-            await redis.set(cache_key, fallback.model_dump_json(), ex=cache_ttl)
             return fallback
 
         # Not found anywhere
@@ -501,25 +323,12 @@ class LLMModelInfo(BaseModel):
         )
 
     @classmethod
-    async def get_all(cls, session: AsyncSession | None = None) -> list["LLMModelInfo"]:
-        """Return all models merged from defaults and database overrides."""
+    async def get_all(cls) -> list["LLMModelInfo"]:
+        """Return all models from the in-memory catalog.
 
-        if session is None:
-            async with get_session() as db:
-                return await cls.get_all(session=db)
-
-        models: dict[str, LLMModelInfo] = {
-            model_id: model.model_copy(deep=True)
-            for model_id, model in AVAILABLE_MODELS.items()
-        }
-
-        result = await session.execute(select(LLMModelInfoTable))
-        for row in result.scalars():
-            model_info = cls.model_validate(row)
-            key = f"{model_info.provider.value}:{model_info.id}"
-            models[key] = model_info
-
-        return list(models.values())
+        Kept ``async`` (despite no I/O) so the awaited call sites stay stable.
+        """
+        return list(AVAILABLE_MODELS.values())
 
     async def calculate_cost(
         self, input_tokens: int, output_tokens: int, cached_input_tokens: int = 0
@@ -563,7 +372,7 @@ class LLMModelInfo(BaseModel):
         )
 
 
-# Default models loaded from CSV
+# Default models loaded from the YAML catalog
 AVAILABLE_MODELS = load_default_llm_models()
 
 # Reverse index: model id → list of composite keys in AVAILABLE_MODELS.
@@ -615,10 +424,9 @@ class LLMModel(BaseModel):
     info: LLMModelInfo
 
     async def model_info(self) -> LLMModelInfo:
-        """Get the model information with caching.
+        """Resolve this model's info from the in-memory catalog.
 
-        First tries to get from cache, then database, then default models loaded from CSV.
-        Raises ValueError if model is not found anywhere.
+        Raises IntentKitAPIError if the model is not found.
         """
         model_info = await LLMModelInfo.get(self.model_name)
         return model_info
@@ -875,6 +683,15 @@ class OpenRouterLLM(LLMModel):
 
         if info.reasoning_effort:
             kwargs["reasoning"] = {"effort": info.reasoning_effort}
+
+        # Pin the upstream provider on OpenRouter when configured; otherwise leave
+        # routing to OpenRouter. allow_fallbacks=False makes it a hard lock so the
+        # request fails rather than silently routing to a different provider.
+        if info.origin_provider:
+            kwargs["openrouter_provider"] = {
+                "order": [info.origin_provider],
+                "allow_fallbacks": False,
+            }
 
         # Update kwargs with params to allow overriding
         kwargs.update(params)
