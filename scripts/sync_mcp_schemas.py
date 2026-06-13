@@ -10,10 +10,9 @@ Requires the MCP server API keys to be set in environment variables.
 import asyncio
 import json
 import logging
-import sys
 from pathlib import Path
 
-from intentkit.clients.mcp.client import McpToolInfo, list_mcp_tools
+from intentkit.clients.mcp.client import list_mcp_tools
 from intentkit.clients.mcp.registry import MCP_SERVERS, McpServerDef
 from intentkit.config.config import config
 
@@ -23,15 +22,23 @@ logger = logging.getLogger(__name__)
 TOOLS_DIR = Path(__file__).parent.parent / "intentkit" / "tools"
 
 
-def generate_schema(server_def: McpServerDef, tools: list[McpToolInfo]) -> dict:
-    """Generate schema.json content for an MCP server tool category."""
-    states_properties: dict[str, object] = {}
-    for tool in tools:
-        tool_name = f"{server_def.name}_{tool.name}"
-        states_properties[tool_name] = {
+def generate_schema(server_def: McpServerDef) -> dict:
+    """Generate schema.json content for an MCP server tool category.
+
+    The schema is a fixed, coarse shape: one visibility toggle for the whole
+    server (keyed by the server name), not a per-tool snapshot. The remote
+    server's actual tools are discovered live at runtime, so the schema never
+    enumerates them and therefore never goes stale when the server changes.
+    """
+    states_properties: dict[str, object] = {
+        server_def.name: {
             "type": "string",
-            "title": tool.name.replace("_", " ").title(),
-            "description": tool.description or f"MCP tool: {tool.name}",
+            "title": f"All {server_def.display_name} Tools",
+            "description": (
+                f"Expose every tool offered by the {server_def.display_name} "
+                "MCP server. The exact tools are discovered live from the "
+                "server at runtime."
+            ),
             "enum": ["disabled", "public", "private"],
             "x-enum-title": [
                 "Disabled",
@@ -40,6 +47,7 @@ def generate_schema(server_def: McpServerDef, tools: list[McpToolInfo]) -> dict:
             ],
             "default": "disabled",
         }
+    }
 
     schema: dict[str, object] = {
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -91,8 +99,15 @@ Config = _module.Config
 '''
 
 
-async def sync_server(server_def: McpServerDef) -> bool:
-    """Sync schema for a single MCP server. Returns True on success."""
+async def sync_server(server_def: McpServerDef) -> None:
+    """Sync schema for a single MCP server.
+
+    The generated schema is a fixed coarse shape derived only from the server
+    definition, so syncing does not depend on the remote server. We still
+    probe it for an informational tool count, but a failed probe does not fail
+    the sync (the server may be down or its tool list may change later). A real
+    failure (e.g. unwritable file) raises and aborts the run.
+    """
     logger.info("Syncing '%s' from %s ...", server_def.name, server_def.url)
 
     # Resolve API key
@@ -101,25 +116,28 @@ async def sync_server(server_def: McpServerDef) -> bool:
         api_key = getattr(config, server_def.api_key_config_attr, None)
         if not api_key:
             logger.warning(
-                "  No API key found for '%s' (config.%s). Trying without auth...",
+                "  No API key found for '%s' (config.%s). Probing without auth...",
                 server_def.name,
                 server_def.api_key_config_attr,
             )
 
+    # Informational connectivity probe only — not used to build the schema.
     try:
         tools = await list_mcp_tools(server_def, api_key)
+        logger.info("  Reachable: server currently offers %d tool(s)", len(tools))
     except Exception:
-        logger.error("  Failed to connect to '%s'", server_def.name, exc_info=True)
-        return False
-
-    logger.info("  Discovered %d tools", len(tools))
+        logger.warning(
+            "  Could not reach '%s'; writing schema anyway (tools are "
+            "discovered at runtime)",
+            server_def.name,
+        )
 
     # Create directory
     category_dir = TOOLS_DIR / server_def.name
     category_dir.mkdir(exist_ok=True)
 
     # Write schema.json (preserve x-icon from existing schema if present)
-    schema = generate_schema(server_def, tools)
+    schema = generate_schema(server_def)
     schema_path = category_dir / "schema.json"
     if schema_path.exists():
         existing = json.loads(schema_path.read_text())
@@ -136,28 +154,13 @@ async def sync_server(server_def: McpServerDef) -> bool:
     else:
         logger.info("  Skipped %s (manually edited)", init_path)
 
-    return True
-
 
 async def main() -> None:
     """Sync all registered MCP servers."""
     logger.info("Syncing %d MCP server(s)...", len(MCP_SERVERS))
-
-    results: dict[str, bool] = {}
-    for name, server_def in MCP_SERVERS.items():
-        results[name] = await sync_server(server_def)
-
-    # Summary
-    logger.info("")
-    logger.info("=== Summary ===")
-    for name, ok in results.items():
-        status = "OK" if ok else "FAILED"
-        logger.info("  %s: %s", name, status)
-
-    failed = [n for n, ok in results.items() if not ok]
-    if failed:
-        logger.error("%d server(s) failed: %s", len(failed), ", ".join(failed))
-        sys.exit(1)
+    for _name, server_def in MCP_SERVERS.items():
+        await sync_server(server_def)
+    logger.info("Done.")
 
 
 if __name__ == "__main__":

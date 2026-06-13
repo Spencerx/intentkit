@@ -208,8 +208,9 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 
 [tool.deptry]
 known_first_party = ["intentkit"]
-# scripts/ are one-off ops tools run in the dev env; tests run under dev deps
-exclude = ["scripts", "tests", "frontend", "docs", "\\.venv"]
+# scripts/ are one-off ops tools run in the dev env; tests run under dev deps;
+# .claude may hold throwaway git worktrees (separate checkouts of this repo)
+exclude = ["scripts", "tests", "frontend", "docs", "\\.venv", "\\.claude"]
 
 [tool.deptry.per_rule_ignores]
 # asyncpg/aiosqlite are loaded dynamically by SQLAlchemy as DB drivers;

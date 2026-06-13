@@ -7,13 +7,15 @@ from typing import Any
 from intentkit.clients.mcp.client import list_mcp_tools
 from intentkit.clients.mcp.registry import MCP_SERVERS, McpServerDef
 from intentkit.config.config import config as system_config
-from intentkit.tools.base import ToolsetConfig, filter_enabled_tool_names
+from intentkit.tools.base import ToolsetConfig, is_tool_visible
 from intentkit.tools.mcp.tool import McpToolTool, create_mcp_tool
 
 logger = logging.getLogger(__name__)
 
-# In-memory cache: {server_name: (tool_instances, timestamp)}
-_cache: dict[str, tuple[dict[str, McpToolTool], float]] = {}
+# In-memory cache: {(server_name, api_key): (tool_instances, timestamp)}.
+# Keyed by the resolved API key too, because a server may expose a different
+# tool set per key — sharing one entry across keys would poison discovery.
+_cache: dict[tuple[str, str | None], tuple[dict[str, McpToolTool], float]] = {}
 _CACHE_TTL = 3600  # 1 hour
 
 
@@ -29,14 +31,15 @@ async def _get_mcp_tool_instances(
     api_key_override: str | None = None,
 ) -> dict[str, McpToolTool]:
     """Get pre-built tool instances for an MCP server, with caching."""
+    api_key = api_key_override or _resolve_system_api_key(server_def)
+    cache_key = (server_def.name, api_key)
+
     now = time.time()
-    cached = _cache.get(server_def.name)
+    cached = _cache.get(cache_key)
     if cached:
         instances, ts = cached
         if now - ts < _CACHE_TTL:
             return instances
-
-    api_key = api_key_override or _resolve_system_api_key(server_def)
 
     try:
         tool_infos = await list_mcp_tools(server_def, api_key)
@@ -46,7 +49,7 @@ async def _get_mcp_tool_instances(
             )
             for t in tool_infos
         }
-        _cache[server_def.name] = (instances, now)
+        _cache[cache_key] = (instances, now)
         logger.info(
             "Discovered %d tools from MCP server '%s'",
             len(instances),
@@ -82,10 +85,16 @@ class McpCategoryModule:
         is_private: bool,
         **_: Any,
     ) -> list[McpToolTool]:
-        """Discover MCP tools, filter by states, return McpToolTool instances."""
-        states: dict[str, Any] = config.get("states", {})
-        available_tools = set(filter_enabled_tool_names(states, is_private))
-        if not available_tools:
+        """Expose the server's tools, gated by one coarse visibility setting.
+
+        Remote MCP servers own their (changing) tool list, so we never
+        snapshot or toggle individual tools. The agent config carries a single
+        visibility state for the whole server, keyed by the server name; when
+        it permits the current caller, every tool discovered live from the
+        server is exposed. This can't drift when the server changes its tools.
+        """
+        visibility = config.get("states", {}).get(self._server_def.name)
+        if not is_tool_visible(visibility, is_private):
             return []
 
         # Use per-agent API key for discovery if system key is not set
@@ -93,7 +102,7 @@ class McpCategoryModule:
         instances = await _get_mcp_tool_instances(
             self._server_def, api_key_override=agent_api_key
         )
-        return [s for name, s in instances.items() if name in available_tools]
+        return list(instances.values())
 
     def available(self) -> bool:
         """Check if this MCP server is available.

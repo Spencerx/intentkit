@@ -46,18 +46,21 @@ class ToolsetConfig(TypedDict):
     __extra__: NotRequired[dict[str, Any]]
 
 
+def is_tool_visible(state: object, is_private: bool) -> bool:
+    """Whether a tool/toolset with this visibility state is exposed here.
+
+    "public" is always visible; "private" only to the agent owner/team;
+    "disabled" (or anything unset) never.
+    """
+    return state == "public" or (state == "private" and is_private)
+
+
 def filter_enabled_tool_names(
     states: Mapping[str, object], is_private: bool
 ) -> list[str]:
-    """Tool names whose configured state allows them in this context.
-
-    "public" tools are always allowed; "private" tools only when the caller
-    is the agent owner/team; "disabled" tools never.
-    """
+    """Tool names whose configured state allows them in this context."""
     return [
-        name
-        for name, state in states.items()
-        if state == "public" or (state == "private" and is_private)
+        name for name, state in states.items() if is_tool_visible(state, is_private)
     ]
 
 
