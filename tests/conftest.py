@@ -10,6 +10,16 @@ os.environ["LANGSMITH_TRACING"] = "false"
 os.environ["LANGSMITH_TRACING_V2"] = "false"
 os.environ["LANGCHAIN_TRACING"] = "false"
 os.environ["LANGCHAIN_TRACING_V2"] = "false"
+# Likewise for Langfuse: it activates on key presence and registers a global
+# LangChain callback at config import, so any agent/LLM run in the suite would
+# emit traces. Drop the keys before intentkit.config loads so it stays off.
+for _var in (
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LANGFUSE_BASE_URL",
+    "LANGFUSE_HOST",
+):
+    os.environ.pop(_var, None)
 os.environ.setdefault("REDIS_HOST", "localhost")
 
 import pytest  # noqa: E402
