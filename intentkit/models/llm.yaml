@@ -260,6 +260,29 @@
   supports_presence_penalty: true
   timeout: 300
 
+- id: "moonshotai/kimi-k2.7-code"
+  name: "Moonshot Kimi K2.7 Code"
+  provider: openrouter
+  origin_provider: "moonshotai/int4"   # lock OpenRouter upstream
+  enabled: true
+  input_price: "0.95"
+  cached_input_price: "0.16"
+  output_price: "4"
+  price_level: 2
+  context_length: 262144
+  output_length: 65536
+  intelligence: 4
+  speed: 3
+  supports_image_input: true
+  supports_audio_input: false
+  supports_video_input: false
+  supports_file_input: false
+  reasoning_effort: "high"
+  supports_temperature: true
+  supports_frequency_penalty: true
+  supports_presence_penalty: true
+  timeout: 300
+
 - id: "qwen/qwen3.6-flash"
   name: "Qwen3.6 Flash"
   provider: openrouter
