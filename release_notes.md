@@ -1,5 +1,5 @@
-# Release v2.6.1
+# Release v2.6.2
 
-## New Features
+## Improvements
 
-- Added Moonshot Kimi K2.7 Code, a coding-focused model, to the list of selectable LLM models.
+- Internal plumbing only, no user-facing changes: added a cached team display-info lookup (team name/avatar) for read-time enrichment, and ensured the automated test suite no longer sends observability traces to Langfuse.
