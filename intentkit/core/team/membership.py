@@ -420,12 +420,15 @@ async def _invalidate_role_cache(team_id: str, user_id: str) -> None:
 
 
 async def _invalidate_team_cache(team_id: str) -> None:
-    """Delete cached team entry from Redis."""
+    """Drop both cached team entries (full object + display info) from Redis."""
+    from intentkit.core.team.info import invalidate_team_info
+
     try:
         redis = get_redis()
         await redis.delete(f"{_CACHE_TEAM_PREFIX}{team_id}")
     except Exception as e:
         logger.warning("Failed to invalidate team cache for %s: %s", team_id, e)
+    await invalidate_team_info(team_id)
 
 
 async def change_member_role(team_id: str, user_id: str, new_role: TeamRole) -> None:

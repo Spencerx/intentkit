@@ -9,6 +9,12 @@ from intentkit.core.team.feed import (
     query_activity_feed,
     query_post_feed,
 )
+from intentkit.core.team.info import (
+    TeamInfo,
+    get_team_info,
+    get_team_infos,
+    invalidate_team_info,
+)
 from intentkit.core.team.membership import (
     change_member_role,
     check_permission,
@@ -29,6 +35,7 @@ from intentkit.core.team.subscription import (
 )
 
 __all__ = [
+    "TeamInfo",
     "auto_subscribe_team",
     "change_member_role",
     "check_permission",
@@ -39,6 +46,9 @@ __all__ = [
     "generate_team_avatar",
     "get_subscriptions",
     "get_team",
+    "get_team_info",
+    "get_team_infos",
+    "invalidate_team_info",
     "join_team",
     "query_activity_feed",
     "query_post_feed",
