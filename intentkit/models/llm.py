@@ -371,6 +371,30 @@ class LLMModelInfo(BaseModel):
             FOURPLACES, rounding=ROUND_HALF_UP
         )
 
+    def cost_usd(
+        self, input_tokens: int, output_tokens: int, cached_input_tokens: int = 0
+    ) -> Decimal:
+        """USD cost for a generation's token usage.
+
+        Unlike ``calculate_cost`` (which returns a credit amount for billing),
+        this is plain USD for observability — sent to Langfuse so its trace cost
+        matches our catalog prices, including the discounted cached-input rate.
+        """
+        input_tokens = max(input_tokens, 0)
+        output_tokens = max(output_tokens, 0)
+        cached = min(max(cached_input_tokens, 0), input_tokens)
+        non_cached = input_tokens - cached
+        cached_price = (
+            self.cached_input_price
+            if self.cached_input_price is not None
+            else self.input_price
+        )
+        return (
+            Decimal(non_cached) * self.input_price
+            + Decimal(cached) * cached_price
+            + Decimal(output_tokens) * self.output_price
+        ) / Decimal(1000000)
+
 
 # Default models loaded from the YAML catalog
 AVAILABLE_MODELS = load_default_llm_models()
@@ -1018,3 +1042,56 @@ async def create_llm_model(
         presence_penalty=presence_penalty,
         info=info,
     )
+
+
+def _resolve_generation_cost(response: object) -> float | None:
+    """USD cost for a finished LLM run, for Langfuse's per-generation cost.
+
+    Prefers the provider-reported charge (OpenRouter returns the real cost in
+    ``response_metadata['cost']``); otherwise prices the run's token usage with
+    the catalog's USD rates, so trace cost matches billing and Gemini cache-read
+    is counted at the cached rate. Returns ``None`` when neither is available, in
+    which case Langfuse falls back to inferring cost from its own model prices.
+    """
+    try:
+        generations = getattr(response, "generations", None)
+        if not generations or not generations[-1]:
+            return None
+        message = getattr(generations[-1][-1], "message", None)
+        if message is None:
+            return None
+        metadata = getattr(message, "response_metadata", None) or {}
+
+        # 1. Provider-reported cost wins (OpenRouter's real charge).
+        provider_cost = metadata.get("cost")
+        if isinstance(provider_cost, (int, float)) and provider_cost > 0:
+            return float(provider_cost)
+
+        # 2. Otherwise price our token usage with catalog rates.
+        usage = getattr(message, "usage_metadata", None)
+        if not usage:
+            return None
+        model_name = metadata.get("model_name") or metadata.get("model")
+        if isinstance(model_name, str) and model_name.startswith("models/"):
+            model_name = model_name[len("models/") :]
+        keys = _MODEL_ID_INDEX.get(model_name) if model_name else None
+        info = AVAILABLE_MODELS.get(keys[0]) if keys else None
+        if info is None:
+            return None
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        cached = int((usage.get("input_token_details") or {}).get("cache_read") or 0)
+        return float(info.cost_usd(input_tokens, output_tokens, cached))
+    except Exception:
+        return None
+
+
+# Register the resolver so the Langfuse callback (config layer) can price
+# generations without importing the model catalog. Best-effort: tracing is
+# optional and may be unavailable in trimmed environments.
+try:
+    from intentkit.config.tracing import set_generation_cost_resolver
+
+    set_generation_cost_resolver(_resolve_generation_cost)
+except Exception:  # pragma: no cover - tracing is optional
+    pass

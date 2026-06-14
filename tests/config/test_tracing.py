@@ -1,6 +1,68 @@
 """Tests for Langfuse tracing setup (intentkit.config.tracing)."""
 
+import pytest
+
 from intentkit.config import tracing
+
+
+class _FakeGeneration:
+    def __init__(self):
+        self.cost_details = None
+
+    def update(self, *, cost_details=None, **kwargs):
+        self.cost_details = cost_details
+        return self
+
+
+@pytest.fixture
+def restore_resolver():
+    saved = tracing._cost_resolver
+    yield
+    tracing._cost_resolver = saved
+
+
+def test_apply_cost_details_sets_cost_on_generation(restore_resolver):
+    gen = _FakeGeneration()
+    tracing.set_generation_cost_resolver(lambda response: 0.0042)
+
+    tracing._apply_cost_details({"r1": gen}, "r1", object())
+
+    assert gen.cost_details == {"total": 0.0042}
+
+
+def test_apply_cost_details_noop_when_resolver_returns_none(restore_resolver):
+    gen = _FakeGeneration()
+    tracing.set_generation_cost_resolver(lambda response: None)
+
+    tracing._apply_cost_details({"r1": gen}, "r1", object())
+
+    assert gen.cost_details is None
+
+
+def test_apply_cost_details_noop_when_run_missing(restore_resolver):
+    tracing.set_generation_cost_resolver(lambda response: 1.0)
+    # No generation for this run_id => nothing happens, no error.
+    tracing._apply_cost_details({}, "missing", object())
+
+
+def test_apply_cost_details_survives_resolver_error(restore_resolver):
+    gen = _FakeGeneration()
+
+    def boom(response):
+        raise RuntimeError("resolver blew up")
+
+    tracing.set_generation_cost_resolver(boom)
+
+    # Best effort: a resolver error must not propagate out of the callback.
+    tracing._apply_cost_details({"r1": gen}, "r1", object())
+    assert gen.cost_details is None
+
+
+def test_apply_cost_details_noop_when_no_resolver(restore_resolver):
+    tracing._cost_resolver = None
+    gen = _FakeGeneration()
+    tracing._apply_cost_details({"r1": gen}, "r1", object())
+    assert gen.cost_details is None
 
 
 class _FakeLangfuse:

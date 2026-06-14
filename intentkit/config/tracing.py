@@ -13,7 +13,7 @@ deployment can A/B the two backends by swapping env vars.
 
 import logging
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,59 @@ logger = logging.getLogger(__name__)
 # The var is therefore (re)created in setup with the handler baked in as default.
 _langfuse_handler_var: ContextVar[Any] | None = None
 _hook_registered = False
+
+# Resolver returning the USD cost of a finished LangChain LLM run. Registered by
+# ``intentkit.models.llm`` so this config-layer module can price generations
+# without importing the model catalog (which sits above config in the layering).
+_cost_resolver: Callable[[Any], float | None] | None = None
+
+
+def set_generation_cost_resolver(resolver: Callable[[Any], float | None]) -> None:
+    """Register the function used to price LLM generations for Langfuse."""
+    global _cost_resolver
+    _cost_resolver = resolver
+
+
+def _apply_cost_details(runs: Any, run_id: Any, response: Any) -> None:
+    """Attach our computed cost to the live Langfuse generation for this run.
+
+    Langfuse's LangChain handler only sends token usage and lets the server
+    infer cost from its own model prices (which misprice Gemini cache-read and
+    ignore OpenRouter's real charge). We instead set ``cost_details`` on the
+    still-open generation — looked up by ``run_id`` just before the base handler
+    ends it — and ingested cost takes precedence over inferred cost server-side.
+    Best effort: a failure here must never break the run.
+    """
+    resolver = _cost_resolver
+    if resolver is None:
+        return
+    try:
+        generation = runs.get(run_id)
+        if generation is None:
+            return
+        cost = resolver(response)
+        if cost is not None:
+            generation.update(cost_details={"total": cost})
+    except Exception:
+        logger.warning("Failed to attach cost to Langfuse generation", exc_info=True)
+
+
+def _build_cost_forwarding_handler(base_cls: Any) -> Any:
+    """Build the Langfuse callback handler that also forwards our cost.
+
+    Subclasses the stock handler to set ``cost_details`` in ``on_llm_end``. The
+    base class is only importable after the lazy import in ``setup_langfuse``,
+    so the subclass is defined here rather than at module top.
+    """
+
+    class _CostForwardingHandler(base_cls):
+        def on_llm_end(self, response, *, run_id, parent_run_id=None, **kwargs):
+            _apply_cost_details(self._runs, run_id, response)
+            return super().on_llm_end(
+                response, run_id=run_id, parent_run_id=parent_run_id, **kwargs
+            )
+
+    return _CostForwardingHandler()
 
 
 def setup_langfuse(
@@ -70,7 +123,8 @@ def setup_langfuse(
 
     # Handler as contextvar default => attaches to runs in any context/thread.
     _langfuse_handler_var = ContextVar(
-        "langfuse_callback_handler", default=CallbackHandler()
+        "langfuse_callback_handler",
+        default=_build_cost_forwarding_handler(CallbackHandler),
     )
     register_configure_hook(_langfuse_handler_var, True)
     _hook_registered = True
