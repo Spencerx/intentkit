@@ -39,8 +39,8 @@ async def test_get_self_info_defaults(mock_lead_runtime):
             new=AsyncMock(return_value=None),
         ),
         patch(
-            "intentkit.core.lead.tools.get_self_info.Memory.get",
-            new=AsyncMock(return_value=None),
+            "intentkit.core.lead.tools.get_self_info.load_memory_block",
+            new=AsyncMock(return_value=""),
         ),
     ):
         result = await tool._arun()
@@ -58,9 +58,6 @@ async def test_get_self_info_with_config(mock_lead_runtime):
     """Returns persisted config values when they exist."""
     from intentkit.core.lead.tools.get_self_info import LeadGetSelfInfo
 
-    mock_memory = MagicMock()
-    mock_memory.content = "I remember things"
-
     tool = LeadGetSelfInfo()
     with (
         patch(
@@ -74,8 +71,8 @@ async def test_get_self_info_with_config(mock_lead_runtime):
             ),
         ),
         patch(
-            "intentkit.core.lead.tools.get_self_info.Memory.get",
-            new=AsyncMock(return_value=mock_memory),
+            "intentkit.core.lead.tools.get_self_info.load_memory_block",
+            new=AsyncMock(return_value="I remember things"),
         ),
     ):
         result = await tool._arun()
@@ -168,30 +165,6 @@ async def test_update_self_name_truncation(mock_lead_runtime):
         await tool._arun(name=long_name)
 
     assert len(captured_updates["name"]) == 50
-
-
-# ──────────────────────────────────────────────
-# LeadUpdateSelfMemory
-# ──────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_update_self_memory(mock_lead_runtime):
-    """Updates lead agent memory via the shared update_memory function."""
-    from intentkit.core.lead.tools.update_self_memory import LeadUpdateSelfMemory
-
-    tool = LeadUpdateSelfMemory()
-    with patch(
-        "intentkit.core.memory.update_scoped_memory",
-        new=AsyncMock(return_value="merged memory content"),
-    ) as mock_update:
-        result = await tool._arun(content="New info to remember")
-
-    mock_update.assert_called_once_with(
-        "team-test-team", "team", "test-team", "New info to remember"
-    )
-    assert "merged memory content" in result
-    assert "updated successfully" in result
 
 
 # ──────────────────────────────────────────────
@@ -409,11 +382,9 @@ def test_self_updater_tools():
 
     tools = get_self_updater_tools()
     names = {s.name for s in tools}
-    assert names == {
-        "lead_get_self_info",
-        "lead_update_self",
-        "lead_update_self_memory",
-    }
+    # the lead records its own memory with the general record_memory tool;
+    # the self-updater only edits the profile
+    assert names == {"lead_get_self_info", "lead_update_self"}
 
 
 def test_content_manager_tools():

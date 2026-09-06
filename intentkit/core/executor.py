@@ -200,10 +200,10 @@ async def build_executor(
         read_webpage_cloudflare,
         recent_activities,
         recent_posts,
+        record_memory,
         store_image,
         ui_ask_user,
         ui_show_card,
-        update_memory,
         web_search,
         write_todos,
     )
@@ -246,9 +246,9 @@ async def build_executor(
         tools.append(get_post)
         tools.append(recent_posts)
 
-    # scoped long-term memory is always on: guests update their own rows
-    # (their user memory and their team's memory of this agent)
-    tools.append(update_memory)
+    # scoped long-term memory is always on: guests record into their own
+    # rows (their user memory and their team's memory of this agent)
+    tools.append(record_memory)
 
     # search-related tools based on provider
     if agent.search_internet:

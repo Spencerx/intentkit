@@ -74,7 +74,7 @@ def build_task_manager(team_id: str) -> Agent:
         "Tips:\n"
         "- Runs never retain conversation history; if a task must carry "
         "facts between runs, tell it (in its prompt) to record them with "
-        "update_memory — each task has its own cron-scoped memory.\n"
+        "record_memory — each task has its own cron-scoped memory.\n"
         "- Prefer disabling (`enabled=False`) over deleting for temporary pauses.\n"
     )
 

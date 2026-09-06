@@ -107,6 +107,13 @@ def test_upgrade_head_on_fresh_database(fresh_db_url):
         assert "team_links" in tables
         index_names = {idx["name"] for idx in inspector.get_indexes("team_links")}
         assert "ix_team_links_connected_account" in index_names
+        # The memory delta: entries and summaries beside the legacy notes.
+        assert {"memories", "memory_entries", "memory_summaries"} <= tables
+        summary_indexes = {
+            idx["name"]: idx for idx in inspector.get_indexes("memory_summaries")
+        }
+        assert summary_indexes["ix_memory_summaries_topic"]["unique"]
+        assert "ix_memory_summaries_scope_key" in summary_indexes
         link_columns = {col["name"] for col in inspector.get_columns("team_links")}
         assert {"level", "user_id"} <= link_columns
 

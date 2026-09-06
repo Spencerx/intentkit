@@ -19,9 +19,10 @@ from intentkit.core.system_tools import (
     get_post,
     recent_activities,
     recent_posts,
-    update_memory,
+    record_memory,
 )
 from intentkit.models.chat import AuthorType
+from intentkit.models.memory import MemoryScope
 
 
 class TestSystemToolsSection:
@@ -49,15 +50,15 @@ class TestSystemToolsSection:
         assert "create_activity" not in result
         assert "CRITICAL RULE" not in result
 
-    def test_update_memory_not_in_guide(self):
-        """The Memory section documents update_memory itself; the own-team
+    def test_record_memory_not_in_guide(self):
+        """The Memory section documents record_memory itself; the own-team
         guide must not duplicate it (the tool is bound for guests too)."""
         agent = self._make_agent()
         context = MagicMock(spec=AgentContext)
         context.is_own_team = True
 
         result = build_system_tools_section(agent, context)
-        assert "update_memory" not in result
+        assert "record_memory" not in result
 
     def test_excludes_call_agent_from_system_tools_section(self):
         agent = self._make_agent()
@@ -85,12 +86,6 @@ class TestSystemToolsSection:
         result = build_system_tools_section(agent, context)
         assert "create_activity" not in result
         assert "recent_activities" not in result
-
-
-def _memory(content: str) -> MagicMock:
-    memory = MagicMock()
-    memory.content = content
-    return memory
 
 
 class TestBuildSystemPromptMemory:
@@ -155,28 +150,34 @@ class TestBuildSystemPromptMemory:
         agent_data = MagicMock()
         agent_data.telegram_id = None
 
-        async def fake_get(agent_id, scope, scope_key):
-            if scope == "team":
-                assert scope_key == "team-1"
-                return _memory("### Facts\n\nUser likes Python.")
-            assert (scope, scope_key) == ("user", "user-1")
-            return None
+        async def fake_blocks(agent_id, scopes):
+            assert agent_id == "agent-1"
+            assert [(s.scope.value, s.scope_key) for s in scopes] == [
+                ("team", "team-1"),
+                ("user", "user-1"),
+            ]
+            return {
+                MemoryScope.TEAM: "Worked out by you:\nteam_profile: User likes Python.",
+                MemoryScope.USER: "",
+            }
 
         with (
             self._config_patch(),
             patch(
-                "intentkit.models.memory.Memory.get",
-                new=AsyncMock(side_effect=fake_get),
+                "intentkit.core.memory.load_memory_blocks",
+                new=AsyncMock(side_effect=fake_blocks),
             ),
         ):
             result = await build_system_prompt(agent, agent_data, context)
 
         assert "## Memory" in result
-        assert "update_memory" in result
-        assert "### Team Memory (scope: team)" in result
+        assert "record_memory" in result
+        assert "### Team Memory" in result
         assert "User likes Python" in result
-        assert "### User Memory (scope: user)" in result
-        assert "(empty)" in result
+        # an empty scope gets no heading; the whitelist is what says it exists
+        assert "### User Memory" not in result
+        assert "- `user` (" in result
+        assert "`user_preferences`" in result
 
     @pytest.mark.asyncio
     async def test_cron_run_lists_cron_memory(self):
@@ -189,19 +190,25 @@ class TestBuildSystemPromptMemory:
 
         seen: list[tuple[str, str]] = []
 
-        async def fake_get(agent_id, scope, scope_key):
-            seen.append((scope, scope_key))
+        async def fake_blocks(agent_id, scopes):
+            seen.extend((s.scope.value, s.scope_key) for s in scopes)
+            return {
+                MemoryScope.TEAM: "",
+                MemoryScope.CRON: "Worked out by you:\nsource_cursors: last id 42",
+            }
 
         with (
             self._config_patch(),
             patch(
-                "intentkit.models.memory.Memory.get",
-                new=AsyncMock(side_effect=fake_get),
+                "intentkit.core.memory.load_memory_blocks",
+                new=AsyncMock(side_effect=fake_blocks),
             ),
         ):
             result = await build_system_prompt(agent, agent_data, context)
 
-        assert "### Cron Task Memory (scope: cron)" in result
+        assert "### Cron Task Memory" in result
+        assert "last id 42" in result
+        assert "`source_cursors`" in result
         assert ("cron", "task-1") in seen
 
     @pytest.mark.asyncio
@@ -227,8 +234,8 @@ class TestBuildSystemPromptMemory:
         with (
             self._config_patch(),
             patch(
-                "intentkit.models.memory.Memory.get",
-                new=AsyncMock(return_value=None),
+                "intentkit.core.memory.load_memory_blocks",
+                new=AsyncMock(return_value={}),
             ),
         ):
             result = await build_system_prompt(agent, agent_data, context)
@@ -255,8 +262,8 @@ class TestSystemToolInstances:
         assert get_post.name == "get_post"
         assert recent_posts.name == "recent_posts"
 
-    def test_update_memory_instance(self):
-        assert update_memory.name == "update_memory"
+    def test_record_memory_instance(self):
+        assert record_memory.name == "record_memory"
 
 
 class TestSubAgentsPromptSection:
@@ -418,8 +425,8 @@ class TestSubAgentsPromptSection:
                 return_value=target_agent,
             ),
             patch(
-                "intentkit.models.memory.Memory.get",
-                new=AsyncMock(return_value=None),
+                "intentkit.core.memory.load_memory_blocks",
+                new=AsyncMock(return_value={}),
             ),
         ):
             result = await build_system_prompt(agent, agent_data, context)

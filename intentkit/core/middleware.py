@@ -154,7 +154,7 @@ class ToolBindingMiddleware(AgentMiddleware[AgentState, AgentContext]):
         # hidden from cron-triggered runs and sub-agent calls.
         # getattr covers dict-typed provider server tools too (no flag).
         interactive_allowed = context.is_interactive
-        # Tools marked requires_memory_scope (update_memory) are dropped when
+        # Tools marked requires_memory_scope (record_memory) are dropped when
         # the conversation resolves no memory scope — sub-agent runs and
         # teamless anonymous chats — where every call would just error.
         memory_scope_active = bool(resolve_memory_scopes(context.agent, context))

@@ -7,29 +7,33 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from intentkit.core.memory import MemoryWithAgent
-from intentkit.models.memory import Memory
+from intentkit.core.memory import MemorySummaryWithAgent
 from intentkit.utils.error import IntentKitAPIError, intentkit_api_error_handler
 
 from app.team.auth import verify_team_member
 from app.team.memory import team_memory_router
 
 
-def _memory(**overrides) -> MemoryWithAgent:
+def _memory(**overrides) -> MemorySummaryWithAgent:
     now = datetime.now(UTC)
     data = {
         "id": "mem-1",
         "agent_id": "agent-1",
         "scope": "team",
         "scope_key": "team-1",
-        "content": "doc",
+        "topic": "team_profile",
+        "topic_label": "Team profile",
+        "constraints": [{"date": "2026-09-01", "text": "we sell widgets"}],
+        "summary": "the team sells widgets",
+        "open_questions": [],
+        "synthesized_at": now,
         "created_at": now,
         "updated_at": now,
         "agent_name": "Agent 1",
         "agent_picture": None,
     }
     data.update(overrides)
-    return MemoryWithAgent.model_validate(data)
+    return MemorySummaryWithAgent.model_validate(data)
 
 
 @pytest.fixture
@@ -54,33 +58,12 @@ def test_list_memories_scoped_to_auth(test_client):
     body = response.json()
     assert len(body) == 1
     assert body[0]["agent_name"] == "Agent 1"
+    assert body[0]["topic_label"] == "Team profile"
+    assert body[0]["constraints"] == [{"date": "2026-09-01", "text": "we sell widgets"}]
 
 
-def test_update_memory_scoped_to_auth(test_client):
-    updated = Memory.model_validate(_memory(content="edited").model_dump())
-    with patch(
-        "app.team.memory.overwrite_memory",
-        new=AsyncMock(return_value=updated),
-    ) as mock_overwrite:
-        response = test_client.put(
-            "/teams/team-1/memories/mem-1", json={"content": "edited"}
-        )
-
-    assert response.status_code == 200
-    mock_overwrite.assert_awaited_once_with(
-        "mem-1", "edited", team_id="team-1", user_id="user-1"
-    )
-    assert response.json()["content"] == "edited"
-
-
-def test_update_memory_too_long(test_client):
-    with patch(
-        "app.team.memory.overwrite_memory",
-        new=AsyncMock(side_effect=IntentKitAPIError(422, "MemoryTooLong", "Too long.")),
-    ):
-        response = test_client.put(
-            "/teams/team-1/memories/mem-1", json={"content": "x"}
-        )
-
-    assert response.status_code == 422
-    assert response.json()["error"] == "MemoryTooLong"
+def test_memory_is_read_only(test_client):
+    """Memory reaches prompts only through record_memory, never from web
+    input: there is no edit route."""
+    response = test_client.put("/teams/team-1/memories/mem-1", json={"content": "x"})
+    assert response.status_code in (404, 405)

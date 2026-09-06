@@ -1,179 +1,91 @@
 "use client";
 
-import { useState } from "react";
-import { Eye, Pencil } from "lucide-react";
-
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MarkdownRenderer } from "@/components/ui/markdown-renderer";
-import { Textarea } from "@/components/ui/textarea";
-import type { Memory } from "@/types/memory";
+import type { MemorySummary } from "@/types/memory";
 
-// Keep in sync with MAX_MEMORY_BYTES in the backend (intentkit/core/memory.py)
-const MAX_MEMORY_BYTES = 4000;
-
-function byteLength(text: string): number {
-  return new TextEncoder().encode(text).length;
-}
-
-function memoryTitle(memory: Memory): string {
+function agentTitle(memory: MemorySummary): string {
   return memory.agent_name || memory.agent_id;
 }
 
-function ViewDialog({
-  memory,
-  onClose,
-}: {
-  memory: Memory;
-  onClose: () => void;
-}) {
-  return (
-    <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent className="sm:max-w-[640px] max-h-[85vh] overflow-y-auto">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{memoryTitle(memory)}</AlertDialogTitle>
-          <AlertDialogDescription>
-            Last updated {new Date(memory.updated_at).toLocaleString()}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="rounded-md border bg-muted/30 p-4">
-          <MarkdownRenderer className="prose prose-sm prose-neutral dark:prose-invert max-w-none">
-            {memory.content}
-          </MarkdownRenderer>
-        </div>
-        <AlertDialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-function EditDialog({
-  memory,
-  onSave,
-  onClose,
-}: {
-  memory: Memory;
-  onSave: (memory: Memory, content: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [draft, setDraft] = useState(memory.content ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const bytes = byteLength(draft);
-  const tooLong = bytes > MAX_MEMORY_BYTES;
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(memory, draft);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save memory");
-    } finally {
-      setSaving(false);
+/** Group the flat summary list by agent, keeping the server's order. */
+function groupByAgent(memories: MemorySummary[]): MemorySummary[][] {
+  const groups = new Map<string, MemorySummary[]>();
+  for (const memory of memories) {
+    const group = groups.get(memory.agent_id);
+    if (group) {
+      group.push(memory);
+    } else {
+      groups.set(memory.agent_id, [memory]);
     }
-  };
+  }
+  return Array.from(groups.values());
+}
 
+function TopicBlock({ memory }: { memory: MemorySummary }) {
   return (
-    <AlertDialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <AlertDialogContent className="sm:max-w-[640px]">
-        <AlertDialogHeader>
-          <AlertDialogTitle>Edit {memoryTitle(memory)}</AlertDialogTitle>
-          <AlertDialogDescription>
-            This memory is managed automatically by the agent. Only edit it if
-            you know exactly what you are doing — your changes may be merged
-            with new information later.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={14}
-          disabled={saving}
-          aria-label="Memory content"
-          className="font-mono text-xs"
-        />
-        <div className="flex items-center justify-between text-xs">
-          <span className={tooLong ? "text-destructive" : "text-muted-foreground"}>
-            {bytes} / {MAX_MEMORY_BYTES} bytes
-          </span>
-          {error && (
-            <span role="alert" className="text-destructive">
-              {error}
-            </span>
-          )}
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{memory.topic_label}</h3>
+      {memory.constraints.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Told by people
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+            {memory.constraints.map((constraint, index) => (
+              <li key={index}>
+                {constraint.date && (
+                  <span className="mr-1.5 font-mono text-xs text-muted-foreground">
+                    {constraint.date}
+                  </span>
+                )}
+                {constraint.text}
+              </li>
+            ))}
+          </ul>
         </div>
-        <AlertDialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || tooLong || draft === memory.content}
-          >
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      )}
+      {memory.summary && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Worked out by the agent
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-sm">{memory.summary}</p>
+        </div>
+      )}
+      {memory.open_questions.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            To confirm
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+            {memory.open_questions.map((question, index) => (
+              <li key={index}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
-function MemoryCard({
-  memory,
-  onView,
-  onEdit,
-}: {
-  memory: Memory;
-  onView: () => void;
-  onEdit: () => void;
-}) {
+function AgentCard({ memories }: { memories: MemorySummary[] }) {
+  const latest = memories.reduce((a, b) =>
+    a.synthesized_at > b.synthesized_at ? a : b,
+  );
   return (
     <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-base truncate" title={memoryTitle(memory)}>
-            {memoryTitle(memory)}
-          </CardTitle>
-          <div className="flex shrink-0 gap-1">
-            <Button variant="ghost" size="sm" onClick={onView}>
-              <Eye className="mr-1 h-3.5 w-3.5" />
-              View
-            </Button>
-            <Button variant="ghost" size="sm" onClick={onEdit}>
-              <Pencil className="mr-1 h-3.5 w-3.5" />
-              Edit
-            </Button>
-          </div>
-        </div>
+        <CardTitle className="text-base truncate" title={agentTitle(latest)}>
+          {agentTitle(latest)}
+        </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Updated {new Date(memory.updated_at).toLocaleString()}
+          Updated {new Date(latest.synthesized_at).toLocaleString()}
         </p>
       </CardHeader>
-      <CardContent>
-        <p className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">
-          {memory.content.trim() || "(empty)"}
-        </p>
+      <CardContent className="space-y-4">
+        {memories.map((memory) => (
+          <TopicBlock key={memory.id} memory={memory} />
+        ))}
       </CardContent>
     </Card>
   );
@@ -184,35 +96,27 @@ function MemoryGroup({
   description,
   memories,
   emptyText,
-  onView,
-  onEdit,
 }: {
   title: string;
   description: string;
-  memories: Memory[];
+  memories: MemorySummary[];
   emptyText: string;
-  onView: (memory: Memory) => void;
-  onEdit: (memory: Memory) => void;
 }) {
+  const agents = groupByAgent(memories);
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      {memories.length === 0 ? (
+      {agents.length === 0 ? (
         <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
           {emptyText}
         </p>
       ) : (
         <div className="space-y-3">
-          {memories.map((memory) => (
-            <MemoryCard
-              key={memory.id}
-              memory={memory}
-              onView={() => onView(memory)}
-              onEdit={() => onEdit(memory)}
-            />
+          {agents.map((group) => (
+            <AgentCard key={group[0].agent_id} memories={group} />
           ))}
         </div>
       )}
@@ -220,16 +124,7 @@ function MemoryGroup({
   );
 }
 
-export function MemorySections({
-  memories,
-  onSave,
-}: {
-  memories: Memory[];
-  onSave: (memory: Memory, content: string) => Promise<void>;
-}) {
-  const [viewing, setViewing] = useState<Memory | null>(null);
-  const [editing, setEditing] = useState<Memory | null>(null);
-
+export function MemorySections({ memories }: { memories: MemorySummary[] }) {
   const teamMemories = memories.filter((m) => m.scope === "team");
   const userMemories = memories.filter((m) => m.scope === "user");
 
@@ -237,30 +132,16 @@ export function MemorySections({
     <div className="space-y-8">
       <MemoryGroup
         title="Team Memory"
-        description="What each agent remembers for the whole team."
+        description="What each agent remembers for the whole team, by topic."
         memories={teamMemories}
-        emptyText="No team memories yet. Agents create them automatically as your team works with them."
-        onView={setViewing}
-        onEdit={setEditing}
+        emptyText="No team memory yet. Agents record it themselves as your team works with them."
       />
       <MemoryGroup
         title="Your Memory"
-        description="What each agent remembers about you personally."
+        description="What each agent remembers about you personally, by topic."
         memories={userMemories}
-        emptyText="No personal memories yet. Agents create them automatically as you chat with them."
-        onView={setViewing}
-        onEdit={setEditing}
+        emptyText="No personal memory yet. Agents record it themselves as you chat with them."
       />
-      {viewing && (
-        <ViewDialog memory={viewing} onClose={() => setViewing(null)} />
-      )}
-      {editing && (
-        <EditDialog
-          memory={editing}
-          onSave={onSave}
-          onClose={() => setEditing(null)}
-        />
-      )}
     </div>
   );
 }

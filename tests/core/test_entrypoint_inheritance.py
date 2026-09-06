@@ -228,8 +228,8 @@ async def test_system_prompt_stable_across_model_calls():
 
     with (
         patch(
-            "intentkit.models.memory.Memory.get",
-            new=AsyncMock(return_value=None),
+            "intentkit.core.memory.load_memory_blocks",
+            new=AsyncMock(return_value={}),
         ),
         patch(
             "intentkit.core.autonomous.get_autonomous_task",
@@ -254,8 +254,8 @@ async def test_system_prompt_subagent_mode_section():
 
     # The top-level prompt loads scoped memories; keep this test off the DB.
     with patch(
-        "intentkit.models.memory.Memory.get",
-        new=AsyncMock(return_value=None),
+        "intentkit.core.memory.load_memory_blocks",
+        new=AsyncMock(return_value={}),
     ):
         subagent_prompt = await build_system_prompt(
             agent, agent_data, _context(call_depth=1)

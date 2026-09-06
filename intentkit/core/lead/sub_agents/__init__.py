@@ -127,9 +127,7 @@ SUB_AGENT_REGISTRY: dict[str, SubAgentDefinition] = {
     ),
     SLUG_SELF_UPDATER: SubAgentDefinition(
         slug=SLUG_SELF_UPDATER,
-        description=(
-            "Updates the lead agent itself: name, avatar, personality, and memory."
-        ),
+        description=("Updates the lead agent itself: name, avatar, and personality."),
         build_fn=build_self_updater,
         tools_fn=get_self_updater_tools,
     ),

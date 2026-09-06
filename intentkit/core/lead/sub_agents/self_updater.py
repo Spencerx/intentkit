@@ -10,7 +10,6 @@ from langchain_core.tools import BaseTool
 from intentkit.core.lead.constants import compose_system_prompt
 from intentkit.core.lead.tools.get_self_info import lead_get_self_info_tool
 from intentkit.core.lead.tools.update_self import lead_update_self_tool
-from intentkit.core.lead.tools.update_self_memory import lead_update_self_memory_tool
 from intentkit.models.agent import Agent
 from intentkit.models.llm_picker import pick_default_model
 
@@ -20,7 +19,6 @@ def get_self_updater_tools() -> Sequence[BaseTool]:
     return [
         lead_get_self_info_tool,
         lead_update_self_tool,
-        lead_update_self_memory_tool,
     ]
 
 
@@ -31,17 +29,17 @@ def build_self_updater(team_id: str) -> Agent:
     rules = (
         "### Workflow\n\n"
         "1. Call `lead_get_self_info` first to see the current configuration.\n"
-        "2. Use `lead_update_self` to change name, avatar, or personality.\n"
-        "3. Use `lead_update_self_memory` to add or update memory.\n\n"
+        "2. Use `lead_update_self` to change name, avatar, or personality.\n\n"
         "### Guidelines\n\n"
         "- Name: max 50 characters, should be professional and descriptive.\n"
         "- Avatar: must be a valid URL to an image.\n"
         "- Personality: a brief description of how the lead agent should behave.\n"
-        "- Memory: information the lead agent should remember across conversations.\n"
+        "- Memory is not yours to edit: the lead records its own memory with "
+        "record_memory; `lead_get_self_info` only shows it.\n"
     )
 
     system_prompt = compose_system_prompt(
-        purpose="Update the lead agent's own name, avatar, personality, and memory.",
+        purpose="Update the lead agent's own name, avatar, and personality.",
         principles=(
             "1. Speak to users in their language.\n"
             "2. Always check current config before making changes.\n"

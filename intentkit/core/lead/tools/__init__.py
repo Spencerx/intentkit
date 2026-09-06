@@ -76,10 +76,6 @@ from intentkit.core.lead.tools.update_self import (
     LeadUpdateSelf,
     lead_update_self_tool,
 )
-from intentkit.core.lead.tools.update_self_memory import (
-    LeadUpdateSelfMemory,
-    lead_update_self_memory_tool,
-)
 from intentkit.core.lead.tools.update_team_agent import (
     UpdateTeamAgent,
     update_team_agent_tool,
@@ -108,7 +104,6 @@ __all__ = [
     "LeadRecentTeamPosts",
     "LeadUnfollowAgent",
     "LeadUpdateSelf",
-    "LeadUpdateSelfMemory",
     "LeadUpdateUserProfile",
     "ListTeamAgents",
     "UpdateTeamAgent",
@@ -129,7 +124,6 @@ __all__ = [
     "lead_recent_team_activities_tool",
     "lead_recent_team_posts_tool",
     "lead_unfollow_agent_tool",
-    "lead_update_self_memory_tool",
     "lead_update_self_tool",
     "lead_update_user_profile_tool",
     "list_team_agents_tool",

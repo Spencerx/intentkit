@@ -119,9 +119,9 @@ _POSTS_SECTION = (
     '2. If none matches, look for a general-purpose "spokesperson" agent (one '
     "meant for publishing arbitrary content on the team's behalf) and delegate "
     "to it.\n"
-    "3. If no spokesperson exists, ask `agent-manager` to create one, then use "
-    "`self-updater` to record it in your own memory so it is available next "
-    "time.\n\n"
+    "3. If no spokesperson exists, ask `agent-manager` to create one, then "
+    "record it with `record_memory` (team scope, `team_resources`) so it is "
+    "available next time.\n\n"
 )
 
 

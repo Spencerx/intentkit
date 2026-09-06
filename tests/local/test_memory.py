@@ -7,28 +7,32 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from intentkit.core.memory import MemoryWithAgent
-from intentkit.models.memory import Memory
+from intentkit.core.memory import MemorySummaryWithAgent
 from intentkit.utils.error import IntentKitAPIError, intentkit_api_error_handler
 
 from app.local.memory import memory_router
 
 
-def _memory(**overrides) -> MemoryWithAgent:
+def _memory(**overrides) -> MemorySummaryWithAgent:
     now = datetime.now(UTC)
     data = {
         "id": "mem-1",
         "agent_id": "agent-1",
         "scope": "team",
         "scope_key": "system",
-        "content": "doc",
+        "topic": "team_profile",
+        "topic_label": "Team profile",
+        "constraints": [],
+        "summary": "the team sells widgets",
+        "open_questions": ["still true?"],
+        "synthesized_at": now,
         "created_at": now,
         "updated_at": now,
         "agent_name": "Agent 1",
         "agent_picture": None,
     }
     data.update(overrides)
-    return MemoryWithAgent.model_validate(data)
+    return MemorySummaryWithAgent.model_validate(data)
 
 
 @pytest.fixture
@@ -52,30 +56,9 @@ def test_list_memories_uses_system_account(test_client):
     assert len(body) == 1
     assert body[0]["id"] == "mem-1"
     assert body[0]["agent_name"] == "Agent 1"
+    assert body[0]["open_questions"] == ["still true?"]
 
 
-def test_update_memory_overwrites_with_system_account(test_client):
-    updated = Memory.model_validate(_memory(content="edited").model_dump())
-    with patch(
-        "app.local.memory.overwrite_memory",
-        new=AsyncMock(return_value=updated),
-    ) as mock_overwrite:
-        response = test_client.put("/memories/mem-1", json={"content": "edited"})
-
-    assert response.status_code == 200
-    mock_overwrite.assert_awaited_once_with(
-        "mem-1", "edited", team_id="system", user_id="system"
-    )
-    assert response.json()["content"] == "edited"
-
-
-def test_update_memory_not_found(test_client):
-    with patch(
-        "app.local.memory.overwrite_memory",
-        new=AsyncMock(
-            side_effect=IntentKitAPIError(404, "MemoryNotFound", "Memory not found.")
-        ),
-    ):
-        response = test_client.put("/memories/nope", json={"content": "x"})
-
-    assert response.status_code == 404
+def test_memory_is_read_only(test_client):
+    response = test_client.put("/memories/mem-1", json={"content": "x"})
+    assert response.status_code in (404, 405)
