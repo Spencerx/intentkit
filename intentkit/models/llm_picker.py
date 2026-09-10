@@ -64,10 +64,10 @@ def pick_summarize_model() -> str:
     """Pick the best available summarize model based on configured API keys."""
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.5-flash-lite", LLMProvider.GOOGLE),
-        ("deepseek/deepseek-v4-flash-vision-exp", LLMProvider.OPENROUTER),
+        ("deepseek/deepseek-v4.1-flash", LLMProvider.OPENROUTER),
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
@@ -86,7 +86,7 @@ def pick_default_model() -> str:
         ("minimax/minimax-m3", LLMProvider.OPENROUTER),
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
     return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
@@ -96,13 +96,12 @@ def pick_lead_model() -> str:
     """Pick the model for the team lead orchestrator.
 
     The lead drives user conversation and multi-agent delegation. DeepSeek's
-    V4 Flash tops agent/tool-driving benchmarks at flash cost, so it heads the
-    list on both its providers. The live build is the experimental multimodal
-    one, which DeepSeek states matches the base build it was benchmarked as.
+    V4.1 Flash tops agent/tool-driving benchmarks at flash cost (DeepSeek
+    states it surpasses V4 Pro), so it heads the list on both its providers.
     """
     order: list[tuple[str, LLMProvider]] = [
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
-        ("deepseek/deepseek-v4-flash-vision-exp", LLMProvider.OPENROUTER),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
+        ("deepseek/deepseek-v4.1-flash", LLMProvider.OPENROUTER),
         ("gemini-3.7-flash", LLMProvider.GOOGLE),
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
@@ -117,7 +116,7 @@ def pick_lite_model() -> str:
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.5-flash-lite", LLMProvider.GOOGLE),
         ("z-ai/glm-5.3-flash", LLMProvider.OPENROUTER),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         # Luna is OpenAI's cheapest tier; glm/deepseek above are still cheaper.
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
@@ -150,7 +149,7 @@ def pick_fastest_model() -> str:
         ("qwen/qwen3.8-flash", LLMProvider.OPENROUTER),
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
@@ -168,7 +167,7 @@ def pick_multimodal_model() -> str:
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("gpt-5.6-terra", LLMProvider.OPENAI),
         ("grok-4.6", LLMProvider.XAI),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
     ]
     return _first_configured(order, fallback=_DEFAULT_FALLBACK_MODEL)
 
@@ -222,7 +221,7 @@ def pick_search_model() -> str:
         ("gemini-3.7-flash", LLMProvider.GOOGLE),
         ("gpt-5.6-terra", LLMProvider.OPENAI),
         ("x-ai/grok-4.6", LLMProvider.OPENROUTER),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),
     ]
@@ -251,8 +250,8 @@ def pick_long_context_model() -> str:
     # Priority order based on cost (cheapest first), one per provider:
     order: list[tuple[str, LLMProvider]] = [
         ("gemini-3.5-flash-lite", LLMProvider.GOOGLE),
-        ("deepseek/deepseek-v4-flash-vision-exp", LLMProvider.OPENROUTER),
-        ("deepseek-v4-flash-vision-exp", LLMProvider.DEEPSEEK),
+        ("deepseek/deepseek-v4.1-flash", LLMProvider.OPENROUTER),
+        ("deepseek-flash", LLMProvider.DEEPSEEK),
         ("gpt-5.6-luna", LLMProvider.OPENAI),
         ("MiniMax-M3", LLMProvider.MINIMAX),
         ("mimo-v2.5", LLMProvider.MIMO_PLAN),

@@ -627,26 +627,27 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-# DeepSeek doubles every price 01:00-04:00 and 06:00-10:00 UTC. All four
-# DeepSeek rows below carry the off-peak (standard) rate only, the way the
-# xAI rows ignore the >200k long-context tier.
+# DeepSeek doubles every price 01:00-04:00 and 06:00-10:00 UTC on weekdays.
+# All four DeepSeek rows below carry the off-peak (standard) rate only, the
+# way the xAI rows ignore the >200k long-context tier.
 #
-# vision-exp is DeepSeek's experimental multimodal V4 Flash build: base-model
-# text quality and price plus image input (billed as up to 384 tokens/image).
-# Its pricing page calls the build non-thinking-only, but a live probe of
-# DeepSeek's own endpoint returned reasoning content, so the levels stay.
-- id: "deepseek-v4-flash-vision-exp"
-  name: "Deepseek V4 Flash"
+# V4.1 Flash (2026-09-10) is DeepSeek's unified multimodal build: native image
+# input, thinking on by default server-side (the toggle is passed explicitly),
+# and DeepSeek states it surpasses V4 Pro on quality, cost and speed. DeepSeek's
+# own API exposes it as the versionless "deepseek-flash"; the retired V4 ids are
+# still accepted upstream and route here via legacy_ids.
+- id: "deepseek-flash"
+  name: "Deepseek V4.1 Flash"
   provider: deepseek
-  legacy_ids: ["deepseek-v4-flash"]
+  legacy_ids: ["deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]
   enabled: true
-  input_price: "0.22"
-  cached_input_price: "0.007"
-  output_price: "0.66"
+  input_price: "0.15"
+  cached_input_price: "0.003"
+  output_price: "0.6"
   price_level: 1
   context_length: 1048576
   output_length: 384000
-  intelligence: 4
+  intelligence: 5
   speed: 4
   supports_image_input: true
   supports_audio_input: false
@@ -657,21 +658,21 @@
   timeout: 300
 
 # OpenRouter lists each official build separately (DeepSeek's own API upgrades
-# "deepseek-v4-flash"/"deepseek-v4-pro" in place), so the superseded listing
-# ids route to the live build via legacy_ids.
-- id: "deepseek/deepseek-v4-flash-vision-exp"
-  name: "Deepseek V4 Flash"
+# its versionless ids in place), so the superseded listing ids route to the
+# live build via legacy_ids.
+- id: "deepseek/deepseek-v4.1-flash"
+  name: "Deepseek V4.1 Flash"
   provider: openrouter
   origin_provider: "deepseek"   # lock OpenRouter upstream
-  legacy_ids: ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash-0731"]
+  legacy_ids: ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash-0731", "deepseek/deepseek-v4-flash-vision-exp"]
   enabled: true
-  input_price: "0.22"
-  cached_input_price: "0.007"
-  output_price: "0.66"
+  input_price: "0.15"
+  cached_input_price: "0.003"
+  output_price: "0.6"
   price_level: 1
   context_length: 1048576
   output_length: 384000
-  intelligence: 4
+  intelligence: 5
   speed: 4
   supports_image_input: true
   supports_audio_input: false

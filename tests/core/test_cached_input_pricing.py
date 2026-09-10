@@ -195,7 +195,7 @@ def test_csv_loads_cached_input_price_for_claude():
 
 
 def test_csv_cached_input_price_for_deepseek():
-    """DeepSeek V4 Flash bills 0.007/1M on cache hits and 0.22/1M otherwise.
+    """DeepSeek V4.1 Flash bills 0.003/1M on cache hits and 0.15/1M otherwise.
 
     The pinned DeepSeek endpoint on OpenRouter bills the same as the direct
     API. These rows have twice recorded someone else's numbers -- a
@@ -218,15 +218,17 @@ def test_csv_cached_input_price_for_deepseek():
 
         models = load_default_llm_models()
 
-    deepseek = models.get("deepseek:deepseek-v4-flash-vision-exp")
+    deepseek = models.get("deepseek:deepseek-flash")
     assert deepseek is not None
-    assert deepseek.cached_input_price == Decimal("0.007")
-    assert deepseek.input_price == Decimal("0.22")
+    assert deepseek.cached_input_price == Decimal("0.003")
+    assert deepseek.input_price == Decimal("0.15")
+    assert deepseek.output_price == Decimal("0.6")
 
-    deepseek_or = models.get("openrouter:deepseek/deepseek-v4-flash-vision-exp")
+    deepseek_or = models.get("openrouter:deepseek/deepseek-v4.1-flash")
     assert deepseek_or is not None
-    assert deepseek_or.cached_input_price == Decimal("0.007")
-    assert deepseek_or.input_price == Decimal("0.22")
+    assert deepseek_or.cached_input_price == Decimal("0.003")
+    assert deepseek_or.input_price == Decimal("0.15")
+    assert deepseek_or.output_price == Decimal("0.6")
 
     # Pro drifted the same way and by more; pin it on both providers too.
     for key in ("deepseek:deepseek-v4-pro", "openrouter:deepseek/deepseek-v4-pro-0813"):

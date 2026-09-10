@@ -235,9 +235,11 @@ def test_model_id_index_suffix_and_legacy_matching():
 
         # Explicit regression pins for retirements.
         assert index.get("x-ai/grok-4.3") == ["openrouter:x-ai/grok-4.6"]
-        assert index.get("deepseek/deepseek-v4-flash-0731") == [
-            "openrouter:deepseek/deepseek-v4-flash-vision-exp"
-        ]
+        for retired in (
+            "deepseek/deepseek-v4-flash-0731",
+            "deepseek/deepseek-v4-flash-vision-exp",
+        ):
+            assert index.get(retired) == ["openrouter:deepseek/deepseek-v4.1-flash"]
         assert index.get("qwen/qwen3.7-flash") == ["openrouter:qwen/qwen3.8-flash"]
         assert index.get("z-ai/glm-4.7-flash") == ["openrouter:z-ai/glm-5.3-flash"]
 
