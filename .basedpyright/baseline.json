@@ -76,56 +76,6 @@
                 }
             }
         ],
-        "./intentkit/core/public_api.py": [
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 32,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 26,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 29,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 35,
-                    "lineCount": 1
-                }
-            },
-            {
-                "code": "reportUnusedFunction",
-                "range": {
-                    "startColumn": 14,
-                    "endColumn": 39,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./intentkit/tools/__init__.py": [
             {
                 "code": "reportUnsupportedDunderAll",

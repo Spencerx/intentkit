@@ -27,7 +27,10 @@ separately. Call :func:`validate_fetch_url` directly only where the fetch
 does not go through such a client: a hand-rolled redirect loop, a URL handed
 to a third party to fetch, or a batch filtered before any client exists.
 :func:`requests_redirect_guard` is the adapter for ``requests``, which
-exposes no request-level hook.
+exposes no request-level hook. A ``urllib`` opener (WeasyPrint's
+``URLFetcher``, see ``utils.pdf``) is the one place a direct call does cover
+every hop: its redirect handler re-enters the opener, so a guard in the
+subclass's ``fetch`` sees each location in turn.
 
 **Raise or skip.** When the URL is the caller's own argument, let the
 exception out — the caller asked for something that will not be done, and

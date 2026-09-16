@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import re
+import ssl
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi.responses import Response
 from langchain_core.tools.base import ToolException
 
 from intentkit.utils.ssrf import validate_fetch_url_sync
+
+if TYPE_CHECKING:
+    from weasyprint.urls import URLFetcher, URLFetcherResponse
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _POST_TEMPLATE = (_TEMPLATE_DIR / "post_pdf.html").read_text()
@@ -47,28 +51,47 @@ _VAR_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 # Variables that contain pre-rendered HTML and should not be escaped
 _RAW_VARS = {"content"}
 
-# Empty stand-in returned for any blocked resource so rendering still succeeds.
-_BLOCKED_RESOURCE = {"string": b"", "mime_type": "image/png"}
+
+# URLFetcher builds an HTTPS handler per instance and, given no context, has
+# ssl load the system trust store each time (~4ms). One context serves every
+# render; the fetcher instance itself must stay per-render, it carries
+# per-request state.
+_SSL_CONTEXT = ssl.create_default_context()
 
 
-def _safe_url_fetcher(url: str, timeout: int = 10, ssl_context: Any = None) -> Any:
-    """URL fetcher for WeasyPrint that blocks non-HTTP schemes and non-public
-    hosts (SSRF prevention).
+def _make_url_fetcher() -> URLFetcher:
+    """Build the WeasyPrint URL fetcher that blocks non-HTTP schemes and
+    non-public hosts (SSRF prevention).
 
-    Rendering must still succeed when an asset is refused, so a blocked
-    resource becomes an empty stand-in rather than an exception. This covers
-    the requested host only; WeasyPrint's own fetch follows redirects, so a
-    public host that 3xx-redirects inward is not caught here and should be
-    constrained at the network egress layer.
+    WeasyPrint 70 replaced the fetcher callable with a ``URLFetcher`` class
+    (a ``urllib`` opener), so the guard is a subclass. A refused asset raises
+    out of ``fetch``; WeasyPrint wraps that into a non-fatal
+    ``URLFetchingError`` (its ``fail_on_errors`` default), logs the reason and
+    renders on without the asset. Redirects are covered too: the opener's
+    redirect handler re-enters ``open`` with the new URL, which routes back
+    through ``fetch`` and hence the guard.
+
+    Imported lazily: ``weasyprint`` needs the native pango/cairo libraries,
+    which only the app image installs.
     """
-    try:
-        validate_fetch_url_sync(url)
-    except ToolException:
-        return _BLOCKED_RESOURCE
+    from weasyprint.urls import URLFetcher
 
-    from weasyprint import default_url_fetcher
+    class SafeURLFetcher(URLFetcher):
+        def fetch(
+            self, url: str, headers: dict[str, str] | None = None
+        ) -> URLFetcherResponse:
+            try:
+                validate_fetch_url_sync(url)
+            except ToolException:
+                # A redirect arrives via open(), which stashes its Request on
+                # self for the base fetch to consume and clear. Refusing here
+                # skips that clear, and the next fetch would pick the blocked
+                # target up instead of its own URL.
+                self._request = None
+                raise
+            return super().fetch(url, headers=headers)
 
-    return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
+    return SafeURLFetcher(ssl_context=_SSL_CONTEXT)
 
 
 def _render_template(template: str, **kwargs: object) -> str:
@@ -132,7 +155,7 @@ def _generate_pdf(
         tags=tags or [],
     )
 
-    result = HTML(string=full_html, url_fetcher=_safe_url_fetcher).write_pdf()
+    result = HTML(string=full_html, url_fetcher=_make_url_fetcher()).write_pdf()
     if result is None:
         raise RuntimeError("WeasyPrint failed to generate PDF")
     return result

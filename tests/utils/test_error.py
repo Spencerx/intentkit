@@ -30,7 +30,7 @@ class TestTransportTimeoutErrors:
                 request=httpx2.Request("POST", "https://api.example.com")
             ),
             anthropic.APITimeoutError(
-                request=httpx.Request("POST", "https://api.example.com")
+                request=httpx2.Request("POST", "https://api.example.com")
             ),
             ModelTimeoutError("model request timed out"),
         ],

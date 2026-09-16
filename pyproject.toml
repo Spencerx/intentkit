@@ -19,7 +19,8 @@ dependencies = [
     "starlette>=0.47.1",
     "httpx>=0.28.1",
     "httpcore>=1.0.9",
-    # The second HTTP stack: mcp 2.x and openai 3.x run on httpx2/httpcore2.
+    # The second HTTP stack: mcp 2.x, openai 3.x and anthropic 1.x run on
+    # httpx2/httpcore2.
     # We hand mcp an httpx2 client (clients/mcp) and classify both stacks'
     # transport errors in utils/error.py; our own code otherwise stays on httpx.
     "httpx2>=2.5.0",
@@ -52,8 +53,9 @@ dependencies = [
     "langchain-anthropic>=1.4,<2",
     # Declared only because utils/error.py imports APITimeoutError directly
     # (deptry DEP003). langchain-anthropic pins the effective version — keep
-    # this floor loose so it can never outrank that pin.
-    "anthropic>=0.30.0",
+    # this floor loose so it can never outrank that pin. 1.0 is where the SDK
+    # moved to httpx2, which the timeout tests build their requests with.
+    "anthropic>=1.0.0",
     "langchain-openrouter>=0.2.5,<1",
     # Used directly for image generation (tools/image, core/avatar) and for its
     # typed error classes; chat and usage accounting go through
@@ -124,9 +126,11 @@ classifiers = [
 
 [project.optional-dependencies]
 # PDF rendering (utils/pdf.py imports these lazily; weasyprint needs system
-# pango/cairo, so it stays out of the default install)
+# pango/cairo, so it stays out of the default install). 70.0 is the release
+# that turned url_fetcher into the URLFetcher class the SSRF guard subclasses
+# (and the fix for GHSA-jf6q-chmf-3h3v).
 pdf = [
-    "weasyprint>=63.0",
+    "weasyprint>=70.0",
     "markdown>=3.7",
     "pymdown-extensions>=10.0",
 ]
@@ -150,7 +154,7 @@ app = [
     "python-multipart>=0.0.20",
     "sentry-sdk[fastapi]>=2.20.0",
     # PDF generation (the pdf extra, pinned identically)
-    "weasyprint>=63.0",
+    "weasyprint>=70.0",
     "markdown>=3.7",
     "pymdown-extensions>=10.0",
     "pyjwt>=2.13.0",

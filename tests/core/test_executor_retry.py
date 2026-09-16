@@ -41,7 +41,8 @@ def _response(status_code: int) -> httpx.Response:
 
 
 def _response2(status_code: int) -> httpx2.Response:
-    """httpx2 twin of ``_response`` — openai 3.x errors carry httpx2 objects."""
+    """httpx2 twin of ``_response`` — openai 3.x and anthropic 1.x errors
+    carry httpx2 objects."""
     request = httpx2.Request("POST", "https://api.example.com/v1/messages")
     return httpx2.Response(status_code, request=request)
 
@@ -111,7 +112,7 @@ class TestShouldRetryModelFailure:
 
     def test_anthropic_overloaded_retries(self):
         overloaded = AnthropicAPIStatusError(
-            "overloaded", response=_response(529), body=None
+            "overloaded", response=_response2(529), body=None
         )
         assert _should_retry_model_failure(overloaded)
 

@@ -20,9 +20,10 @@ from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 logger = logging.getLogger(__name__)
 
 # Two HTTP stacks coexist in the dependency tree: most SDKs run on
-# httpx/httpcore, while openai 3.x and mcp 2.x run on httpx2/httpcore2. The
-# hierarchies are fully disjoint (httpx2.TransportError is not a subclass of
-# httpx.TransportError), so transient-failure classification must list both.
+# httpx/httpcore, while several (see the httpx2 note in pyproject.toml) run
+# on httpx2/httpcore2. The hierarchies are fully disjoint
+# (httpx2.TransportError is not a subclass of httpx.TransportError), so
+# transient-failure classification must list both.
 
 # Transport-level failures that mean a transient network problem — safe to
 # retry. Raw httpcore(2) errors are listed because they leak past httpx(2)
