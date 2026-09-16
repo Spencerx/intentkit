@@ -179,10 +179,9 @@ def test_picker_entries_reference_live_catalog_ids():
 
 def test_pick_lead_model_on_google():
     """The lead runs a flash model at least as strong as the per-agent
-    default; on Google both land on the current Flash (3.7)."""
+    default; on Google both land on the current Flash."""
     with mock_llm_config(google_api_key="gk"):
-        assert pick_lead_model() == "gemini-3.7-flash"
-        assert pick_default_model() == "gemini-3.7-flash"
+        assert pick_lead_model() == pick_default_model() == "gemini-flash"
 
 
 # ── pick_long_context_model ──────────────────────────────────────────

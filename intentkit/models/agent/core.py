@@ -8,7 +8,7 @@ from typing import Annotated, ClassVar
 from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic import Field as PydanticField
 
-from intentkit.models.llm import ReasoningEffort
+from intentkit.models.llm import ReasoningEffort, resolve_model_id
 from intentkit.models.llm_picker import pick_default_model
 
 
@@ -71,7 +71,13 @@ class AgentCore(BaseModel):
     def _set_model_default(cls, v: str | None) -> str:
         if v is None or v == "":
             return pick_default_model()
-        return v
+        # Retired ids (see legacy_ids in llm.yaml) normalize to the live
+        # series id on every read and write, so agents saved before a model
+        # bump show the current entry in the picker without a data migration.
+        # Resolution only sees providers configured in this process, so a
+        # save made where the native provider is missing pins the agent to
+        # the OpenRouter twin — the same route it would have taken at runtime.
+        return resolve_model_id(v)
 
     reasoning_effort: Annotated[
         ReasoningEffort | None,

@@ -31,9 +31,9 @@ FOURPLACES = Decimal("0.0001")
 def load_default_llm_models() -> dict[str, "LLMModelInfo"]:
     """Load default LLM models from the bundled ``llm.yaml`` catalog.
 
-    Models are keyed by ``{provider}:{id}`` so that the same model ID from
-    different providers (e.g. ``MiniMax-M3`` via MiniMax *and* OpenRouter)
-    is preserved as separate entries.
+    Models are keyed by ``{provider}:{id}`` so that the same model from
+    different providers (e.g. ``minimax`` via MiniMax and ``minimax/minimax``
+    via OpenRouter) is preserved as separate entries.
     """
 
     path = Path(__file__).with_name("llm.yaml")
@@ -218,6 +218,14 @@ class LLMModelInfo(BaseModel):
 
     id: str
     name: str
+    api_id: str = Field(
+        default_factory=lambda data: data.get("id", ""),
+        description=(
+            "Model id sent to the provider API. Defaults to ``id``; catalog "
+            "rows set it when the stable series id differs from the versioned "
+            "(or OpenRouter '~family-latest' alias) id the provider expects."
+        ),
+    )
     provider: LLMProvider
     origin_provider: str | None = Field(
         default=None,
@@ -380,18 +388,9 @@ class LLMModelInfo(BaseModel):
         if model_id in AVAILABLE_MODELS:
             return AVAILABLE_MODELS[model_id]
 
-        # Backward-compatible fallback: match by bare model id.
-        # If multiple providers have the same model id, prefer native over OpenRouter.
-        matching_keys = _MODEL_ID_INDEX.get(model_id, [])
-        fallback: LLMModelInfo | None = None
-        for key in matching_keys:
-            candidate = AVAILABLE_MODELS[key]
-            if fallback is None or (
-                fallback.provider == LLMProvider.OPENROUTER
-                and candidate.provider != LLMProvider.OPENROUTER
-            ):
-                fallback = candidate
-        if fallback is not None:
+        key = _resolve_catalog_key(model_id)
+        if key is not None:
+            fallback = AVAILABLE_MODELS[key]
             base = fallback.id.rsplit("/", 1)[1] if "/" in fallback.id else fallback.id
             if model_id in (fallback.id, base):
                 logger.debug(
@@ -500,18 +499,20 @@ AVAILABLE_MODELS = load_default_llm_models()
 def build_model_id_index(models: dict[str, "LLMModelInfo"]) -> dict[str, list[str]]:
     """Build the reverse index: model id → list of composite keys in ``models``.
 
-    Each model is indexed by its full id (e.g. "openai/gpt-5.6-luna"), the
-    base name after "/" (e.g. "gpt-5.6-luna"), and its ``legacy_ids`` (retired
-    ids routed to their successor), so agents storing any of those keep
-    resolving. A legacy id (or its base name) that collides with anything a
-    live model claims is ignored — the live model always wins.
+    Each model is indexed by its full id (e.g. "openai/gpt-luna"), the base
+    name after "/" (e.g. "gpt-luna"), its ``api_id`` the same way (the
+    versioned id providers report back, e.g. "gemini-3.8-flash"), and its
+    ``legacy_ids`` (retired ids routed to their successor), so agents storing
+    any of those keep resolving. A legacy id (or its base name) that collides
+    with anything a live model claims is ignored — the live model always wins.
     """
     index: dict[str, list[str]] = {}
 
     for key, model in models.items():
-        index.setdefault(model.id, []).append(key)
-        if "/" in model.id:
-            index.setdefault(model.id.rsplit("/", 1)[1], []).append(key)
+        for claimed in {model.id, model.api_id}:
+            index.setdefault(claimed, []).append(key)
+            if "/" in claimed:
+                index.setdefault(claimed.rsplit("/", 1)[1], []).append(key)
 
     # Everything live models claim (full ids and base names); legacy routing
     # must never shadow these. Snapshot before adding any legacy entry so the
@@ -538,12 +539,41 @@ def build_model_id_index(models: dict[str, "LLMModelInfo"]) -> dict[str, list[st
 _MODEL_ID_INDEX: dict[str, list[str]] = build_model_id_index(AVAILABLE_MODELS)
 
 
+def _resolve_catalog_key(model_id: str) -> str | None:
+    """Composite catalog key for ``model_id`` via the id index, or None.
+
+    Matches bare ids, base names after "/", and legacy ids. When several
+    providers match, native providers are preferred over OpenRouter.
+    """
+    if model_id in AVAILABLE_MODELS:
+        return model_id
+    winner: str | None = None
+    for key in _MODEL_ID_INDEX.get(model_id, []):
+        if winner is None or (
+            AVAILABLE_MODELS[winner].provider == LLMProvider.OPENROUTER
+            and AVAILABLE_MODELS[key].provider != LLMProvider.OPENROUTER
+        ):
+            winner = key
+    return winner
+
+
 def is_model_resolvable(model_id: str) -> bool:
     """Whether ``LLMModelInfo.get`` would resolve this id in this deployment.
 
     Covers composite keys, bare ids, base names after "/", and legacy ids.
     """
     return model_id in AVAILABLE_MODELS or model_id in _MODEL_ID_INDEX
+
+
+def resolve_model_id(model_id: str) -> str:
+    """Live catalog id for ``model_id``; unknown ids are returned unchanged.
+
+    Legacy and base-name ids are normalized to the current series id the same
+    way ``LLMModelInfo.get`` routes them, so stored agent configs read back
+    with the id the catalog (and the model picker) knows.
+    """
+    key = _resolve_catalog_key(model_id)
+    return AVAILABLE_MODELS[key].id if key is not None else model_id
 
 
 # USD cost per single provider-billed server-side web search call. Only
@@ -634,7 +664,7 @@ class OpenAILLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model_name": info.id,
+            "model_name": info.api_id,
             "openai_api_key": config.openai_api_key,
             "timeout": info.timeout,
             "max_retries": 3,
@@ -663,7 +693,7 @@ class DeepseekLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "api_key": config.deepseek_api_key,
             "timeout": info.timeout,
             "max_retries": 3,
@@ -695,7 +725,7 @@ class XAILLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model_name": info.id,
+            "model_name": info.api_id,
             "openai_api_key": config.xai_api_key,
             "openai_api_base": "https://api.x.ai/v1",
             "timeout": info.timeout,
@@ -805,7 +835,7 @@ class OpenRouterLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "api_key": config.openrouter_api_key,
             "timeout": info.timeout * 1000,
             "max_retries": 3,
@@ -847,7 +877,7 @@ class GoogleLLM(LLMModel):
         use_vertexai = config.google_genai_use_vertexai is True
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "api_key": config.google_api_key,
             "timeout": info.timeout,
             "max_retries": 3,
@@ -877,7 +907,7 @@ class OllamaLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "base_url": "http://localhost:11434",
             # Ollama specific parameters
             "keep_alive": -1,  # Keep the model loaded indefinitely
@@ -897,7 +927,7 @@ class MiniMaxLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "api_key": config.minimax_plan_api_key,
             "base_url": "https://api.minimax.io/anthropic",
             "timeout": info.timeout,
@@ -928,7 +958,7 @@ class MimoPlanLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model_name": info.id,
+            "model_name": info.api_id,
             "openai_api_key": config.mimo_plan_api_key,
             "openai_api_base": "https://api.xiaomimimo.com/v1",
             "timeout": info.timeout,
@@ -958,7 +988,7 @@ class AnthropicCompatibleLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model": info.id,
+            "model": info.api_id,
             "api_key": config.anthropic_compatible_api_key,
             "base_url": config.anthropic_compatible_base_url,
             "timeout": info.timeout,
@@ -979,7 +1009,7 @@ class OpenAICompatibleLLM(LLMModel):
         info = await self.model_info()
 
         kwargs: dict[str, Any] = {
-            "model_name": info.id,
+            "model_name": info.api_id,
             "openai_api_base": config.openai_compatible_base_url,
             "timeout": info.timeout,
             "max_retries": 3,
@@ -1064,10 +1094,10 @@ def _resolve_generation_cost(response: object) -> float | None:
         model_name = metadata.get("model_name") or metadata.get("model")
         if isinstance(model_name, str) and model_name.startswith("models/"):
             model_name = model_name[len("models/") :]
-        keys = _MODEL_ID_INDEX.get(model_name) if model_name else None
-        info = AVAILABLE_MODELS.get(keys[0]) if keys else None
-        if info is None:
+        key = _resolve_catalog_key(model_name) if model_name else None
+        if key is None:
             return None
+        info = AVAILABLE_MODELS[key]
         input_tokens = int(usage.get("input_tokens") or 0)
         output_tokens = int(usage.get("output_tokens") or 0)
         cached = int((usage.get("input_token_details") or {}).get("cache_read") or 0)

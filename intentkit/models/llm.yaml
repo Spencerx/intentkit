@@ -5,16 +5,28 @@
 #
 # Field notes:
 #   prices            USD per 1M tokens; quoted as strings to keep exact Decimal precision.
+#   id                stable series id, no version number (e.g. "gemini-flash",
+#                     "openai/gpt-luna"). Agents store this id, so a version
+#                     bump never touches agent config; put the version in name.
+#   api_id            the model id actually sent to the provider; defaults to id.
+#                     OpenRouter rows use the "~<author>/<family>-latest" alias
+#                     when OpenRouter has one: it re-points on every release, so
+#                     a bump there is a name change plus a price check. Rows
+#                     without an alias pin the versioned id and are bumped by
+#                     hand. api_id is indexed like id, so agents storing the
+#                     versioned id keep resolving without a legacy_ids entry.
 #   provider          which integration serves the model (see LLMProvider).
 #   origin_provider   OpenRouter-only. Pins the upstream provider on OpenRouter via
 #                     {"order": [origin_provider], "allow_fallbacks": false}.
 #                     Pin the bare provider slug, not a quant-suffixed tag: the
 #                     pin matches endpoint tags by prefix and survives quant swaps.
 #                     Omit to let OpenRouter pick the upstream provider.
-#   legacy_ids        Retired ids this model supersedes. Agents still storing one
-#                     of these are routed here at resolve time; never reuse a
-#                     legacy id for a live model. When retiring a model, move its
-#                     id (and its own legacy_ids) onto the successor entry.
+#   legacy_ids        Retired ids this model supersedes (the versioned ids agents
+#                     stored before ids became series ids, plus older series).
+#                     Agents still storing one are routed here at resolve time;
+#                     never reuse a legacy id for a live model. When retiring a
+#                     series, move its id (and its own legacy_ids) onto the
+#                     successor entry.
 #   reasoning_effort  Default reasoning/thinking effort when the agent doesn't
 #                     set one. Uses OpenRouter's unified scale:
 #                     "max"/"xhigh"/"high"/"medium"/"low"/"minimal"/"none" or null.
@@ -31,7 +43,8 @@
 #                     warm 50% of context_length, hot 80% of context_length.
 
 
-- id: "google/gemma-4-31b-it:free"
+- id: "google/gemma:free"
+  api_id: "google/gemma-4-31b-it:free"
   name: "Gemma 4 31B (Free)"
   provider: openrouter
   origin_provider: "google-ai-studio"   # lock OpenRouter upstream
@@ -72,11 +85,14 @@
   reasoning_levels: ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
   timeout: 300
 
-- id: "qwen/qwen3.8-max"
+# OpenRouter has no Qwen "latest" alias, so api_id pins the dated snapshot
+# (OpenRouter delisted the undated qwen3.8-max on 2026-09-04).
+- id: "qwen/qwen-max"
+  api_id: "qwen/qwen3.8-max-0902"
   name: "Qwen3.8 Max"
   provider: openrouter
   origin_provider: "alibaba"   # lock OpenRouter upstream
-  legacy_ids: ["qwen/qwen3.7-max"]
+  legacy_ids: ["qwen/qwen3.8-max", "qwen/qwen3.7-max"]
   enabled: true
   input_price: "2"
   cached_input_price: "0.25"
@@ -94,7 +110,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "qwen/qwen3.7-plus"
+- id: "qwen/qwen-plus"
+  api_id: "qwen/qwen3.7-plus"
   name: "Qwen3.7 Plus"
   provider: openrouter
   origin_provider: "alibaba"   # lock OpenRouter upstream
@@ -116,7 +133,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "minimax/minimax-m3"
+- id: "minimax/minimax"
+  api_id: "minimax/minimax-m3"
   name: "MiniMax M3"
   provider: openrouter
   origin_provider: "minimax/fp8"   # lock OpenRouter upstream
@@ -138,7 +156,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "xiaomi/mimo-v2.5-pro"
+- id: "xiaomi/mimo-pro"
+  api_id: "xiaomi/mimo-v2.5-pro"
   name: "MiMo V2.5 Pro"
   provider: openrouter
   origin_provider: "xiaomi/fp8"   # lock OpenRouter upstream
@@ -159,7 +178,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "xiaomi/mimo-v2.5"
+- id: "xiaomi/mimo"
+  api_id: "xiaomi/mimo-v2.5"
   name: "MiMo V2.5"
   provider: openrouter
   origin_provider: "xiaomi/fp8"   # lock OpenRouter upstream
@@ -180,7 +200,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "mimo-v2.5-pro"
+- id: "mimo-pro"
+  api_id: "mimo-v2.5-pro"
   name: "MiMo V2.5 Pro"
   provider: mimo_plan
   enabled: true
@@ -200,7 +221,8 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-- id: "mimo-v2.5"
+- id: "mimo"
+  api_id: "mimo-v2.5"
   name: "MiMo V2.5"
   provider: mimo_plan
   enabled: true
@@ -218,17 +240,46 @@
   supports_file_input: false
   reasoning_effort: "high"
   reasoning_levels: ["none", "high"]
+  timeout: 300
+
+# Meta's contributor tier: prompts and completions may be used to train
+# future Meta models, in exchange for a steep discount off the standard
+# "meta/muse-spark-1.3" (1.25/0.15/4.25). Meta rate-limits it to 100 rpm, and
+# OpenRouter gates it behind the account's "18+ age confirmation" attestation
+# (openrouter.ai/settings/preferences) — requests 403 until that is ticked.
+# Reasoning is always on; "max" is only accepted on the standard tier.
+- id: "meta/muse-spark-contributor"
+  api_id: "meta/muse-spark-1.3-contributor"
+  name: "Muse Spark 1.3 (Contributor)"
+  provider: openrouter
+  origin_provider: "meta"   # lock OpenRouter upstream
+  enabled: true
+  input_price: "0.1"
+  cached_input_price: "0.002"
+  output_price: "0.2"
+  price_level: 1
+  context_length: 1048576
+  output_length: 131072
+  intelligence: 5
+  speed: 3
+  supports_image_input: true
+  supports_audio_input: true
+  supports_video_input: true
+  supports_file_input: true
+  reasoning_effort: "high"
+  reasoning_levels: ["minimal", "low", "medium", "high", "xhigh"]
   timeout: 300
 
 # Reasoning is always on for K3 and "max" is the only effort Moonshot
 # currently accepts ("more levels coming soon" per their API docs).
-- id: "moonshotai/kimi-k3"
+- id: "moonshotai/kimi"
+  api_id: "~moonshotai/kimi-latest"
   name: "Moonshot Kimi K3"
   provider: openrouter
   # No quantization pin: Moonshot retired its int4 endpoint for mxfp4, and a
   # stale quant slug with allow_fallbacks=false would fail to route at all.
   origin_provider: "moonshotai"   # lock OpenRouter upstream
-  legacy_ids: ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code"]
+  legacy_ids: ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "moonshotai/kimi-k3"]
   enabled: true
   input_price: "3"
   cached_input_price: "0.3"
@@ -246,13 +297,14 @@
   reasoning_levels: ["max"]
   timeout: 300
 
-- id: "qwen/qwen3.8-flash"
+- id: "qwen/qwen-flash"
+  api_id: "qwen/qwen3.8-flash"
   name: "Qwen3.8 Flash"
   provider: openrouter
   origin_provider: "alibaba"   # lock OpenRouter upstream
   legacy_ids: ["qwen/qwen3.7-flash", "qwen/qwen3.6-flash"]
   enabled: true
-  input_price: "0.16"
+  input_price: "0.15"
   cached_input_price: "0.016"
   output_price: "0.47"
   price_level: 1
@@ -268,17 +320,18 @@
   reasoning_levels: ["none", "high"]
   timeout: 300
 
-# Z.AI's first-party endpoint bills 0.075/0.015/0.25: a 50% launch discount
-# off its 0.15/0.03/0.5 list price (as of 2026-08-27).
-- id: "z-ai/glm-5.3-flash"
+# Z.AI's 50% launch discount ended; the first-party endpoint bills list
+# price again (as of 2026-09-16).
+- id: "z-ai/glm-flash"
+  api_id: "~z-ai/glm-flash-latest"
   name: "GLM 5.3 Flash"
   provider: openrouter
   origin_provider: "z-ai"   # lock OpenRouter upstream
-  legacy_ids: ["z-ai/glm-4.7-flash"]
+  legacy_ids: ["z-ai/glm-4.7-flash", "z-ai/glm-5.3-flash"]
   enabled: true
-  input_price: "0.075"
-  cached_input_price: "0.015"
-  output_price: "0.25"
+  input_price: "0.15"
+  cached_input_price: "0.03"
+  output_price: "0.5"
   price_level: 1
   context_length: 1048576
   output_length: 131072
@@ -288,19 +341,20 @@
   supports_audio_input: false
   supports_video_input: true
   supports_file_input: false
-  # Thinking cannot be disabled (see glm-5.3 below); "low" keeps latency
+  # Thinking cannot be disabled (see z-ai/glm below); "low" keeps latency
   # and cost sane for the lite-model role.
   reasoning_effort: "low"
   reasoning_levels: ["low", "high", "max"]
   timeout: 300
 
-- id: "z-ai/glm-5.3"
+- id: "z-ai/glm"
+  api_id: "~z-ai/glm-latest"
   name: "GLM 5.3"
   provider: openrouter
   # Bare slug: it matches Z.ai's quant-suffixed endpoint (z-ai/fp8 today) and
   # keeps working if they swap quantization, as Moonshot did for K3.
   origin_provider: "z-ai"   # lock OpenRouter upstream
-  legacy_ids: ["z-ai/glm-5.1", "z-ai/glm-5.2"]
+  legacy_ids: ["z-ai/glm-5.1", "z-ai/glm-5.2", "z-ai/glm-5.3"]
   enabled: true
   input_price: "1.4"
   cached_input_price: "0.26"
@@ -319,11 +373,12 @@
   reasoning_levels: ["low", "high", "max"]
   timeout: 300
 
-- id: "anthropic/claude-sonnet-5"
+- id: "anthropic/claude-sonnet"
+  api_id: "~anthropic/claude-sonnet-latest"
   name: "Claude Sonnet 5"
   provider: openrouter
   origin_provider: "anthropic"   # lock OpenRouter upstream
-  legacy_ids: ["anthropic/claude-sonnet-4.6"]
+  legacy_ids: ["anthropic/claude-sonnet-4.6", "anthropic/claude-sonnet-5"]
   enabled: true
   input_price: "2"
   cached_input_price: "0.2"
@@ -341,11 +396,12 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 300
 
-- id: "anthropic/claude-opus-5"
+- id: "anthropic/claude-opus"
+  api_id: "~anthropic/claude-opus-latest"
   name: "Claude Opus 5"
   provider: openrouter
   origin_provider: "anthropic"   # lock OpenRouter upstream
-  legacy_ids: ["anthropic/claude-opus-4.8"]
+  legacy_ids: ["anthropic/claude-opus-4.8", "anthropic/claude-opus-5"]
   enabled: true
   input_price: "5"
   cached_input_price: "0.5"
@@ -364,8 +420,10 @@
   timeout: 300
 
 # GA id "gemini-3.1-pro" 404s on Vertex express mode (as of 2026-07);
-# the customtools preview alias still serves.
-- id: "gemini-3.1-pro-preview-customtools"
+# the customtools preview alias still serves. Google has no "-latest" alias
+# on Vertex express either, so Google rows all pin versioned ids.
+- id: "gemini-pro"
+  api_id: "gemini-3.1-pro-preview-customtools"
   name: "Gemini 3.1 Pro"
   provider: google
   enabled: true
@@ -385,10 +443,12 @@
   reasoning_levels: ["low", "medium", "high"]
   timeout: 300
 
-- id: "google/gemini-3.1-pro-preview-customtools"
+- id: "google/gemini-pro"
+  api_id: "google/gemini-3.1-pro-preview-customtools"
   name: "Gemini 3.1 Pro"
   provider: openrouter
   # The customtools alias has no Vertex endpoint on OpenRouter (as of 2026-08).
+  # Kept explicit: "~google/gemini-pro-latest" resolves to the plain preview.
   origin_provider: "google-ai-studio"   # lock OpenRouter upstream
   enabled: true
   input_price: "2"
@@ -407,7 +467,8 @@
   reasoning_levels: ["low", "medium", "high"]
   timeout: 300
 
-- id: "gemini-3.5-flash-lite"
+- id: "gemini-flash-lite"
+  api_id: "gemini-3.5-flash-lite"
   name: "Gemini 3.5 Flash Lite"
   provider: google
   legacy_ids: ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite"]
@@ -428,10 +489,11 @@
   reasoning_levels: ["minimal", "low", "medium", "high"]
   timeout: 300
 
-- id: "google/gemini-3.5-flash-lite"
+- id: "google/gemini-flash-lite"
+  api_id: "google/gemini-3.5-flash-lite"
   name: "Gemini 3.5 Flash Lite"
   provider: openrouter
-  # Vertex and AI Studio bill the same here; Vertex for parity with 3.7 Flash.
+  # Vertex and AI Studio bill the same here; Vertex for parity with 3.8 Flash.
   origin_provider: "google-vertex/global"   # lock OpenRouter upstream
   legacy_ids: ["google/gemini-3.1-flash-lite-preview", "google/gemini-3.1-flash-lite"]
   enabled: true
@@ -451,12 +513,14 @@
   reasoning_levels: ["minimal", "low", "medium", "high"]
   timeout: 300
 
-# Google prices 3.7 Flash at half the 3.6 launch rate through 2026-12-31
-# (1.5/0.15/7.5 from 2027-01-01). 3.7 drops the "minimal" thinking level.
-- id: "gemini-3.7-flash"
-  name: "Gemini 3.7 Flash"
+# Google prices 3.8 Flash at the same introductory rate as 3.7 through
+# 2026-12-31 (1.5/0.15/7.5 from 2027-01-01). Thinking levels stay
+# low/medium/high: "minimal" is rejected and thinking cannot be disabled.
+- id: "gemini-flash"
+  api_id: "gemini-3.8-flash"
+  name: "Gemini 3.8 Flash"
   provider: google
-  legacy_ids: ["gemini-3-flash-preview", "gemini-3.5-flash", "gemini-3.6-flash"]
+  legacy_ids: ["gemini-3-flash-preview", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash"]
   enabled: true
   input_price: "0.75"
   cached_input_price: "0.075"
@@ -474,17 +538,18 @@
   reasoning_levels: ["low", "medium", "high"]
   timeout: 300
 
-# OpenRouter's Vertex endpoint bills 0.375/1.875: half of its AI Studio
-# endpoint and a quarter of Google's 1.5/7.5 list (promo, as of 2026-08-21).
-- id: "google/gemini-3.7-flash"
-  name: "Gemini 3.7 Flash"
+# OpenRouter's Vertex promo (0.375/1.875) ended in 2026-09; the Vertex and
+# AI Studio endpoints both bill Google's introductory 0.75/3.75 now.
+- id: "google/gemini-flash"
+  api_id: "~google/gemini-flash-latest"
+  name: "Gemini 3.8 Flash"
   provider: openrouter
   origin_provider: "google-vertex/global"   # lock OpenRouter upstream
-  legacy_ids: ["google/gemini-3-flash-preview", "google/gemini-3.5-flash", "google/gemini-3.6-flash"]
+  legacy_ids: ["google/gemini-3-flash-preview", "google/gemini-3.5-flash", "google/gemini-3.6-flash", "google/gemini-3.7-flash"]
   enabled: true
-  input_price: "0.375"
-  cached_input_price: "0.0375"
-  output_price: "1.875"
+  input_price: "0.75"
+  cached_input_price: "0.075"
+  output_price: "3.75"
   price_level: 2
   context_length: 1048576
   output_length: 65536
@@ -498,14 +563,17 @@
   reasoning_levels: ["low", "medium", "high"]
   timeout: 300
 
-- id: "gpt-5.6-sol"
+# OpenAI cut Sol to 4/0.4/20 when GPT-6 Astra launched (promotional, listed
+# through at least 2026-11-21; was 5/0.5/30).
+- id: "gpt-sol"
+  api_id: "gpt-5.6-sol"
   name: "GPT-5.6 Sol"
   provider: openai
   enabled: true
-  input_price: "5"
-  cached_input_price: "0.5"
-  output_price: "30"
-  price_level: 5
+  input_price: "4"
+  cached_input_price: "0.4"
+  output_price: "20"
+  price_level: 4
   context_length: 1050000
   output_length: 128000
   intelligence: 5
@@ -518,15 +586,18 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-- id: "openai/gpt-5.6-sol"
+# Sol on OpenRouter: 50% off OpenAI's promo list (promo, as of 2026-09-16).
+- id: "openai/gpt-sol"
+  api_id: "~openai/gpt-sol-latest"
   name: "GPT-5.6 Sol"
   provider: openrouter
   origin_provider: "openai"   # lock OpenRouter upstream
+  legacy_ids: ["openai/gpt-5.6-sol"]
   enabled: true
-  input_price: "5"
-  cached_input_price: "0.5"
-  output_price: "30"
-  price_level: 5
+  input_price: "2"
+  cached_input_price: "0.2"
+  output_price: "10"
+  price_level: 3
   context_length: 1050000
   output_length: 128000
   intelligence: 5
@@ -539,7 +610,8 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-- id: "gpt-5.6-terra"
+- id: "gpt-terra"
+  api_id: "gpt-5.6-terra"
   name: "GPT-5.6 Terra"
   provider: openai
   legacy_ids: ["gpt-5.4"]
@@ -560,17 +632,17 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-# Terra on OpenRouter: 50% off OpenAI list (promo, as of 2026-07-31).
-- id: "openai/gpt-5.6-terra"
+- id: "openai/gpt-terra"
+  api_id: "~openai/gpt-terra-latest"
   name: "GPT-5.6 Terra"
   provider: openrouter
   origin_provider: "openai"   # lock OpenRouter upstream
-  legacy_ids: ["openai/gpt-5.4"]
+  legacy_ids: ["openai/gpt-5.4", "openai/gpt-5.6-terra"]
   enabled: true
-  input_price: "1"
-  cached_input_price: "0.1"
-  output_price: "6"
-  price_level: 3
+  input_price: "2"
+  cached_input_price: "0.2"
+  output_price: "12"
+  price_level: 4
   context_length: 1050000
   output_length: 128000
   intelligence: 5
@@ -583,7 +655,8 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-- id: "gpt-5.6-luna"
+- id: "gpt-luna"
+  api_id: "gpt-5.6-luna"
   name: "GPT-5.6 Luna"
   provider: openai
   legacy_ids: ["gpt-5.4-mini", "gpt-5.4-nano"]
@@ -604,17 +677,17 @@
   reasoning_levels: ["none", "low", "medium", "high", "xhigh", "max"]
   timeout: 180
 
-# Luna on OpenRouter: 50% off OpenAI list (promo, as of 2026-07-31).
-- id: "openai/gpt-5.6-luna"
+- id: "openai/gpt-luna"
+  api_id: "~openai/gpt-luna-latest"
   name: "GPT-5.6 Luna"
   provider: openrouter
   origin_provider: "openai"   # lock OpenRouter upstream
-  legacy_ids: ["openai/gpt-5.4-mini", "openai/gpt-5.4-nano"]
+  legacy_ids: ["openai/gpt-5.4-mini", "openai/gpt-5.4-nano", "openai/gpt-5.6-luna"]
   enabled: true
-  input_price: "0.1"
-  cached_input_price: "0.01"
-  output_price: "0.6"
-  price_level: 1
+  input_price: "0.2"
+  cached_input_price: "0.02"
+  output_price: "1.2"
+  price_level: 2
   context_length: 1050000
   output_length: 128000
   intelligence: 4
@@ -657,14 +730,14 @@
   reasoning_levels: ["none", "high", "max"]
   timeout: 300
 
-# OpenRouter lists each official build separately (DeepSeek's own API upgrades
-# its versionless ids in place), so the superseded listing ids route to the
-# live build via legacy_ids.
-- id: "deepseek/deepseek-v4.1-flash"
+# OpenRouter lists each official build separately; the "-latest" alias tracks
+# the newest one (DeepSeek's own API upgrades its versionless ids in place).
+- id: "deepseek/deepseek-flash"
+  api_id: "~deepseek/deepseek-flash-latest"
   name: "Deepseek V4.1 Flash"
   provider: openrouter
   origin_provider: "deepseek"   # lock OpenRouter upstream
-  legacy_ids: ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash-0731", "deepseek/deepseek-v4-flash-vision-exp"]
+  legacy_ids: ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4-flash-0731", "deepseek/deepseek-v4-flash-vision-exp", "deepseek/deepseek-v4.1-flash"]
   enabled: true
   input_price: "0.15"
   cached_input_price: "0.003"
@@ -682,7 +755,8 @@
   reasoning_levels: ["none", "high", "max"]
   timeout: 300
 
-- id: "deepseek-v4-pro"
+- id: "deepseek-pro"
+  api_id: "deepseek-v4-pro"
   name: "Deepseek V4 Pro"
   provider: deepseek
   enabled: true
@@ -702,11 +776,12 @@
   reasoning_levels: ["none", "high", "max"]
   timeout: 300
 
-- id: "deepseek/deepseek-v4-pro-0813"
+- id: "deepseek/deepseek-pro"
+  api_id: "~deepseek/deepseek-pro-latest"
   name: "Deepseek V4 Pro"
   provider: openrouter
   origin_provider: "deepseek"   # lock OpenRouter upstream
-  legacy_ids: ["deepseek/deepseek-v4-pro"]
+  legacy_ids: ["deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-pro-0813"]
   enabled: true
   input_price: "0.66"
   cached_input_price: "0.022"
@@ -726,7 +801,8 @@
 
 # xAI bills prompts above 200k tokens at 2x on a long-context tier; the flat
 # prices here cover the standard tier only.
-- id: "grok-4.6"
+- id: "grok"
+  api_id: "grok-4.6"
   name: "Grok 4.6"
   provider: xai
   # grok-4.20 is older than 4.5/4.6 despite the version number (Musk-style numbering)
@@ -748,12 +824,13 @@
   reasoning_levels: ["low", "medium", "high", "xhigh"]
   timeout: 180
 
-- id: "x-ai/grok-4.6"
+- id: "x-ai/grok"
+  api_id: "~x-ai/grok-latest"
   name: "Grok 4.6"
   provider: openrouter
   origin_provider: "xai"   # lock OpenRouter upstream
   # grok-4.20 is older than 4.5/4.6 despite the version number (Musk-style numbering)
-  legacy_ids: ["x-ai/grok-4.5", "x-ai/grok-4.3", "x-ai/grok-4.20"]
+  legacy_ids: ["x-ai/grok-4.5", "x-ai/grok-4.3", "x-ai/grok-4.20", "x-ai/grok-4.6"]
   enabled: true
   input_price: "2"
   cached_input_price: "0.5"
@@ -771,7 +848,8 @@
   reasoning_levels: ["low", "medium", "high", "xhigh"]
   timeout: 180
 
-- id: "MiniMax-M3"
+- id: "minimax"
+  api_id: "MiniMax-M3"
   name: "MiniMax M3"
   provider: minimax
   enabled: true

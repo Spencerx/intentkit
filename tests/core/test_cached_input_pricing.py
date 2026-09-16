@@ -188,7 +188,7 @@ def test_csv_loads_cached_input_price_for_claude():
 
         models = load_default_llm_models()
 
-    claude = models.get("openrouter:anthropic/claude-sonnet-5")
+    claude = models.get("openrouter:anthropic/claude-sonnet")
     assert claude is not None
     assert claude.cached_input_price == Decimal("0.2")
     assert claude.input_price == Decimal("2")
@@ -224,14 +224,14 @@ def test_csv_cached_input_price_for_deepseek():
     assert deepseek.input_price == Decimal("0.15")
     assert deepseek.output_price == Decimal("0.6")
 
-    deepseek_or = models.get("openrouter:deepseek/deepseek-v4.1-flash")
+    deepseek_or = models.get("openrouter:deepseek/deepseek-flash")
     assert deepseek_or is not None
     assert deepseek_or.cached_input_price == Decimal("0.003")
     assert deepseek_or.input_price == Decimal("0.15")
     assert deepseek_or.output_price == Decimal("0.6")
 
     # Pro drifted the same way and by more; pin it on both providers too.
-    for key in ("deepseek:deepseek-v4-pro", "openrouter:deepseek/deepseek-v4-pro-0813"):
+    for key in ("deepseek:deepseek-pro", "openrouter:deepseek/deepseek-pro"):
         pro = models.get(key)
         assert pro is not None, key
         assert pro.cached_input_price == Decimal("0.022")
@@ -257,6 +257,6 @@ def test_csv_cached_input_price_for_grok4():
 
         models = load_default_llm_models()
 
-    grok4 = models.get("xai:grok-4.6")
+    grok4 = models.get("xai:grok")
     assert grok4 is not None
     assert grok4.cached_input_price == Decimal("0.5")

@@ -7,7 +7,7 @@ tags:
 - China
 - Stocks
 - News
-model: google/gemini-3.7-flash
+model: google/gemini-flash
 search_internet: false
 visibility: 20
 tools:

@@ -26,6 +26,19 @@ def _model_info(model_id: str, provider: LLMProvider, **overrides) -> LLMModelIn
     return LLMModelInfo.model_validate(attrs)
 
 
+def _catalog_rows() -> list[dict]:
+    """Raw llm.yaml rows, independent of which providers are configured."""
+    from pathlib import Path
+
+    import yaml as pyyaml
+
+    import intentkit.models.llm as llm_module
+
+    return pyyaml.safe_load(
+        (Path(llm_module.__file__).with_name("llm.yaml")).read_text(encoding="utf-8")
+    )
+
+
 def test_llm_model_filtering():
     """Test that models are filtered based on available API keys in config."""
 
@@ -135,8 +148,8 @@ def test_llm_model_filtering():
         models = load_default_llm_models()
 
         # Both native and OpenRouter variants should exist
-        luna_openai = models.get("openai:gpt-5.6-luna")
-        luna_openrouter = models.get("openrouter:openai/gpt-5.6-luna")
+        luna_openai = models.get("openai:gpt-luna")
+        luna_openrouter = models.get("openrouter:openai/gpt-luna")
 
         assert luna_openai is not None
         assert luna_openai.provider == LLMProvider.OPENAI
@@ -163,10 +176,10 @@ def test_llm_model_filtering():
         models = load_default_llm_models()
 
         # Native variant should not exist
-        assert models.get("openai:gpt-5.6-luna") is None
+        assert models.get("openai:gpt-luna") is None
 
         # OpenRouter variant should exist
-        luna_or = models.get("openrouter:openai/gpt-5.6-luna")
+        luna_or = models.get("openrouter:openai/gpt-luna")
         assert luna_or is not None
         assert luna_or.provider == LLMProvider.OPENROUTER
 
@@ -188,12 +201,12 @@ def test_llm_model_filtering():
 
         models = load_default_llm_models()
 
-        mimo_pro = models.get("mimo_plan:mimo-v2.5-pro")
+        mimo_pro = models.get("mimo_plan:mimo-pro")
         assert mimo_pro is not None
         assert mimo_pro.provider == LLMProvider.MIMO_PLAN
-        assert mimo_pro.id == "mimo-v2.5-pro"
+        assert mimo_pro.id == "mimo-pro"
 
-        mimo_v25 = models.get("mimo_plan:mimo-v2.5")
+        mimo_v25 = models.get("mimo_plan:mimo")
         assert mimo_v25 is not None
         assert mimo_v25.provider == LLMProvider.MIMO_PLAN
 
@@ -220,10 +233,10 @@ def test_model_id_index_suffix_and_legacy_matching():
 
         index = build_model_id_index(models)
 
-        # Models with slash in id (e.g. "openai/gpt-5.6-luna") should also be
-        # indexed by the base name ("gpt-5.6-luna") for legacy agent configs.
-        assert "gpt-5.6-luna" in index
-        assert any("openrouter:" in k for k in index["gpt-5.6-luna"])
+        # Models with slash in id (e.g. "openai/gpt-luna") should also be
+        # indexed by the base name ("gpt-luna") for legacy agent configs.
+        assert "gpt-luna" in index
+        assert any("openrouter:" in k for k in index["gpt-luna"])
 
         # Every legacy id in the catalog routes to its successor and does not
         # linger as a live model.
@@ -234,14 +247,14 @@ def test_model_id_index_suffix_and_legacy_matching():
                 assert key in index[legacy]
 
         # Explicit regression pins for retirements.
-        assert index.get("x-ai/grok-4.3") == ["openrouter:x-ai/grok-4.6"]
+        assert index.get("x-ai/grok-4.3") == ["openrouter:x-ai/grok"]
         for retired in (
             "deepseek/deepseek-v4-flash-0731",
             "deepseek/deepseek-v4-flash-vision-exp",
         ):
-            assert index.get(retired) == ["openrouter:deepseek/deepseek-v4.1-flash"]
-        assert index.get("qwen/qwen3.7-flash") == ["openrouter:qwen/qwen3.8-flash"]
-        assert index.get("z-ai/glm-4.7-flash") == ["openrouter:z-ai/glm-5.3-flash"]
+            assert index.get(retired) == ["openrouter:deepseek/deepseek-flash"]
+        assert index.get("qwen/qwen3.7-flash") == ["openrouter:qwen/qwen-flash"]
+        assert index.get("z-ai/glm-4.7-flash") == ["openrouter:z-ai/glm-flash"]
 
 
 def test_catalog_legacy_ids_are_disjoint():
@@ -251,17 +264,12 @@ def test_catalog_legacy_ids_are_disjoint():
     legacy id may be claimed by two entries — otherwise old agents would
     route to an arbitrary winner.
     """
-    from pathlib import Path
-
-    import yaml as pyyaml
-
-    import intentkit.models.llm as llm_module
-
-    rows = pyyaml.safe_load(
-        (Path(llm_module.__file__).with_name("llm.yaml")).read_text(encoding="utf-8")
-    )
-    live = {row["id"] for row in rows}
-    live_bases = {row["id"].rsplit("/", 1)[1] for row in rows if "/" in row["id"]}
+    rows = _catalog_rows()
+    claimed = {row["id"] for row in rows} | {
+        row["api_id"] for row in rows if row.get("api_id")
+    }
+    live = claimed
+    live_bases = {name.rsplit("/", 1)[1] for name in claimed if "/" in name}
     seen: set[str] = set()
     for row in rows:
         for legacy in row.get("legacy_ids", []):
@@ -308,15 +316,7 @@ def test_catalog_reasoning_effort_within_levels():
     A model bump that drops a level (3.7 Flash lost "minimal") would otherwise
     leave a default the clamp has to silently rewrite on every request.
     """
-    from pathlib import Path
-
-    import yaml as pyyaml
-
-    import intentkit.models.llm as llm_module
-
-    rows = pyyaml.safe_load(
-        (Path(llm_module.__file__).with_name("llm.yaml")).read_text(encoding="utf-8")
-    )
+    rows = _catalog_rows()
     for row in rows:
         levels = row.get("reasoning_levels")
         effort = row.get("reasoning_effort")
@@ -324,3 +324,108 @@ def test_catalog_reasoning_effort_within_levels():
             assert effort in levels, (
                 f"{row['id']}: reasoning_effort {effort!r} not in {levels}"
             )
+
+
+# ── series ids / api_id ─────────────────────────────────────────────
+
+
+def test_api_id_defaults_to_id():
+    plain = _model_info("gemini-flash", LLMProvider.GOOGLE)
+    assert plain.api_id == "gemini-flash"
+
+    aliased = _model_info(
+        "google/gemini-flash",
+        LLMProvider.OPENROUTER,
+        api_id="~google/gemini-flash-latest",
+    )
+    assert aliased.api_id == "~google/gemini-flash-latest"
+
+
+def test_catalog_ids_are_versionless_series_ids():
+    """Live ids never carry a version: bumps change ``api_id``/``name`` only.
+
+    OpenRouter's "~family-latest" aliases are the only ``api_id`` form that
+    tracks releases by itself, and they only exist on OpenRouter rows.
+    """
+    import re
+
+    rows = _catalog_rows()
+    for row in rows:
+        assert not re.search(r"\d", row["id"]), f"{row['id']} carries a version"
+        api_id = row.get("api_id", row["id"])
+        assert api_id, row["id"]
+        if api_id.startswith("~"):
+            assert row["provider"] == "openrouter", row["id"]
+            assert api_id.endswith("-latest"), row["id"]
+
+
+def _install_catalog(monkeypatch, *models):
+    import intentkit.models.llm as llm_module
+
+    catalog = {f"{m.provider.value}:{m.id}": m for m in models}
+    monkeypatch.setattr(llm_module, "AVAILABLE_MODELS", catalog)
+    monkeypatch.setattr(llm_module, "_MODEL_ID_INDEX", build_model_id_index(catalog))
+
+
+def test_resolve_model_id_normalizes_legacy_and_base_names(monkeypatch):
+    from intentkit.models.llm import resolve_model_id
+
+    _install_catalog(
+        monkeypatch,
+        _model_info(
+            "gemini-flash", LLMProvider.GOOGLE, legacy_ids=["gemini-3.8-flash"]
+        ),
+        _model_info(
+            "google/gemini-flash",
+            LLMProvider.OPENROUTER,
+            legacy_ids=["google/gemini-3.8-flash"],
+        ),
+        _model_info("openai/gpt-luna", LLMProvider.OPENROUTER),
+    )
+
+    # Live ids and composite keys are returned as the bare live id.
+    assert resolve_model_id("gemini-flash") == "gemini-flash"
+    assert resolve_model_id("openrouter:openai/gpt-luna") == "openai/gpt-luna"
+    # Legacy ids route to their successor; the shared base name prefers the
+    # native provider, like LLMModelInfo.get.
+    assert resolve_model_id("gemini-3.8-flash") == "gemini-flash"
+    assert resolve_model_id("google/gemini-3.8-flash") == "google/gemini-flash"
+    assert resolve_model_id("gpt-luna") == "openai/gpt-luna"
+    # Unknown ids pass through untouched so validation errors stay visible.
+    assert resolve_model_id("not-a-model") == "not-a-model"
+
+
+def test_api_id_is_indexed_like_a_live_id(monkeypatch):
+    """The versioned id sent to (and reported by) the provider resolves too."""
+    from intentkit.models.llm import resolve_model_id
+
+    _install_catalog(
+        monkeypatch,
+        _model_info("grok", LLMProvider.XAI, api_id="grok-4.6"),
+        _model_info(
+            "google/gemini-flash-lite",
+            LLMProvider.OPENROUTER,
+            api_id="google/gemini-3.5-flash-lite",
+        ),
+    )
+    assert resolve_model_id("grok-4.6") == "grok"
+    assert (
+        resolve_model_id("google/gemini-3.5-flash-lite") == "google/gemini-flash-lite"
+    )
+    assert resolve_model_id("gemini-3.5-flash-lite") == "google/gemini-flash-lite"
+
+
+def test_agent_model_field_normalizes_legacy_ids(monkeypatch):
+    """Agents saved with a retired id read back with the live series id."""
+    from intentkit.models.agent import AgentUpdate
+
+    _install_catalog(
+        monkeypatch,
+        _model_info(
+            "gemini-flash", LLMProvider.GOOGLE, legacy_ids=["gemini-3.8-flash"]
+        ),
+    )
+
+    assert AgentUpdate(name="t", model="gemini-3.8-flash").model == "gemini-flash"
+    assert AgentUpdate(name="t", model="gemini-flash").model == "gemini-flash"
+    assert AgentUpdate(name="t", model="custom-model").model == "custom-model"

@@ -15,7 +15,7 @@ from intentkit.models.llm import (
 def _openrouter_info(origin_provider: str | None = None) -> LLMModelInfo:
     return LLMModelInfo.model_validate(
         {
-            "id": "anthropic/claude-opus-5",
+            "id": "anthropic/claude-opus",
             "name": "Claude Opus 5",
             "provider": "openrouter",
             "origin_provider": origin_provider,
@@ -55,24 +55,24 @@ def test_origin_provider_loaded_from_catalog():
         models = load_default_llm_models()
 
     # Locked models carry their pinned upstream provider.
-    opus = models.get("openrouter:anthropic/claude-opus-5")
+    opus = models.get("openrouter:anthropic/claude-opus")
     assert opus is not None
     assert opus.origin_provider == "anthropic"
 
-    kimi = models.get("openrouter:moonshotai/kimi-k3")
+    kimi = models.get("openrouter:moonshotai/kimi")
     assert kimi is not None
     assert kimi.origin_provider == "moonshotai"
 
-    grok = models.get("openrouter:x-ai/grok-4.6")
+    grok = models.get("openrouter:x-ai/grok")
     assert grok is not None
     assert grok.origin_provider == "xai"
 
-    for gemini_id in ("google/gemini-3.7-flash", "google/gemini-3.5-flash-lite"):
+    for gemini_id in ("google/gemini-flash", "google/gemini-flash-lite"):
         gemini = models.get(f"openrouter:{gemini_id}")
         assert gemini is not None
         assert gemini.origin_provider == "google-vertex/global"
 
-    for glm_id in ("z-ai/glm-5.3", "z-ai/glm-5.3-flash"):
+    for glm_id in ("z-ai/glm", "z-ai/glm-flash"):
         glm = models.get(f"openrouter:{glm_id}")
         assert glm is not None
         assert glm.origin_provider == "z-ai"
